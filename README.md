@@ -32,16 +32,16 @@ then unity will:
 It is also rather simple to do. The minimal code you need is basically:
 ```cs
 var uri = new Uri(path);
-var request = UnityWebRequestAssetBundle.GetAssetBundle(uri);
-yield return request.SendWebRequest();
+var request = AssetBundle.LoadAssetBundleAsync(uri);
+yield return request;
 
-if (request.isHttpError || request.isNetworkError)
+if (request.assetBundle == null)
 {
-    Debug.LogError($"Failed to load sset bundle: {request.error}");
+    Debug.LogError($"Failed to load asset bundle");
     return
 }
 
-var bundle = DownloadHandlerAssetBundle.GetContent(request);
+var bundle = request.assetBundle;
 var texreq = bundle.LoadAssetAsync<Texture2D>(name);
 yield return texreq;
 
