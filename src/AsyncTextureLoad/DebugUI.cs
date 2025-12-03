@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using KSP.UI.Screens;
+using Steamworks;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.Profiling;
@@ -24,6 +25,11 @@ internal class DebugUI : MonoBehaviour
     Rect window;
     bool showGUI = false;
     int iterations = 50;
+
+    string texturePath = "";
+    string assetBundle = "";
+    TextureLoadHint hint = TextureLoadHint.BatchAsynchronous;
+    TextureHandle<Texture2D> handle = null;
 
     void Start()
     {
@@ -97,102 +103,67 @@ internal class DebugUI : MonoBehaviour
         if (GUI.Button(closeButtonRect, "X"))
             HideToolbarGUI();
 
-        GUILayout.BeginVertical();
+        using var mainvert = new PushVertical();
 
-        if (GUILayout.Button("Load PNG"))
-            DoLoadPNG();
-        if (GUILayout.Button("Load DDS"))
-            DoLoadDDS();
-        if (GUILayout.Button("Load Asset Bundle"))
-            DoLoadAssetBundle();
-
-        GUILayout.EndVertical();
-    }
-
-    void DoLoadPNG()
-    {
-        var path = Path.Combine(
-            KSPUtil.ApplicationRootPath,
-            "GameData/AsyncTextureLoad/Textures/Kerbin_Color.png"
-        );
-        var uri = new Uri(path);
-        for (int i = 0; i < iterations; ++i)
+        using (var horz = new PushHorizontal())
         {
-            using var sample = new Sample("LoadPNG");
-            var request = UnityWebRequestTexture.GetTexture(uri, nonReadable: true);
-            StartCoroutine(LoadPNGCoroutine(request));
-        }
-    }
+            using (var vert = new PushVertical())
+            {
+                GUILayout.Label("Texture Path");
+                GUILayout.Label("Asset Bundle");
+            }
 
-    IEnumerator LoadPNGCoroutine(UnityWebRequest request)
-    {
-        yield return request.SendWebRequest();
-
-        if (request.isHttpError || request.isNetworkError)
-        {
-            Debug.LogError($"Failed to load texture: {request.error}");
-            yield break;
+            using (var vert = new PushVertical())
+            {
+                texturePath = GUILayout.TextField(texturePath, GUILayout.ExpandWidth(true));
+                assetBundle = GUILayout.TextField(assetBundle, GUILayout.ExpandWidth(true));
+            }
         }
 
-        _ = DownloadHandlerTexture.GetContent(request);
-    }
-
-    void DoLoadDDS()
-    {
-        for (int i = 0; i < iterations; ++i)
+        if (GUILayout.Button("Load Texture"))
         {
-            using var sample = new Sample("LoadDDS");
-            TextureLoadManager.LoadTextureAsync(
-                "AsyncTextureLoad/Textures/Kerbin_Color.dds",
-                false,
-                true
+            StartCoroutine(LoadTextureCoroutine());
+        }
+
+        GUILayout.Space(5f);
+
+        if (handle is not null)
+        {
+            var texture = handle.GetTexture();
+            GUILayout.Box(
+                texture,
+                GUILayout.ExpandHeight(true),
+                GUILayout.ExpandWidth(true),
+                GUILayout.MaxHeight(1024f),
+                GUILayout.MaxWidth(1024f)
             );
         }
     }
 
-    void DoLoadAssetBundle()
+    IEnumerator LoadTextureCoroutine()
     {
-        var path = Path.Combine(
-            KSPUtil.ApplicationRootPath,
-            "GameData/AsyncTextureLoad/Textures/kerbin"
-        );
-        var uri = new Uri(path);
+        this.handle?.Dispose();
+        this.handle = null;
 
-        using var sample = new Sample("LoadAssetBundle");
-        var request = UnityWebRequestAssetBundle.GetAssetBundle(uri);
-        StartCoroutine(LoadAssetBundleCoroutine(request, "Assets/Textures/Kerbin_Color.dds"));
-    }
-
-    IEnumerator LoadAssetBundleCoroutine(UnityWebRequest request, string name)
-    {
-        yield return request.SendWebRequest();
-
-        if (request.isHttpError || request.isNetworkError)
+        var options = new TextureLoadOptions
         {
-            Debug.LogError($"Failed to load asset bundle: {request.error}");
-            yield break;
-        }
+            AssetBundles = string.IsNullOrEmpty(assetBundle) ? [] : [assetBundle],
+            Hint = hint,
+        };
+        var handle = TextureLoader.LoadTexture<Texture2D>(texturePath, options);
+        yield return handle;
 
-        var bundle = DownloadHandlerAssetBundle.GetContent(request);
-
-        List<Coroutine> coroutines = [];
-        for (int i = 0; i < iterations; ++i)
+        try
         {
-            coroutines.Add(StartCoroutine(LoadAssetBundleTexture(bundle, name)));
+            handle.GetTexture();
+            this.handle = handle;
         }
-
-        foreach (var coro in coroutines)
-            yield return coro;
-
-        bundle.Unload(false);
-    }
-
-    IEnumerator LoadAssetBundleTexture(AssetBundle bundle, string name)
-    {
-        var texreq = bundle.LoadAssetAsync<Texture2D>(name);
-        yield return texreq;
-
-        _ = (Texture2D)texreq.asset;
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to load texture {texturePath}");
+            Debug.LogException(e);
+            handle.Dispose();
+        }
     }
 
     readonly struct PushGUISkin : IDisposable
@@ -209,5 +180,19 @@ internal class DebugUI : MonoBehaviour
         {
             GUI.skin = prev;
         }
+    }
+
+    readonly struct PushHorizontal : IDisposable
+    {
+        public PushHorizontal() => GUILayout.BeginHorizontal();
+
+        public readonly void Dispose() => GUILayout.EndHorizontal();
+    }
+
+    readonly struct PushVertical : IDisposable
+    {
+        public PushVertical() => GUILayout.BeginHorizontal();
+
+        public readonly void Dispose() => GUILayout.EndHorizontal();
     }
 }

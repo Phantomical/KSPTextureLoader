@@ -1,0 +1,222 @@
+using System;
+using System.Collections;
+using System.Runtime.ExceptionServices;
+using JetBrains.Annotations;
+using Unity.Profiling;
+using UnityEngine;
+
+namespace AsyncTextureLoad;
+
+internal class TextureHandle : IDisposable, ISetException, ICompleteHandler
+{
+    private static readonly ProfilerMarker CompleteMarker = new("TextureHandle.Complete");
+
+    internal int RefCount { get; private set; } = 1;
+    internal string Path { get; private set; }
+
+    private Texture texture;
+    private ExceptionDispatchInfo exception;
+    internal ICompleteHandler completeHandler;
+    internal IEnumerator coroutine;
+
+    public bool IsComplete => coroutine is null;
+    public bool IsError => exception is not null;
+
+    internal TextureHandle(string path)
+    {
+        Path = path;
+    }
+
+    internal TextureHandle(string path, ExceptionDispatchInfo ex)
+    {
+        Path = path;
+        exception = ex;
+    }
+
+    /// <summary>
+    /// Get the texture for this texture handle. Will block if the texture has
+    /// not loaded yet and will throw an exception if the texture failed to load.
+    /// </summary>
+    ///
+    /// <remarks>
+    /// You will need to keep this texture handle around or else the texture will
+    /// be either destroyed or leaked when the last handle is disposed of.
+    /// </remarks>
+    public Texture GetTexture()
+    {
+        if (!IsComplete)
+            WaitUntilComplete();
+
+        exception?.Throw();
+        return texture;
+    }
+
+    /// <summary>
+    /// Take ownership of the texture referred to by this texture handle.
+    /// Consumes the current texture handle.
+    /// </summary>
+    ///
+    /// <remarks>
+    /// If the handle has only one reference then this will remove the texture
+    /// from the handle and return it. Otherwise, a copy of the texture will be
+    /// made and the copy will be returned.
+    /// </remarks>
+    public Texture TakeTexture()
+    {
+        using var guard = this;
+
+        var texture = GetTexture();
+        if (RefCount == 1)
+            this.texture = null;
+        else
+            texture = TextureUtils.CloneTexture(this.texture);
+
+        return texture;
+    }
+
+    /// <summary>
+    /// Block until this texture has been loaded.
+    /// </summary>
+    public void WaitUntilComplete()
+    {
+        if (coroutine is null)
+            return;
+
+        using var scope = CompleteMarker.Auto();
+
+        while (true)
+        {
+            if (coroutine is null)
+                break;
+
+            completeHandler?.WaitUntilComplete();
+            if (!coroutine.MoveNext())
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Get a new handle for the same texture and increase the reference count.
+    /// </summary>
+    /// <returns></returns>
+    public TextureHandle Acquire()
+    {
+        RefCount += 1;
+        return this;
+    }
+
+    /// <summary>
+    /// Decrese the reference count of this texture handle. If the reference
+    /// count is decreased to zero then the texture will be destroyed.
+    /// </summary>
+    public void Dispose()
+    {
+        RefCount -= 1;
+        if (RefCount != 0)
+            return;
+
+        var key = TextureLoader.CanonicalizeResourcePath(Path);
+        TextureLoader.Instance.assetBundles.Remove(key);
+
+        if (texture != null)
+            UnityEngine.Object.Destroy(texture);
+    }
+
+    internal void SetTexture<T>(Texture tex, TextureLoadOptions options)
+        where T : Texture
+    {
+        texture = TextureLoader.ConvertTexture<T>(tex, options);
+        coroutine = null;
+        completeHandler = null;
+    }
+
+    void ISetException.SetException(ExceptionDispatchInfo ex)
+    {
+        exception = ex;
+        coroutine = null;
+        completeHandler = null;
+    }
+}
+
+public class TextureHandle<T> : CustomYieldInstruction, IDisposable
+    where T : Texture
+{
+    readonly TextureHandle handle;
+
+    public int RefCount => handle.RefCount;
+    public string Path => handle.Path;
+    public bool IsComplete => handle.IsComplete;
+    public bool IsError => handle.IsError;
+
+    public override bool keepWaiting => !IsComplete;
+
+    internal TextureHandle(TextureHandle handle) => this.handle = handle;
+
+    public static implicit operator TextureHandle<Texture>(TextureHandle<T> handle) =>
+        new(handle.handle);
+
+    /// <summary>
+    /// Get the texture for this texture handle. Will block if the texture has
+    /// not loaded yet and will throw an exception if the texture failed to load.
+    /// </summary>
+    ///
+    /// <remarks>
+    /// You will need to keep this texture handle around or else the texture will
+    /// be either destroyed or leaked when the last handle is disposed of.
+    /// </remarks>
+    public T GetTexture()
+    {
+        var general = handle.GetTexture();
+        if (general is not T texture)
+            throw new InvalidCastException(
+                $"Invalid cast: texture was loaded as type {general.GetType().Name} which cannot be casted to a texture of type {typeof(T).Name}"
+            );
+
+        return texture;
+    }
+
+    /// <summary>
+    /// Take ownership of the texture referred to by this texture handle.
+    /// Consumes the current texture handle.
+    /// </summary>
+    ///
+    /// <remarks>
+    /// If the handle has only one reference then this will remove the texture
+    /// from the handle and return it. Otherwise, a copy of the texture will be
+    /// made and the copy will be returned.
+    /// </remarks>
+    public T TakeTexture()
+    {
+        var general = handle.TakeTexture();
+        if (general is not T texture)
+        {
+            UnityEngine.Object.Destroy(general);
+            throw new InvalidCastException(
+                $"Invalid cast: texture was loaded as type {general.GetType().Name} which cannot be casted to a texture of type {typeof(T).Name}"
+            );
+        }
+
+        return texture;
+    }
+
+    /// <summary>
+    /// Block until this texture has been loaded.
+    /// </summary>
+    public void WaitUntilComplete() => handle.WaitUntilComplete();
+
+    /// <summary>
+    /// Get a new handle for the same texture and increase the reference count.
+    /// </summary>
+    /// <returns></returns>
+    public TextureHandle<T> Acquire()
+    {
+        handle.Acquire();
+        return this;
+    }
+
+    /// <summary>
+    /// Decrese the reference count of this texture handle. If the reference
+    /// count is decreased to zero then the texture will be destroyed.
+    /// </summary>
+    public void Dispose() => handle.Dispose();
+}

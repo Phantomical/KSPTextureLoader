@@ -1,0 +1,110 @@
+using System;
+using System.Collections;
+using System.Runtime.ExceptionServices;
+using Unity.Profiling;
+using UnityEngine;
+
+namespace AsyncTextureLoad;
+
+/// <summary>
+/// A reference counted handle to a loaded asset bundle.
+/// </summary>
+public class AssetBundleHandle
+    : CustomYieldInstruction,
+        IDisposable,
+        ISetException,
+        ICompleteHandler
+{
+    private static readonly ProfilerMarker CompleteMarker = new("AssetBundleHandle.Complete");
+
+    public int RefCount { get; private set; } = 1;
+    private AssetBundle bundle;
+    private ExceptionDispatchInfo exception;
+    internal ICompleteHandler completeHandler;
+    internal IEnumerator coroutine;
+
+    /// <summary>
+    /// The path that this asset bundle was loaded from within GameData.
+    /// </summary>
+    public string Path { get; private set; }
+    public bool IsComplete => coroutine is null;
+    public bool IsError => exception is not null;
+
+    public override bool keepWaiting => !IsComplete;
+
+    internal AssetBundleHandle(string path) => Path = path;
+
+    internal AssetBundleHandle(string path, AssetBundle bundle)
+    {
+        if (bundle is null)
+            throw new ArgumentNullException(nameof(bundle));
+
+        this.Path = path;
+        this.bundle = bundle;
+    }
+
+    /// <summary>
+    /// Get the asset bundle for this handle. If the asset bundle is still being
+    /// loaded then this will block until loading completes.
+    /// </summary>
+    /// <returns></returns>
+    public AssetBundle GetBundle()
+    {
+        if (!IsComplete)
+            WaitUntilComplete();
+
+        exception?.Throw();
+        return bundle;
+    }
+
+    /// <summary>
+    /// Increase the reference count and get a new handle to the same asset
+    /// bundle.
+    /// </summary>
+    /// <returns></returns>
+    public AssetBundleHandle Acquire()
+    {
+        RefCount += 1;
+        return this;
+    }
+
+    /// <summary>
+    /// Decrease the reference count.
+    /// </summary>
+    public void Dispose()
+    {
+        RefCount -= 1;
+    }
+
+    public void WaitUntilComplete()
+    {
+        if (coroutine is null)
+            return;
+
+        using var scope = CompleteMarker.Auto();
+
+        while (true)
+        {
+            if (coroutine is null)
+                break;
+
+            completeHandler?.WaitUntilComplete();
+            if (!coroutine.MoveNext())
+                break;
+        }
+    }
+
+    internal void SetBundle(AssetBundle bundle)
+    {
+        this.bundle = bundle;
+        this.coroutine = null;
+        this.completeHandler = null;
+    }
+
+    void ISetException.SetException(ExceptionDispatchInfo ex)
+    {
+        this.exception = ex;
+        this.coroutine = null;
+        this.completeHandler = null;
+    }
+}

@@ -16,8 +16,7 @@
     <ItemGroup>
         <KSPVersionFile Include=".">
             <Destination>$(RepoRootPath)\GameData\AsyncTextureLoad\AsyncTextureLoad.version</Destination>
-            <URL>
-                https://github.com/KSPModStewards/AsyncTextureLoad/releases/latest/download/AsyncTextureLoad.version</URL>
+            <URL>https://github.com/KSPModStewards/AsyncTextureLoad/releases/latest/download/AsyncTextureLoad.version</URL>
             <Download>https//github.com/KSPModStewards/AsyncTextureLoad/releases</Download>
         </KSPVersionFile>
     </ItemGroup>
@@ -43,8 +42,11 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <!-- Texture2D -->
+        <Publicize Include="UnityEngine.CoreModule:UnityEngine.Cubemap.Internal_Create" />
+        <Publicize Include="UnityEngine.CoreModule:UnityEngine.CubemapArray.Internal_Create" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Texture2D.Internal_Create" />
+        <Publicize Include="UnityEngine.CoreModule:UnityEngine.Texture2DArray.Internal_Create" />
+        <Publicize Include="UnityEngine.CoreModule:UnityEngine.Texture3D.Internal_Create" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Texture.ValidateFormat" />
     </ItemGroup>
 
