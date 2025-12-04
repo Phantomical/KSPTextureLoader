@@ -116,6 +116,9 @@ internal class AsyncTextureLoadConfig : IConfigNode
     {
         node.AddValue(nameof(AssetBundleUnloadDelay), AssetBundleUnloadDelay);
         node.AddValue(nameof(AsyncUploadBufferSize), AsyncUploadBufferSize);
+
+        foreach (var bundle in ImplicitBundles)
+            bundle.Save(node.AddNode("ImplicitBundle"));
     }
 
     struct PrefixEntry
