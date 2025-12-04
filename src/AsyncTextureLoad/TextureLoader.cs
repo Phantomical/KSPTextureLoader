@@ -99,6 +99,29 @@ public partial class TextureLoader : MonoBehaviour
         return Instance.LoadTextureImpl<T>(path, options);
     }
 
+    /// <summary>
+    /// Check whether a texture exists.
+    /// </summary>
+    /// <param name="path">A path to load the texture from on disk or in asset bundles.</param>
+    /// <param name="options">Additional options configuring how the texture gets loaded.</param>
+    /// <returns>Whether a texture with that name exists on disk or in an asset bundle.</returns>
+    ///
+    /// <remarks>
+    /// With implicit bundles it can be rather difficult to tell whether a
+    /// texture actually exists to be loaded. This method is meant to bridge
+    /// that gap. It does not actually load the texture, but it will load asset
+    /// bundles that might contain the texture.
+    ///
+    /// Note that just because the texture exists that doesn't mean that it
+    /// will load successfully. Don't use this to check just before loading
+    /// the texture. Instead you should just try to load the texture.
+    ///
+    /// This is meant for load-time checks so that you can display a warning to
+    /// the user if their install is incorrect.
+    /// </remarks>
+    public static bool TextureExists(string path, TextureLoadOptions options) =>
+        Instance.DoTextureExists(path, options);
+
     // Use weak references so that textures that get leaked will at least get
     // cleaned up during a scene switch.
     internal readonly Dictionary<string, WeakReference<TextureHandleImpl>> textures = new(
@@ -280,6 +303,44 @@ public partial class TextureLoader : MonoBehaviour
 
         var texture = DownloadHandlerTexture.GetContent(request);
         handle.SetTexture<T>(texture, options);
+    }
+
+    private bool DoTextureExists(string path, TextureLoadOptions options)
+    {
+        var key = CanonicalizeResourcePath(path);
+        if (textures.TryGetValue(key, out var weakHandle))
+        {
+            if (weakHandle.TryGetTarget(out _))
+                return true;
+        }
+
+        var diskPath = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", path);
+        if (File.Exists(diskPath))
+            return true;
+
+        var assetBundles = new List<string>(options.AssetBundles ?? []);
+        AsyncTextureLoadConfig.Instance.GetImplicitBundlesForCanonicalPath(key, assetBundles);
+
+        var assetPath = CanonicalizeAssetPath(path);
+        foreach (var assetBundlePath in assetBundles)
+        {
+            using var handle = LoadAssetBundle(assetBundlePath, sync: true);
+
+            try
+            {
+                var bundle = handle.GetBundle();
+                if (bundle.Contains(assetPath))
+                    return true;
+            }
+            catch
+            {
+                // The asset bundle loader will print out an error message, we
+                // don't really need to do anything here.
+                continue;
+            }
+        }
+
+        return false;
     }
 
     internal static T ConvertTexture<T>(Texture src, TextureLoadOptions options)
