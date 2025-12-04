@@ -109,6 +109,9 @@ public class AssetBundleHandle
 
     void ISetException.SetException(ExceptionDispatchInfo ex)
     {
+        Debug.LogError($"[AsyncTextureLoad] Failed to load asset bundle {Path}");
+        Debug.LogException(ex.SourceException);
+
         this.exception = ex;
         this.coroutine = null;
         this.completeHandler = null;

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 using Unity.IO.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Profiling;
@@ -162,7 +163,8 @@ public partial class TextureLoader : MonoBehaviour
     )
         where T : Texture
     {
-        if (options.AssetBundles is not null)
+        List<Exception> assetBundleExceptions = null;
+        if (assetBundles.Count != 0)
         {
             var bundles = new AssetBundleHandle[assetBundles.Count];
             using var bundlesGuard = new ArrayDisposeGuard<AssetBundleHandle>(bundles);
@@ -179,7 +181,18 @@ public partial class TextureLoader : MonoBehaviour
                 var abHandle = bundles[i];
                 if (!abHandle.IsComplete && options.Hint < TextureLoadHint.BatchSynchronous)
                     yield return abHandle;
-                var bundle = abHandle.GetBundle();
+
+                AssetBundle bundle;
+                try
+                {
+                    bundle = abHandle.GetBundle();
+                }
+                catch (Exception ex)
+                {
+                    assetBundleExceptions ??= [];
+                    assetBundleExceptions.Add(ex);
+                    continue;
+                }
 
                 if (!bundle.Contains(assetPath))
                     continue;
@@ -216,6 +229,20 @@ public partial class TextureLoader : MonoBehaviour
                 handle.SetTexture<T>(asset, options);
                 yield break;
             }
+        }
+
+        var diskPath = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", handle.Path);
+        if (!File.Exists(diskPath))
+        {
+            if (assetBundleExceptions is null)
+                throw new FileNotFoundException(
+                    "Texture not present on disk or in configured asset bundles"
+                );
+
+            throw new AggregateException(
+                "Texture not present on disk or in configured asset bundles. Some asset bundles failed to load.",
+                assetBundleExceptions
+            );
         }
 
         var extension = Path.GetExtension(handle.Path);
