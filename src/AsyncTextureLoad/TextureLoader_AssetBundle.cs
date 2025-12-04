@@ -80,7 +80,7 @@ public partial class TextureLoader
         int delayCount = 0;
         while (true)
         {
-            if (handle.RefCount != 0)
+            if (handle.RefCount > 0)
             {
                 delayCount = 0;
                 yield return null;

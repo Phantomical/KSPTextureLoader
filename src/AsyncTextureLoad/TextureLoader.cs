@@ -100,12 +100,12 @@ public partial class TextureLoader : MonoBehaviour
         if (!SupportedTextureTypes.Contains(typeof(T)))
             throw new NotSupportedException($"Cannot load a texture of type {typeof(T).Name}");
 
-        throw new NotImplementedException();
+        return Instance.LoadTextureImpl<T>(path, options);
     }
 
     // Use weak references so that textures that get leaked will at least get
     // cleaned up during a scene switch.
-    private readonly Dictionary<string, WeakReference<TextureHandle>> textures = new(
+    internal readonly Dictionary<string, WeakReference<TextureHandle>> textures = new(
         StringComparer.InvariantCultureIgnoreCase
     );
 

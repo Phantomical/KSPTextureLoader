@@ -13,6 +13,7 @@ internal class TextureHandle : IDisposable, ISetException, ICompleteHandler
 
     internal int RefCount { get; private set; } = 1;
     internal string Path { get; private set; }
+    internal string AssetBundle { get; private set; }
 
     private Texture texture;
     private ExceptionDispatchInfo exception;
@@ -112,20 +113,28 @@ internal class TextureHandle : IDisposable, ISetException, ICompleteHandler
     public void Dispose()
     {
         RefCount -= 1;
+        if (RefCount < 0)
+        {
+            Debug.LogError(
+                $"TextureHandle for texture at {Path} has been disposed of too many times!"
+            );
+        }
+
         if (RefCount != 0)
             return;
 
         var key = TextureLoader.CanonicalizeResourcePath(Path);
-        TextureLoader.Instance.assetBundles.Remove(key);
+        TextureLoader.Instance.textures.Remove(key);
 
         if (texture != null)
             UnityEngine.Object.Destroy(texture);
     }
 
-    internal void SetTexture<T>(Texture tex, TextureLoadOptions options)
+    internal void SetTexture<T>(Texture tex, TextureLoadOptions options, string assetBundle = null)
         where T : Texture
     {
         texture = TextureLoader.ConvertTexture<T>(tex, options);
+        AssetBundle = assetBundle;
         coroutine = null;
         completeHandler = null;
     }
@@ -143,9 +152,32 @@ public class TextureHandle<T> : CustomYieldInstruction, IDisposable
 {
     readonly TextureHandle handle;
 
+    /// <summary>
+    /// The current reference count of this texture handle.
+    /// </summary>
     public int RefCount => handle.RefCount;
+
+    /// <summary>
+    /// The path that this texture was loaded from. This will either be a path
+    /// on disk or an asset within an asset bundle, depending on whether
+    /// <see cref="AssetBundle"/> is null or not.
+    /// </summary>
     public string Path => handle.Path;
+
+    /// <summary>
+    /// The asset bundle that this texture was loaded from, or null if it was
+    /// loaded from a texture file on disk.
+    /// </summary>
+    public string AssetBundle => handle.AssetBundle;
+
+    /// <summary>
+    /// Indicates whether the texture load has completed.
+    /// </summary>
     public bool IsComplete => handle.IsComplete;
+
+    /// <summary>
+    /// Indicates whether the texture load completed with an error.
+    /// </summary>
     public bool IsError => handle.IsError;
 
     public override bool keepWaiting => !IsComplete;

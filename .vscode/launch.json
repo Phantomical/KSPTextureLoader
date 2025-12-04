@@ -42,6 +42,19 @@
             "cwd": "D:\\Projects\\KSP\\Kerbal Space Program - Test 2\\",
             "stopAtEntry": false,
             "console": "internalConsole"
+        },
+        {
+            "name": "Launch KSP - Test 3",
+            "type": "clr",
+            "request": "launch",
+            "preLaunchTask": "dotnet: build",
+            "program": "D:\\Projects\\KSP\\Kerbal Space Program - Test 3\\KSP_x64.exe",
+            "args": [
+                "-popupwindow"
+            ],
+            "cwd": "D:\\Projects\\KSP\\Kerbal Space Program - Test 3\\",
+            "stopAtEntry": false,
+            "console": "internalConsole"
         }
     ]
 }

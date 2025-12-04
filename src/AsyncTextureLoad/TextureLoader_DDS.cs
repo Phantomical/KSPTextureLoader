@@ -77,8 +77,7 @@ partial class TextureLoader
             }
         }
 
-        using var bufGuard = buffer;
-        using var colorBufGuard = new NativeArrayGuard<byte>();
+        using var bufGuard = new NativeArrayGuard<byte>(buffer);
         using var readGuard = new SafeReadHandleGuard(readHandle);
 
         var flags = (DDS_HEADER_FLAGS)header.dwFlags;
@@ -196,7 +195,7 @@ partial class TextureLoader
                     };
 
                     readGuard.JobHandle = job.Schedule(readGuard.JobHandle);
-                    colorBufGuard.array = colors;
+                    bufGuard.array = colors;
                     buffer = colors;
                 }
                 else if (header.ddspf.dwRGBBitCount == 8)
@@ -227,7 +226,7 @@ partial class TextureLoader
                     };
 
                     readGuard.JobHandle = job.Schedule(readGuard.JobHandle);
-                    colorBufGuard.array = colors;
+                    bufGuard.array = colors;
                     buffer = colors;
                 }
                 else
@@ -298,13 +297,33 @@ partial class TextureLoader
                 if (options.Hint == TextureLoadHint.Synchronous)
                 {
                     tex2d.GetRawTextureData<byte>();
+
+                    handle.completeHandler = new JobHandleCompleteHandler(readGuard.JobHandle);
+                    yield return new WaitUntil(() => readGuard.JobHandle.IsCompleted);
+                    handle.completeHandler = null;
+
+                    tex2d.LoadRawTextureData(buffer);
+                }
+                else
+                {
+                    // TODO: Actually detect when the texture has finished being uploaded.
+                    yield return null;
+                    yield return null;
+
+                    var texbuffer = tex2d.GetRawTextureData<byte>();
+
+                    var job = new BufferCopyJob { input = buffer, output = texbuffer };
+                    readGuard.JobHandle = job.Schedule(readGuard.JobHandle);
+                    buffer.Dispose(readGuard.JobHandle);
+                    JobHandle.ScheduleBatchedJobs();
+
+                    bufGuard.array = default;
+
+                    handle.completeHandler = new JobHandleCompleteHandler(readGuard.JobHandle);
+                    yield return new WaitUntil(() => readGuard.JobHandle.IsCompleted);
+                    handle.completeHandler = null;
                 }
 
-                handle.completeHandler = new JobHandleCompleteHandler(readGuard.JobHandle);
-                yield return new WaitUntil(() => readGuard.JobHandle.IsCompleted);
-                handle.completeHandler = null;
-
-                tex2d.LoadRawTextureData(buffer);
                 tex2d.Apply(
                     false,
                     makeNoLongerReadable: options.Unreadable && typeof(T) != typeof(Cubemap)
@@ -752,6 +771,7 @@ partial class TextureLoader
     struct DecodeKopernicusPalette4bitJob : IJob
     {
         [ReadOnly]
+        [DeallocateOnJobCompletion]
         public NativeArray<byte> data;
 
         [WriteOnly]
@@ -779,6 +799,7 @@ partial class TextureLoader
     struct DecodeKopernicusPalette8bitJob : IJob
     {
         [ReadOnly]
+        [DeallocateOnJobCompletion]
         public NativeArray<byte> data;
 
         [WriteOnly]
@@ -797,10 +818,27 @@ partial class TextureLoader
         }
     }
 
-    class NativeArrayGuard<T> : IDisposable
+    struct BufferCopyJob : IJob
+    {
+        [ReadOnly]
+        public NativeArray<byte> input;
+
+        [WriteOnly]
+        public NativeArray<byte> output;
+
+        public readonly void Execute()
+        {
+            if (input.Length != output.Length)
+                return;
+
+            output.CopyFrom(input);
+        }
+    }
+
+    class NativeArrayGuard<T>(NativeArray<T> array = default) : IDisposable
         where T : unmanaged
     {
-        public NativeArray<T> array;
+        public NativeArray<T> array = array;
 
         public void Dispose() => array.Dispose();
     }

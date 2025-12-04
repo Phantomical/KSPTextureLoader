@@ -24,12 +24,11 @@ internal class DebugUI : MonoBehaviour
 
     Rect window;
     bool showGUI = false;
-    int iterations = 50;
 
     string texturePath = "";
     string assetBundle = "";
     TextureLoadHint hint = TextureLoadHint.BatchAsynchronous;
-    TextureHandle<Texture2D> handle = null;
+    Texture2D texture = null;
 
     void Start()
     {
@@ -107,10 +106,10 @@ internal class DebugUI : MonoBehaviour
 
         using (var horz = new PushHorizontal())
         {
-            using (var vert = new PushVertical())
+            using (var vert = new PushVertical(GUILayout.MaxWidth(200f)))
             {
-                GUILayout.Label("Texture Path");
-                GUILayout.Label("Asset Bundle");
+                GUILayout.Label("Texture Path", GUILayout.ExpandWidth(true));
+                GUILayout.Label("Asset Bundle", GUILayout.ExpandWidth(true));
             }
 
             using (var vert = new PushVertical())
@@ -127,24 +126,19 @@ internal class DebugUI : MonoBehaviour
 
         GUILayout.Space(5f);
 
-        if (handle is not null)
+        if (texture != null)
         {
-            var texture = handle.GetTexture();
-            GUILayout.Box(
-                texture,
-                GUILayout.ExpandHeight(true),
-                GUILayout.ExpandWidth(true),
-                GUILayout.MaxHeight(1024f),
-                GUILayout.MaxWidth(1024f)
-            );
+            var aspect = (float)texture.height / (float)texture.width;
+            var width = Math.Min(window.width - 10f, 256f);
+            var height = width * aspect;
+            GUILayout.Box(texture, GUILayout.Width(width), GUILayout.Height(height));
         }
+
+        GUI.DragWindow();
     }
 
     IEnumerator LoadTextureCoroutine()
     {
-        this.handle?.Dispose();
-        this.handle = null;
-
         var options = new TextureLoadOptions
         {
             AssetBundles = string.IsNullOrEmpty(assetBundle) ? [] : [assetBundle],
@@ -153,16 +147,26 @@ internal class DebugUI : MonoBehaviour
         var handle = TextureLoader.LoadTexture<Texture2D>(texturePath, options);
         yield return handle;
 
+        Destroy(texture);
+        texture = null;
+
         try
         {
-            handle.GetTexture();
-            this.handle = handle;
+            handle.WaitUntilComplete();
+
+            if (handle.AssetBundle is not null)
+                Debug.Log(
+                    $"[AsyncTextureLoad] Loaded texture {handle.Path} from {handle.AssetBundle}"
+                );
+            else
+                Debug.Log($"[AsyncTextureLoad] Loaded texture {handle.Path}");
+
+            texture = handle.TakeTexture();
         }
         catch (Exception e)
         {
             Debug.LogError($"Failed to load texture {texturePath}");
             Debug.LogException(e);
-            handle.Dispose();
         }
     }
 
@@ -186,13 +190,18 @@ internal class DebugUI : MonoBehaviour
     {
         public PushHorizontal() => GUILayout.BeginHorizontal();
 
+        public PushHorizontal(params GUILayoutOption[] options) =>
+            GUILayout.BeginHorizontal(options);
+
         public readonly void Dispose() => GUILayout.EndHorizontal();
     }
 
     readonly struct PushVertical : IDisposable
     {
-        public PushVertical() => GUILayout.BeginHorizontal();
+        public PushVertical() => GUILayout.BeginVertical();
 
-        public readonly void Dispose() => GUILayout.EndHorizontal();
+        public PushVertical(params GUILayoutOption[] options) => GUILayout.BeginVertical(options);
+
+        public readonly void Dispose() => GUILayout.EndVertical();
     }
 }

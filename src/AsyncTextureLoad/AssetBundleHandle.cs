@@ -74,6 +74,12 @@ public class AssetBundleHandle
     public void Dispose()
     {
         RefCount -= 1;
+        if (RefCount < 0)
+        {
+            Debug.LogError(
+                $"AssetBundleHandle for asset bundle at {Path} has been disposed of too many times!"
+            );
+        }
     }
 
     public void WaitUntilComplete()
