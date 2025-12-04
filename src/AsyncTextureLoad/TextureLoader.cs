@@ -100,14 +100,14 @@ public partial class TextureLoader : MonoBehaviour
 
     // Use weak references so that textures that get leaked will at least get
     // cleaned up during a scene switch.
-    internal readonly Dictionary<string, WeakReference<TextureHandle>> textures = new(
+    internal readonly Dictionary<string, WeakReference<TextureHandleImpl>> textures = new(
         StringComparer.InvariantCultureIgnoreCase
     );
 
     private TextureHandle<T> LoadTextureImpl<T>(string path, TextureLoadOptions options)
         where T : Texture
     {
-        TextureHandle handle;
+        TextureHandleImpl handle;
         var key = CanonicalizeResourcePath(path);
         if (textures.TryGetValue(key, out var weakHandle))
         {
@@ -115,8 +115,8 @@ public partial class TextureLoader : MonoBehaviour
                 return new TextureHandle<T>(handle);
         }
 
-        handle = new TextureHandle(path);
-        textures[key] = new WeakReference<TextureHandle>(handle);
+        handle = new TextureHandleImpl(path);
+        textures[key] = new WeakReference<TextureHandleImpl>(handle);
 
         var assetBundles = new List<string>(options.AssetBundles ?? []);
         AsyncTextureLoadConfig.Instance.GetImplicitBundlesForCanonicalPath(key, assetBundles);
@@ -129,7 +129,7 @@ public partial class TextureLoader : MonoBehaviour
     }
 
     private IEnumerator DoLoadTexture<T>(
-        TextureHandle handle,
+        TextureHandleImpl handle,
         TextureLoadOptions options,
         List<string> assetBundles
     )
@@ -156,7 +156,7 @@ public partial class TextureLoader : MonoBehaviour
     }
 
     private IEnumerator DoLoadTextureInner<T>(
-        TextureHandle handle,
+        TextureHandleImpl handle,
         TextureLoadOptions options,
         List<string> assetBundles
     )
@@ -235,7 +235,7 @@ public partial class TextureLoader : MonoBehaviour
         }
     }
 
-    IEnumerable<object> LoadPNGOrJPEG<T>(TextureHandle handle, TextureLoadOptions options)
+    IEnumerable<object> LoadPNGOrJPEG<T>(TextureHandleImpl handle, TextureLoadOptions options)
         where T : Texture
     {
         var diskPath = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", handle.Path);

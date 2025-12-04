@@ -24,7 +24,7 @@ partial class TextureLoader
         CubemapArray,
     }
 
-    IEnumerable<object> LoadDDSTexture<T>(TextureHandle handle, TextureLoadOptions options)
+    IEnumerable<object> LoadDDSTexture<T>(TextureHandleImpl handle, TextureLoadOptions options)
         where T : Texture
     {
         var diskPath = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", handle.Path);
