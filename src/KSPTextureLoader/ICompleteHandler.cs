@@ -2,7 +2,7 @@ using Unity.Jobs;
 using UnityEngine;
 using UnityEngine.Networking;
 
-namespace AsyncTextureLoad;
+namespace KSPTextureLoader;
 
 internal interface ICompleteHandler
 {

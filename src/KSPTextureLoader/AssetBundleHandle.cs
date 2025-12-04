@@ -4,7 +4,7 @@ using System.Runtime.ExceptionServices;
 using Unity.Profiling;
 using UnityEngine;
 
-namespace AsyncTextureLoad;
+namespace KSPTextureLoader;
 
 /// <summary>
 /// A reference counted handle to a loaded asset bundle.
@@ -109,7 +109,7 @@ public class AssetBundleHandle
 
     void ISetException.SetException(ExceptionDispatchInfo ex)
     {
-        Debug.LogError($"[AsyncTextureLoad] Failed to load asset bundle {Path}");
+        Debug.LogError($"[KSPTextureLoader] Failed to load asset bundle {Path}");
         Debug.LogException(ex.SourceException);
 
         this.exception = ex;

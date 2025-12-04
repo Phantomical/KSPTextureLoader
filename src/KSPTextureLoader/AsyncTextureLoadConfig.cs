@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using UnityEngine;
 
-namespace AsyncTextureLoad;
+namespace KSPTextureLoader;
 
 internal struct ImplicitBundle : IConfigNode
 {
@@ -27,9 +27,9 @@ internal struct ImplicitBundle : IConfigNode
 /// <summary>
 /// The type used for the config file in GameData.
 /// </summary>
-internal class AsyncTextureLoadConfig : IConfigNode
+internal class KSPTextureLoaderConfig : IConfigNode
 {
-    public static readonly AsyncTextureLoadConfig Instance = new();
+    public static readonly KSPTextureLoaderConfig Instance = new();
 
     /// <summary>
     /// How many frames should we hold on to asset bundles for before they are
@@ -81,7 +81,7 @@ internal class AsyncTextureLoadConfig : IConfigNode
             if (string.IsNullOrEmpty(bundle.prefix))
             {
                 Debug.LogError(
-                    $"[AsyncTextureLoad] Found ImplicitBundle node with an empty prefix"
+                    $"[KSPTextureLoader] Found ImplicitBundle node with an empty prefix"
                 );
                 continue;
             }
@@ -89,19 +89,19 @@ internal class AsyncTextureLoadConfig : IConfigNode
             if (string.IsNullOrEmpty(bundle.bundle))
             {
                 Debug.LogError(
-                    $"[AsyncTextureLoad] ImplicitBundle with prefix {bundle.prefix} is missing a bundle path"
+                    $"[KSPTextureLoader] ImplicitBundle with prefix {bundle.prefix} is missing a bundle path"
                 );
                 continue;
             }
 
             if (!File.Exists(bundle.bundle))
             {
-                Debug.LogError($"[AsyncTextureLoad] ImplicitBundle {bundle.bundle} does not exist");
+                Debug.LogError($"[KSPTextureLoader] ImplicitBundle {bundle.bundle} does not exist");
                 continue;
             }
 
             Debug.Log(
-                $"[AsyncTextureLoad] Loaded implicit bundle for prefix {bundle.prefix}: {bundle.bundle}"
+                $"[KSPTextureLoader] Loaded implicit bundle for prefix {bundle.prefix}: {bundle.bundle}"
             );
 
             bundles.Add(bundle);
@@ -132,7 +132,7 @@ internal class AsyncTextureLoadConfig : IConfigNode
 
     public static void ModuleManagerPostLoad()
     {
-        var config = GameDatabase.Instance.GetConfigNode("AsyncTextureLoad");
+        var config = GameDatabase.Instance.GetConfigNode("KSPTextureLoader");
         if (config != null)
         {
             Instance.Load(config);

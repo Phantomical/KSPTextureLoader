@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.ExceptionServices;
 
-namespace AsyncTextureLoad;
+namespace KSPTextureLoader;
 
 internal interface ISetException
 {

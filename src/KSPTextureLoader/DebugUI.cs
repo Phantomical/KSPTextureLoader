@@ -8,7 +8,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.Profiling;
 
-namespace AsyncTextureLoad;
+namespace KSPTextureLoader;
 
 [KSPAddon(KSPAddon.Startup.AllGameScenes, once: false)]
 internal class DebugUI : MonoBehaviour
@@ -35,7 +35,7 @@ internal class DebugUI : MonoBehaviour
         if (!InitializedStatics)
         {
             ButtonTexture = GameDatabase.Instance.GetTexture(
-                "AsyncTextureLoad/Textures/ToolbarIcon",
+                "KSPTextureLoader/Textures/ToolbarIcon",
                 false
             );
             InitializedStatics = true;
@@ -156,10 +156,10 @@ internal class DebugUI : MonoBehaviour
 
             if (handle.AssetBundle is not null)
                 Debug.Log(
-                    $"[AsyncTextureLoad] Loaded texture {handle.Path} from {handle.AssetBundle}"
+                    $"[KSPTextureLoader] Loaded texture {handle.Path} from {handle.AssetBundle}"
                 );
             else
-                Debug.Log($"[AsyncTextureLoad] Loaded texture {handle.Path}");
+                Debug.Log($"[KSPTextureLoader] Loaded texture {handle.Path}");
 
             texture = handle.TakeTexture();
         }

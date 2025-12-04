@@ -10,7 +10,7 @@ using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Networking;
 
-namespace AsyncTextureLoad;
+namespace KSPTextureLoader;
 
 [KSPAddon(KSPAddon.Startup.Instantly, once: true)]
 public partial class TextureLoader : MonoBehaviour
@@ -143,7 +143,7 @@ public partial class TextureLoader : MonoBehaviour
         textures[key] = new WeakReference<TextureHandleImpl>(handle);
 
         var assetBundles = new List<string>(options.AssetBundles ?? []);
-        AsyncTextureLoadConfig.Instance.GetImplicitBundlesForCanonicalPath(key, assetBundles);
+        KSPTextureLoaderConfig.Instance.GetImplicitBundlesForCanonicalPath(key, assetBundles);
 
         var coroutine = DoLoadTexture<T>(handle, options, assetBundles);
         handle.coroutine = coroutine;
@@ -244,7 +244,7 @@ public partial class TextureLoader : MonoBehaviour
                 if (asset is null)
                 {
                     Debug.LogWarning(
-                        $"[AsyncTextureLoad] Asset {handle.Path} exists in asset bundle {options.AssetBundles[i]} but was not a texture."
+                        $"[KSPTextureLoader] Asset {handle.Path} exists in asset bundle {options.AssetBundles[i]} but was not a texture."
                     );
                     continue;
                 }
@@ -319,7 +319,7 @@ public partial class TextureLoader : MonoBehaviour
             return true;
 
         var assetBundles = new List<string>(options.AssetBundles ?? []);
-        AsyncTextureLoadConfig.Instance.GetImplicitBundlesForCanonicalPath(key, assetBundles);
+        KSPTextureLoaderConfig.Instance.GetImplicitBundlesForCanonicalPath(key, assetBundles);
 
         var assetPath = CanonicalizeAssetPath(path);
         foreach (var assetBundlePath in assetBundles)

@@ -18,7 +18,7 @@ jobs:
       - uses: KSPModdingLibs/KSPBuildTools/.github/actions/compile@0.0.4
       - uses: KSPModdingLibs/KSPBuildTools/.github/actions/assemble-release@0.0.4
         with:
-          output-file-name: AsyncTextureLoad
+          output-file-name: KSPTextureLoader
           # The build step already copies the relevant files into GameData so we
           # don't need to include the defaults here
           artifacts: GameData
@@ -26,5 +26,5 @@ jobs:
       - run: tree
       - uses: actions/upload-artifact@v4
         with:
-          path: GameData/AsyncTextureLoad/AsyncTextureLoad.version
-          name: AsyncTextureLoad.version
+          path: GameData/KSPTextureLoader/KSPTextureLoader.version
+          name: KSPTextureLoader.version

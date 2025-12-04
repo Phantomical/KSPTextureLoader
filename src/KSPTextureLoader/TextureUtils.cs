@@ -3,7 +3,7 @@ using System.Runtime.Serialization;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 
-namespace AsyncTextureLoad;
+namespace KSPTextureLoader;
 
 internal static class TextureUtils
 {

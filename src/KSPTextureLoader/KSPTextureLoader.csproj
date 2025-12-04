@@ -8,16 +8,16 @@
         <!-- <DebugType>portable</DebugType> -->
         <LangVersion>13</LangVersion>
 
-        <BinariesOutputRelativePath>GameData\AsyncTextureLoad</BinariesOutputRelativePath>
+        <BinariesOutputRelativePath>GameData\KSPTextureLoader</BinariesOutputRelativePath>
         <KSPBT_GenerateKSPAssemblyAttribute>true</KSPBT_GenerateKSPAssemblyAttribute>
         <KSPBT_GenerateKSPAssemblyDependencyAttributes>true</KSPBT_GenerateKSPAssemblyDependencyAttributes>
     </PropertyGroup>
 
     <ItemGroup>
         <KSPVersionFile Include=".">
-            <Destination>$(RepoRootPath)\GameData\AsyncTextureLoad\AsyncTextureLoad.version</Destination>
-            <URL>https://github.com/KSPModStewards/AsyncTextureLoad/releases/latest/download/AsyncTextureLoad.version</URL>
-            <Download>https//github.com/KSPModStewards/AsyncTextureLoad/releases</Download>
+            <Destination>$(RepoRootPath)\GameData\KSPTextureLoader\KSPTextureLoader.version</Destination>
+            <URL>https://github.com/Phantomical/KSPTextureLoader/releases/latest/download/KSPTextureLoader.version</URL>
+            <Download>https//github.com/Phantomical/KSPTextureLoader/releases</Download>
         </KSPVersionFile>
     </ItemGroup>
 
@@ -31,7 +31,7 @@
     </ItemGroup>
 
     <PropertyGroup>
-        <GameDataOutDir>$(RepoRootPath)\GameData\AsyncTextureLoad</GameDataOutDir>
+        <GameDataOutDir>$(RepoRootPath)\GameData\KSPTextureLoader</GameDataOutDir>
     </PropertyGroup>
 
     <ItemGroup>

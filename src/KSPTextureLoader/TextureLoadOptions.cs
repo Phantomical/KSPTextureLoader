@@ -1,4 +1,4 @@
-namespace AsyncTextureLoad;
+namespace KSPTextureLoader;
 
 public enum TextureLoadHint
 {

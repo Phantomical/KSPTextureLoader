@@ -5,7 +5,7 @@ using System.IO;
 using Unity.Profiling;
 using UnityEngine;
 
-namespace AsyncTextureLoad;
+namespace KSPTextureLoader;
 
 public partial class TextureLoader
 {
@@ -89,7 +89,7 @@ public partial class TextureLoader
 
             delayCount += 1;
 
-            if (delayCount >= AsyncTextureLoadConfig.Instance.AssetBundleUnloadDelay)
+            if (delayCount >= KSPTextureLoaderConfig.Instance.AssetBundleUnloadDelay)
                 break;
         }
 

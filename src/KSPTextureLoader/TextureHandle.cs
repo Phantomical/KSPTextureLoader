@@ -5,7 +5,7 @@ using JetBrains.Annotations;
 using Unity.Profiling;
 using UnityEngine;
 
-namespace AsyncTextureLoad;
+namespace KSPTextureLoader;
 
 internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 {

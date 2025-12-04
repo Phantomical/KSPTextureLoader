@@ -1,6 +1,6 @@
 using System;
 
-namespace AsyncTextureLoad.DDS;
+namespace KSPTextureLoader.DDS;
 
 [Flags]
 internal enum DDS_HEADER_FLAGS : uint

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
-using AsyncTextureLoad.DDS;
+using KSPTextureLoader.DDS;
 using DDSHeaders;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -11,7 +11,7 @@ using Unity.Jobs;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 
-namespace AsyncTextureLoad;
+namespace KSPTextureLoader;
 
 partial class TextureLoader
 {

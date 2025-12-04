@@ -1,4 +1,4 @@
-namespace AsyncTextureLoad;
+namespace KSPTextureLoader;
 
 internal enum DxgiFormat : uint
 {
