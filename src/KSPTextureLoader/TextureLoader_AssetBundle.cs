@@ -57,9 +57,12 @@ public partial class TextureLoader
         var path = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", handle.Path);
         var request = AssetBundle.LoadFromFileAsync(path);
 
-        handle.completeHandler = new AssetBundleCompleteHandler(request);
-        yield return request;
-        handle.completeHandler = null;
+        if (!sync)
+        {
+            handle.completeHandler = new AssetBundleCompleteHandler(request);
+            yield return request;
+            handle.completeHandler = null;
+        }
 
         var bundle = request.assetBundle;
         if (bundle == null)

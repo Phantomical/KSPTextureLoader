@@ -38,16 +38,6 @@ public partial class TextureLoader : MonoBehaviour
 
         DontDestroyOnLoad(this);
         Instance = this;
-
-        // We want to load configs before regular post patch callbacks for other
-        // mods. Explicitly registered post patch callbacks run first so this
-        // should prevent any issues here.
-        ModuleManager.PostPatchLoader.AddPostPatchCallback(ModuleManagerPostPatch);
-    }
-
-    void ModuleManagerPostPatch()
-    {
-        Config.Instance.ModuleManagerPostLoad();
     }
 
     void OnDestroy()
@@ -151,9 +141,7 @@ public partial class TextureLoader : MonoBehaviour
         handle = new TextureHandleImpl(path);
         textures[key] = new WeakReference<TextureHandleImpl>(handle);
 
-        var assetBundles = new List<string>(options.AssetBundles ?? []);
-        Config.Instance.GetImplicitBundlesForCanonicalPath(key, assetBundles);
-
+        var assetBundles = GetAssetBundlesForKey(key, options.AssetBundles);
         var coroutine = DoLoadTexture<T>(handle, options, assetBundles);
         handle.coroutine = coroutine;
         StartCoroutine(coroutine);
@@ -327,9 +315,7 @@ public partial class TextureLoader : MonoBehaviour
         if (File.Exists(diskPath))
             return true;
 
-        var assetBundles = new List<string>(options.AssetBundles ?? []);
-        Config.Instance.GetImplicitBundlesForCanonicalPath(key, assetBundles);
-
+        var assetBundles = GetAssetBundlesForKey(key, options.AssetBundles);
         var assetPath = CanonicalizeAssetPath(path);
         foreach (var assetBundlePath in assetBundles)
         {
@@ -381,6 +367,22 @@ public partial class TextureLoader : MonoBehaviour
 
     private static unsafe ReadHandle LaunchRead(string path, ReadCommand command) =>
         AsyncReadManager.Read(path, &command, 1);
+
+    private static List<string> GetAssetBundlesForKey(string key, string[] assetBundles)
+    {
+        var bundles = new List<string>(assetBundles?.Length ?? 0);
+        if (assetBundles is not null)
+        {
+            foreach (var bundle in assetBundles)
+            {
+                if (bundle is not null)
+                    bundles.Add(bundle);
+            }
+        }
+
+        Config.Instance.GetImplicitBundlesForCanonicalPath(key, bundles);
+        return bundles;
+    }
 
     private static string CanonicalizeAssetPath(string path)
     {

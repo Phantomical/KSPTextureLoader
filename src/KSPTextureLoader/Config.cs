@@ -94,7 +94,8 @@ internal class Config : IConfigNode
                 continue;
             }
 
-            if (!File.Exists(bundle.bundle))
+            var diskPath = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", bundle.bundle);
+            if (!File.Exists(diskPath))
             {
                 Debug.LogError($"[KSPTextureLoader] ImplicitBundle {bundle.bundle} does not exist");
                 continue;
@@ -130,14 +131,13 @@ internal class Config : IConfigNode
     private string[] BundlePaths;
     private Dictionary<string, PrefixEntry> BundlePrefixMap = [];
 
-    internal void ModuleManagerPostLoad()
+    public static void ModuleManagerPostLoad()
     {
-        var config = GameDatabase.Instance.GetConfigNode("KSPTextureLoader");
-        if (config != null)
-        {
-            Instance.Load(config);
-            Instance.Apply();
-        }
+        var configs = GameDatabase.Instance.GetConfigNodes("KSPTextureLoader");
+        if (configs?.Length >= 1)
+            Instance.Load(configs[0]);
+
+        Instance.Apply();
     }
 
     void BuildBundlePrefixMap()

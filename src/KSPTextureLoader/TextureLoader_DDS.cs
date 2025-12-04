@@ -10,6 +10,7 @@ using Unity.IO.LowLevel.Unsafe;
 using Unity.Jobs;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
+using UnityEngine.Profiling;
 
 namespace KSPTextureLoader;
 
@@ -229,6 +230,8 @@ partial class TextureLoader
                 {
                     throw new Exception("Unsupported DDS file: no recognized format");
                 }
+
+                JobHandle.ScheduleBatchedJobs();
             }
             else
             {
@@ -261,7 +264,6 @@ partial class TextureLoader
                 }
             }
 
-            JobHandle.ScheduleBatchedJobs();
         }
 
         if (options.Linear is bool linear)
@@ -281,12 +283,14 @@ partial class TextureLoader
                     goto case DDSTextureType.Texture2DArray;
                 }
 
+                Profiler.BeginSample("TextureUtils.CreateUninitializedTexture2D");
                 var tex2d = TextureUtils.CreateUninitializedTexture2D(
                     width,
                     height,
                     mipCount,
                     format
                 );
+                Profiler.EndSample();
 
                 // If we are loading synchronously then we want to run UnshareTextureData
                 // now, instead of waiting until after the disk read is complete.
@@ -524,7 +528,7 @@ partial class TextureLoader
                     break;
             }
         }
-        else if (flags.HasFlag((DDSPixelFormatFlags)0x00020000)) // DDS_LUMINANCE
+        else if (flags.HasFlag((DDSPixelFormatFlags)0x20000)) // DDS_LUMINANCE
         {
             switch (ddpf.dwRGBBitCount)
             {
@@ -541,6 +545,10 @@ partial class TextureLoader
 
                     if (IsBitMask(0x00FF, 0, 0, 0xFF00))
                         return GraphicsFormat.R8G8_UNorm;
+
+                    // Sol uses this format for its L8 heightmaps.
+                    if (IsBitMask(0xFF, 0xFF, 0xFF, 0))
+                        return GraphicsFormat.R8_UNorm;
 
                     break;
             }

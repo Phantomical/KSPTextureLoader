@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <Description>Fast and asynchronous texture loading for KSP</Description>
+        <Description>Tests for KSPTextureLoader</Description>
 
         <Version>1.0.0</Version>
 
@@ -32,6 +32,10 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
+
+        <ProjectReference Include="../KSPTextureLoader/KSPTextureLoader.csproj">
+            <Private>false</Private>
+        </ProjectReference>
     </ItemGroup>
 
     <PropertyGroup>
@@ -66,13 +70,8 @@
 
     <Target Name="CopyUnityAssets" AfterTargets="CopyFilesToOutputDirectory">
         <ItemGroup>
-            <Patches Include="$(RepoRootPath)\src\GameData\**\*.*" />
+            <Patches Include="$(RepoRootPath)\src\TestData\**\*.*" />
         </ItemGroup>
         <Copy SourceFiles="@(Patches)" DestinationFolder="$(GameDataOutDir)\%(RecursiveDir)" />
-    </Target>
-
-    <Target Name="CopyLicenseAndReadme" AfterTargets="CopyFilesToOutputDirectory">
-        <Copy SourceFiles="$(RepoRootPath)\LICENSE" DestinationFolder="$(GameDataOutDir)" />
-        <!-- <Copy SourceFiles="$(RepoRootPath)\README.md" DestinationFolder="$(GameDataOutDir)" /> -->
     </Target>
 </Project>
