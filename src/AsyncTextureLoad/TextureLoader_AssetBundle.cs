@@ -89,7 +89,7 @@ public partial class TextureLoader
 
             delayCount += 1;
 
-            if (delayCount >= Config.AssetBundleUnloadDelay)
+            if (delayCount >= AsyncTextureLoadConfig.Instance.AssetBundleUnloadDelay)
                 break;
         }
 

@@ -3,11 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.ExceptionServices;
-using JetBrains.Annotations;
-using Steamworks;
-using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.IO.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Profiling;
@@ -123,14 +118,21 @@ public partial class TextureLoader : MonoBehaviour
         handle = new TextureHandle(path);
         textures[key] = new WeakReference<TextureHandle>(handle);
 
-        var coroutine = DoLoadTexture<T>(handle, options);
+        var assetBundles = new List<string>(options.AssetBundles ?? []);
+        AsyncTextureLoadConfig.Instance.GetImplicitBundlesForCanonicalPath(key, assetBundles);
+
+        var coroutine = DoLoadTexture<T>(handle, options, assetBundles);
         handle.coroutine = coroutine;
         StartCoroutine(coroutine);
 
         return new(handle);
     }
 
-    private IEnumerator DoLoadTexture<T>(TextureHandle handle, TextureLoadOptions options)
+    private IEnumerator DoLoadTexture<T>(
+        TextureHandle handle,
+        TextureLoadOptions options,
+        List<string> assetBundles
+    )
         where T : Texture
     {
         // Ensure that the texture handle doesn't get disposed of while we are still working on it.
@@ -138,7 +140,7 @@ public partial class TextureLoader : MonoBehaviour
         var marker = new ProfilerMarker($"LoadTexture: {handle.Path}");
         using var coroutine = ExceptionUtils.CatchExceptions(
             handle,
-            DoLoadTextureInner<T>(handle, options)
+            DoLoadTextureInner<T>(handle, options, assetBundles)
         );
 
         while (true)
@@ -153,22 +155,26 @@ public partial class TextureLoader : MonoBehaviour
         }
     }
 
-    private IEnumerator DoLoadTextureInner<T>(TextureHandle handle, TextureLoadOptions options)
+    private IEnumerator DoLoadTextureInner<T>(
+        TextureHandle handle,
+        TextureLoadOptions options,
+        List<string> assetBundles
+    )
         where T : Texture
     {
         if (options.AssetBundles is not null)
         {
-            var bundles = new AssetBundleHandle[options.AssetBundles.Length];
+            var bundles = new AssetBundleHandle[assetBundles.Count];
             using var bundlesGuard = new ArrayDisposeGuard<AssetBundleHandle>(bundles);
 
-            for (int i = 0; i < bundles.Length; ++i)
+            for (int i = 0; i < assetBundles.Count; ++i)
                 bundles[i] = LoadAssetBundle(
-                    options.AssetBundles[i],
+                    assetBundles[i],
                     sync: options.Hint < TextureLoadHint.BatchAsynchronous
                 );
 
             var assetPath = CanonicalizeAssetPath(handle.Path);
-            for (int i = 0; i < bundles.Length; ++i)
+            for (int i = 0; i < assetBundles.Count; ++i)
             {
                 var abHandle = bundles[i];
                 if (!abHandle.IsComplete && options.Hint < TextureLoadHint.BatchSynchronous)

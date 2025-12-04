@@ -1,0 +1,208 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using UnityEngine;
+
+namespace AsyncTextureLoad;
+
+public struct ImplicitBundle : IConfigNode
+{
+    public string prefix;
+    public string bundle;
+
+    public void Load(ConfigNode node)
+    {
+        node.TryGetValue(nameof(prefix), ref prefix);
+        node.TryGetValue(nameof(bundle), ref bundle);
+    }
+
+    public void Save(ConfigNode node)
+    {
+        node.AddValue(nameof(prefix), prefix);
+        node.AddValue(nameof(bundle), bundle);
+    }
+}
+
+/// <summary>
+/// The type used for the config file in GameData.
+/// </summary>
+internal class AsyncTextureLoadConfig : IConfigNode
+{
+    public static readonly AsyncTextureLoadConfig Instance = new();
+
+    /// <summary>
+    /// How many frames should we hold on to asset bundles for before they are
+    /// unloaded.
+    /// </summary>
+    ///
+    /// <remarks>
+    /// You want this to be set so that it is longer than the time it takes to
+    /// load all assets from asset bundles. When an asset bundle is unloaded it
+    /// needs to sync with the loading thread which can take a while.
+    /// </remarks>
+    public int AssetBundleUnloadDelay = 30;
+
+    /// <summary>
+    /// Controls the size of the buffer unity will use to buffer uploads
+    /// happening in the background.
+    /// </summary>
+    public int AsyncUploadBufferSize = 128;
+
+    /// <summary>
+    /// Implicit bundle declarations.
+    /// </summary>
+    ///
+    /// <remarks>
+    /// Changing this list doesn't change the actual data structure used to
+    /// look these up. Use module manager to apply a patch, or save/load the
+    /// whole config in order to apply an update.
+    /// </remarks>
+    public List<ImplicitBundle> ImplicitBundles = [];
+
+    internal void Apply()
+    {
+        if (QualitySettings.asyncUploadBufferSize != AsyncUploadBufferSize)
+            QualitySettings.asyncUploadBufferSize = Clamp(AsyncUploadBufferSize, 2, 2047);
+    }
+
+    public void Load(ConfigNode node)
+    {
+        node.TryGetValue(nameof(AssetBundleUnloadDelay), ref AssetBundleUnloadDelay);
+        node.TryGetValue(nameof(AsyncUploadBufferSize), ref AsyncUploadBufferSize);
+
+        var children = node.GetNodes("ImplicitBundle");
+        var bundles = new List<ImplicitBundle>(children.Length);
+        foreach (var child in children)
+        {
+            ImplicitBundle bundle = default;
+            bundle.Load(child);
+
+            if (string.IsNullOrEmpty(bundle.prefix))
+            {
+                Debug.LogError(
+                    $"[AsyncTextureLoad] Found ImplicitBundle node with an empty prefix"
+                );
+                continue;
+            }
+
+            if (string.IsNullOrEmpty(bundle.bundle))
+            {
+                Debug.LogError(
+                    $"[AsyncTextureLoad] ImplicitBundle with prefix {bundle.prefix} is missing a bundle path"
+                );
+                continue;
+            }
+
+            if (!File.Exists(bundle.bundle))
+            {
+                Debug.LogError($"[AsyncTextureLoad] ImplicitBundle {bundle.bundle} does not exist");
+                continue;
+            }
+
+            Debug.Log(
+                $"[AsyncTextureLoad] Loaded implicit bundle for prefix {bundle.prefix}: {bundle.bundle}"
+            );
+
+            bundles.Add(bundle);
+        }
+
+        ImplicitBundles = bundles;
+
+        BuildBundlePrefixMap();
+    }
+
+    public void Save(ConfigNode node)
+    {
+        node.AddValue(nameof(AssetBundleUnloadDelay), AssetBundleUnloadDelay);
+        node.AddValue(nameof(AsyncUploadBufferSize), AsyncUploadBufferSize);
+    }
+
+    struct PrefixEntry
+    {
+        public int start;
+        public int end;
+    }
+
+    private string[] BundlePaths;
+    private Dictionary<string, PrefixEntry> BundlePrefixMap = [];
+
+    public static void ModuleManagerPostLoad()
+    {
+        var config = GameDatabase.Instance.GetConfigNode("AsyncTextureLoad");
+        if (config != null)
+        {
+            Instance.Load(config);
+            Instance.Apply();
+        }
+    }
+
+    void BuildBundlePrefixMap()
+    {
+        var sorted = ImplicitBundles
+            .Select(bundle =>
+            {
+                bundle.prefix = TextureLoader
+                    .CanonicalizeResourcePath(bundle.prefix)
+                    .TrimEnd('\\', '/');
+                return bundle;
+            })
+            .OrderBy(bundle => bundle.prefix, StringComparer.InvariantCultureIgnoreCase)
+            .ToList();
+
+        var paths = new string[sorted.Count];
+        var prefixMap = new Dictionary<string, PrefixEntry>(
+            StringComparer.InvariantCultureIgnoreCase
+        );
+
+        string current = null;
+        int start = -1;
+        for (int i = 0; i < sorted.Count; ++i)
+        {
+            var ibundle = sorted[i];
+            paths[i] = ibundle.bundle;
+
+            if (string.Equals(current, ibundle.prefix, StringComparison.InvariantCultureIgnoreCase))
+                continue;
+
+            if (current is not null)
+                prefixMap.Add(current, new PrefixEntry { start = start, end = i });
+
+            current = ibundle.prefix;
+            start = i;
+        }
+
+        if (current is not null)
+            prefixMap.Add(current, new PrefixEntry { start = start, end = sorted.Count });
+
+        BundlePaths = paths;
+        BundlePrefixMap = prefixMap;
+    }
+
+    internal void GetImplicitBundlesForCanonicalPath(string key, List<string> bundles)
+    {
+        if (BundlePrefixMap is null || BundlePrefixMap.Count == 0)
+            return;
+        if (BundlePaths is null || BundlePaths.Length == 0)
+            return;
+
+        while (!string.IsNullOrEmpty(key))
+        {
+            key = Path.GetDirectoryName(key);
+            if (BundlePrefixMap.TryGetValue(key, out var entry))
+            {
+                for (int i = entry.start; i < entry.end; ++i)
+                    bundles.Add(BundlePaths[i]);
+            }
+        }
+    }
+
+    static int Clamp(int v, int lo, int hi)
+    {
+        if (v < lo)
+            v = lo;
+        if (v > hi)
+            v = hi;
+        return v;
+    }
+}

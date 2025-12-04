@@ -134,6 +134,7 @@ internal class TextureHandle : IDisposable, ISetException, ICompleteHandler
         where T : Texture
     {
         texture = TextureLoader.ConvertTexture<T>(tex, options);
+        texture.name = Path;
         AssetBundle = assetBundle;
         coroutine = null;
         completeHandler = null;
