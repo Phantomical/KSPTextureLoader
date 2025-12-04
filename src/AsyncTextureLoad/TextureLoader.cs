@@ -79,7 +79,7 @@ public partial class TextureLoader : MonoBehaviour
     /// <list type="bullet">
     ///   <item>
     ///     <see cref="Cubemap"/>: can be converted from a <see cref="Texture2D"/> with the faces
-    ///     packed horizontally in a 3x2 configuration.
+    ///     packed horizontally in a cross configuration.
     ///   </item>
     ///   <item>
     ///     <see cref="Texture2DArray"/>: can be converted from a <see cref="Texture2D"/>. This
