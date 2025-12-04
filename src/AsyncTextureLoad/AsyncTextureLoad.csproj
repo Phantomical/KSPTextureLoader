@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <Description>A mod that allows you to replace the HUD/UI of Kerbal Space Program</Description>
+        <Description>Fast and asynchronous texture loading for KSP</Description>
 
-        <Version>1.3.1</Version>
+        <Version>1.0.0</Version>
 
         <TargetFramework>net4.8</TargetFramework>
         <!-- <DebugType>portable</DebugType> -->
@@ -28,13 +28,6 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
-
-        <ModReference Include="HarmonyKSP">
-            <DLLPath>$(KSPRoot)\GameData\000_Harmony\0Harmony.dll</DLLPath>
-            <CKANIdentifier>HarmonyKSP</CKANIdentifier>
-            <KSPAssemblyName>HarmonyKSP</KSPAssemblyName>
-            <KSPAssemblyVersion>1.0.0</KSPAssemblyVersion>
-        </ModReference>
     </ItemGroup>
 
     <PropertyGroup>

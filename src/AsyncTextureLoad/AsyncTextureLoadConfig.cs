@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace AsyncTextureLoad;
 
-public struct ImplicitBundle : IConfigNode
+internal struct ImplicitBundle : IConfigNode
 {
     public string prefix;
     public string bundle;
