@@ -89,7 +89,7 @@ public partial class TextureLoader
 
             delayCount += 1;
 
-            if (delayCount >= KSPTextureLoaderConfig.Instance.AssetBundleUnloadDelay)
+            if (delayCount >= Config.Instance.AssetBundleUnloadDelay)
                 break;
         }
 

@@ -27,9 +27,9 @@ internal struct ImplicitBundle : IConfigNode
 /// <summary>
 /// The type used for the config file in GameData.
 /// </summary>
-internal class KSPTextureLoaderConfig : IConfigNode
+internal class Config : IConfigNode
 {
-    public static readonly KSPTextureLoaderConfig Instance = new();
+    public static readonly Config Instance = new();
 
     /// <summary>
     /// How many frames should we hold on to asset bundles for before they are
@@ -130,7 +130,7 @@ internal class KSPTextureLoaderConfig : IConfigNode
     private string[] BundlePaths;
     private Dictionary<string, PrefixEntry> BundlePrefixMap = [];
 
-    public static void ModuleManagerPostLoad()
+    internal void ModuleManagerPostLoad()
     {
         var config = GameDatabase.Instance.GetConfigNode("KSPTextureLoader");
         if (config != null)

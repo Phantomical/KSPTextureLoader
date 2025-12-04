@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.ExceptionServices;
 using Unity.IO.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Profiling;
@@ -39,6 +38,16 @@ public partial class TextureLoader : MonoBehaviour
 
         DontDestroyOnLoad(this);
         Instance = this;
+
+        // We want to load configs before regular post patch callbacks for other
+        // mods. Explicitly registered post patch callbacks run first so this
+        // should prevent any issues here.
+        ModuleManager.PostPatchLoader.AddPostPatchCallback(ModuleManagerPostPatch);
+    }
+
+    void ModuleManagerPostPatch()
+    {
+        Config.Instance.ModuleManagerPostLoad();
     }
 
     void OnDestroy()
@@ -143,7 +152,7 @@ public partial class TextureLoader : MonoBehaviour
         textures[key] = new WeakReference<TextureHandleImpl>(handle);
 
         var assetBundles = new List<string>(options.AssetBundles ?? []);
-        KSPTextureLoaderConfig.Instance.GetImplicitBundlesForCanonicalPath(key, assetBundles);
+        Config.Instance.GetImplicitBundlesForCanonicalPath(key, assetBundles);
 
         var coroutine = DoLoadTexture<T>(handle, options, assetBundles);
         handle.coroutine = coroutine;
@@ -319,7 +328,7 @@ public partial class TextureLoader : MonoBehaviour
             return true;
 
         var assetBundles = new List<string>(options.AssetBundles ?? []);
-        KSPTextureLoaderConfig.Instance.GetImplicitBundlesForCanonicalPath(key, assetBundles);
+        Config.Instance.GetImplicitBundlesForCanonicalPath(key, assetBundles);
 
         var assetPath = CanonicalizeAssetPath(path);
         foreach (var assetBundlePath in assetBundles)

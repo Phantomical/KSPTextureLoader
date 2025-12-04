@@ -8,6 +8,10 @@
         <!-- <DebugType>portable</DebugType> -->
         <LangVersion>13</LangVersion>
 
+        <RepoRootPath>$(MSBuildThisFileDirectory)\..\..</RepoRootPath>
+
+        <KSPBT_ModRoot>$(RepoRootPath)\GameData\$(MSBuildProjectName)</KSPBT_ModRoot>
+
         <BinariesOutputRelativePath>GameData\KSPTextureLoader</BinariesOutputRelativePath>
         <KSPBT_GenerateKSPAssemblyAttribute>true</KSPBT_GenerateKSPAssemblyAttribute>
         <KSPBT_GenerateKSPAssemblyDependencyAttributes>true</KSPBT_GenerateKSPAssemblyDependencyAttributes>
@@ -22,12 +26,17 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="KSPBuildTools" Version="0.0.4" />
+        <PackageReference Include="KSPBuildTools" Version="1.1.1" />
 
         <PackageReference Include="Krafs.Publicizer" Version="2.3.0">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
+
+        <ModReference Include="ModuleManager">
+            <DLLPath>GameData\ModuleManager.4.2.3.dll</DLLPath>
+            <CKANIdentifier>ModuleManager</CKANIdentifier>
+        </ModReference>
     </ItemGroup>
 
     <PropertyGroup>
