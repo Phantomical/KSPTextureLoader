@@ -339,7 +339,7 @@ public class TextureLoader
         );
         cube.SetPixels(texture.GetPixels(0, cubedim, cubedim, cubedim), CubemapFace.NegativeZ);
         cube.SetPixels(texture.GetPixels(2 * cubedim, 0, cubedim, cubedim), CubemapFace.PositiveY);
-        cube.Apply(true, true);
+        cube.Apply(true, false);
         stopwatch.Stop();
         return cube;
     }

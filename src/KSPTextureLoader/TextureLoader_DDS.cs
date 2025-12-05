@@ -615,6 +615,12 @@ partial class TextureLoader
                     if (IsBitMask(0x00FF, 0, 0, 0xFF00))
                         return GraphicsFormat.R8G8_UNorm;
 
+                    // Match this as a L16 texture.
+                    //
+                    // I haven't seen this in the wild, but it is better to load it like this.
+                    if (IsBitMask(0xFFFF, 0xFFFF, 0xFFFF, 0))
+                        return GraphicsFormat.R16_UNorm;
+
                     break;
                 case 8:
                     if (IsBitMask(0xFF, 0, 0, 0))
@@ -681,7 +687,7 @@ partial class TextureLoader
                 return GraphicsFormat.RG_BC5_UNorm;
             if (ddpf.dwFourCC == MakeFourCC('B', 'C', '5', 'U'))
                 return GraphicsFormat.RG_BC5_UNorm;
-            if (ddpf.dwFourCC == MakeFourCC('B', 'C', '4', 'S'))
+            if (ddpf.dwFourCC == MakeFourCC('B', 'C', '5', 'S'))
                 return GraphicsFormat.RG_BC5_SNorm;
 
             // Both BC6H and BC7 are written using the DX10 extended header

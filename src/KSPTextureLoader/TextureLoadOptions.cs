@@ -62,6 +62,8 @@ public struct TextureLoadOptions()
     /// <remarks>
     /// This option is only used when loading loose textures off disk. For asset
     /// bundles these properties will be set in the editor before building.
+    /// If not set then DDS textures will usually default to linear, unless they
+    /// explicitly have a DX10 sRGB format.
     /// </remarks>
     public bool? Linear { get; set; } = null;
 

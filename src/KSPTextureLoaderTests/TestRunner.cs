@@ -80,7 +80,10 @@ public class TestRunner : MonoBehaviour
                 yield return value;
         }
         else
-            throw new NotImplementedException();
+        {
+            foreach (var value in CatchExceptions(RunTestCubemap(tc)))
+                yield return value;
+        }
     }
 
     IEnumerable<object> CatchExceptions(IEnumerator inner)
@@ -173,11 +176,112 @@ public class TestRunner : MonoBehaviour
                 $"Texture graphics formats did not match! {a.format} != {b.format}"
             );
 
-        var apixels = a.GetPixels32();
-        var bpixels = b.GetPixels32();
+        var apixels = ReadTexture2D(a);
+        var bpixels = ReadTexture2D(b);
 
         if (!Enumerable.SequenceEqual(apixels, bpixels))
             throw new Exception($"Loaded pixels were not equal");
+    }
+
+    IEnumerator RunTestCubemap(TestCase tc)
+    {
+        var options = new TextureLoadOptions
+        {
+            Hint = TextureLoadHint.BatchSynchronous,
+            Unreadable = false,
+            Linear = tc.linear,
+        };
+        using var handle = TextureLoader.LoadTexture<Cubemap>(tc.path, options);
+
+        if (!tc.parallax)
+            yield break;
+
+        Debug.Log("Comparing against parallax texture cubemap");
+        var ptex = Parallax.TextureLoader.LoadCubeTexture(tc.path, tc.linear);
+        if (ptex == null)
+            yield break;
+
+        using var guard = new TextureDestroyGuard(ptex);
+        if (!handle.IsComplete)
+            yield return handle;
+
+        CompareCubemap(handle.GetTexture(), ptex);
+    }
+
+    void CompareCubemap(Cubemap a, Cubemap b)
+    {
+        if (a.width != b.width || a.height != b.height)
+            throw new Exception(
+                $"Cubemap dimensions did not match! {a.width}x{a.height} != {b.width}x{b.height}"
+            );
+
+        // if ((a.mipmapCount == 1) != (b.mipmapCount == 1))
+        //     throw new Exception(
+        //         $"Cubemap mipmap counts did not match! {a.mipmapCount} != {b.mipmapCount}"
+        //     );
+
+        // if (a.format != b.format)
+        //     throw new Exception($"Cubemap formats did not match! {a.format} != {b.format}");
+
+        // if (a.graphicsFormat != b.graphicsFormat)
+        //     throw new Exception(
+        //         $"Cubemap graphics formats did not match! {a.format} != {b.format}"
+        //     );
+
+        var apixels = ReadCubemapFaces(a);
+        var bpixels = ReadCubemapFaces(b);
+
+        for (int i = 0; i < 6; ++i)
+        {
+            var face = (CubemapFace)i;
+
+            if (!Enumerable.SequenceEqual(apixels[i], bpixels[i]))
+                throw new Exception($"Pixels for cubemap face {face} were not equal");
+        }
+    }
+
+    Color32[] ReadTexture2D(Texture2D tex)
+    {
+        if (tex.isReadable)
+            return tex.GetPixels32();
+
+        var staging = new Texture2D(tex.width, tex.height, TextureFormat.ARGB32, false);
+        var rt = new RenderTexture(tex.width, tex.height, 1, RenderTextureFormat.ARGB32);
+        Graphics.Blit(tex, rt);
+
+        var active = RenderTexture.active;
+        RenderTexture.active = rt;
+        staging.ReadPixels(new Rect(0f, 0f, tex.width, tex.height), 0, 0, false);
+        RenderTexture.active = active;
+        rt.Release();
+
+        var pixels = staging.GetPixels32();
+        Destroy(staging);
+        return pixels;
+    }
+
+    Color32[][] ReadCubemapFaces(Cubemap cubemap)
+    {
+        var staging = new Texture2D(cubemap.width, cubemap.height, TextureFormat.ARGB32, false);
+        var rt = new RenderTexture(cubemap.width, cubemap.width, 1, RenderTextureFormat.ARGB32);
+
+        Color32[][] pixels = new Color32[6][];
+        var active = RenderTexture.active;
+        RenderTexture.active = rt;
+
+        for (int i = 0; i < 6; ++i)
+        {
+            Graphics.CopyTexture(cubemap, i, 0, staging, 0, 0);
+            Graphics.Blit(staging, rt);
+            staging.ReadPixels(new Rect(0f, 0f, cubemap.width, cubemap.height), 0, 0);
+            pixels[i] = staging.GetPixels32();
+        }
+
+        RenderTexture.active = active;
+        rt.Release();
+        Destroy(staging);
+
+        return pixels;
     }
 
     void DumpDDSHeader(string path)

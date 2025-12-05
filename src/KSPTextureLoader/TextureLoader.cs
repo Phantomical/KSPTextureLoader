@@ -347,8 +347,7 @@ public partial class TextureLoader : MonoBehaviour
         if (src is Texture2D tex2d)
         {
             if (typeof(T) == typeof(Cubemap))
-                return (T)
-                    (Texture)TextureUtils.ConvertTexture2dToCubemap(tex2d, options.Unreadable);
+                return (T)(Texture)TextureUtils.ConvertTexture2dToCubemap(tex2d);
 
             if (typeof(T) == typeof(Texture2DArray))
                 return (T)(Texture)TextureUtils.ConvertTexture2DToArray(tex2d);

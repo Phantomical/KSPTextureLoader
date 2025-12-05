@@ -1,16 +1,11 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
-using System.IO;
 using KSP.UI.Screens;
-using Steamworks;
 using UnityEngine;
-using UnityEngine.Networking;
-using UnityEngine.Profiling;
 
 namespace KSPTextureLoader;
 
-[KSPAddon(KSPAddon.Startup.AllGameScenes, once: false)]
+[KSPAddon(KSPAddon.Startup.SpaceCentre, once: false)]
 internal class DebugUI : MonoBehaviour
 {
     const int DefaultWidth = 600;
@@ -28,7 +23,7 @@ internal class DebugUI : MonoBehaviour
     string texturePath = "";
     string assetBundle = "";
     TextureLoadHint hint = TextureLoadHint.BatchAsynchronous;
-    Texture2D texture = null;
+    Texture2D[] textures = [];
 
     void Start()
     {
@@ -61,6 +56,13 @@ internal class DebugUI : MonoBehaviour
             ApplicationLauncher.AppScenes.ALWAYS,
             ButtonTexture
         );
+    }
+
+    void OnDestroy()
+    {
+        if (button != null)
+            ApplicationLauncher.Instance.RemoveModApplication(button);
+        button = null;
     }
 
     void ShowToolbarGUI()
@@ -124,14 +126,25 @@ internal class DebugUI : MonoBehaviour
             StartCoroutine(LoadTextureCoroutine());
         }
 
+        if (GUILayout.Button("Load Cubemap"))
+        {
+            StartCoroutine(LoadCubemapCoroutine());
+        }
+
         GUILayout.Space(5f);
 
-        if (texture != null)
+        using (var horz = new PushHorizontal())
         {
-            var aspect = (float)texture.height / (float)texture.width;
-            var width = Math.Min(window.width - 10f, 256f);
-            var height = width * aspect;
-            GUILayout.Box(texture, GUILayout.Width(width), GUILayout.Height(height));
+            foreach (var texture in textures)
+            {
+                if (texture == null)
+                    continue;
+
+                var aspect = (float)texture.height / (float)texture.width;
+                var width = Math.Min((window.width - 10f) / textures.Length, 128f);
+                var height = width * aspect;
+                GUILayout.Box(texture, GUILayout.Width(width), GUILayout.Height(height));
+            }
         }
 
         GUI.DragWindow();
@@ -147,8 +160,7 @@ internal class DebugUI : MonoBehaviour
         var handle = TextureLoader.LoadTexture<Texture2D>(texturePath, options);
         yield return handle;
 
-        Destroy(texture);
-        texture = null;
+        DestroyAllTextures();
 
         try
         {
@@ -161,13 +173,52 @@ internal class DebugUI : MonoBehaviour
             else
                 Debug.Log($"[KSPTextureLoader] Loaded texture {handle.Path}");
 
-            texture = handle.TakeTexture();
+            textures = [handle.TakeTexture()];
         }
         catch (Exception e)
         {
             Debug.LogError($"Failed to load texture {texturePath}");
             Debug.LogException(e);
         }
+    }
+
+    IEnumerator LoadCubemapCoroutine()
+    {
+        var options = new TextureLoadOptions
+        {
+            AssetBundles = string.IsNullOrEmpty(assetBundle) ? [] : [assetBundle],
+            Hint = hint,
+        };
+        using var handle = TextureLoader.LoadTexture<Cubemap>(texturePath, options);
+        yield return handle;
+
+        DestroyAllTextures();
+
+        textures = new Texture2D[6];
+        var cubemap = handle.GetTexture();
+
+        for (int i = 0; i < 6; ++i)
+        {
+            var texture = TextureUtils.CreateUninitializedTexture2D(
+                cubemap.width,
+                cubemap.height,
+                cubemap.mipmapCount,
+                cubemap.graphicsFormat
+            );
+
+            texture.Apply(false, true);
+            Graphics.CopyTexture(cubemap, i, texture, 0);
+            textures[i] = texture;
+        }
+    }
+
+    void DestroyAllTextures()
+    {
+        textures ??= [];
+        foreach (var texture in textures)
+            Destroy(texture);
+
+        textures = [];
     }
 
     readonly struct PushGUISkin : IDisposable
