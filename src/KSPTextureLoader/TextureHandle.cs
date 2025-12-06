@@ -1,10 +1,10 @@
 using System;
 using System.Collections;
 using System.Runtime.ExceptionServices;
-using JetBrains.Annotations;
 using KSPTextureLoader.Utils;
 using Unity.Profiling;
 using UnityEngine;
+using DebuggerDisplayAttribute = System.Diagnostics.DebuggerDisplayAttribute;
 
 namespace KSPTextureLoader;
 
@@ -30,8 +30,8 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
     }
 
     internal TextureHandleImpl(string path, ExceptionDispatchInfo ex)
+        : this(path)
     {
-        Path = path;
         exception = ex;
     }
 
@@ -169,6 +169,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 /// complete. If loading fails then calling it will throw an exception. Make
 /// sure to take this into account in your loading routine.
 /// </remarks>
+[DebuggerDisplay("{Path} (RefCount: {RefCount})")]
 public class TextureHandle : CustomYieldInstruction, IDisposable
 {
     internal readonly TextureHandleImpl handle;
@@ -269,6 +270,7 @@ public class TextureHandle : CustomYieldInstruction, IDisposable
 /// complete. If loading fails then calling it will throw an exception. Make
 /// sure to take this into account in your loading routine.
 /// </remarks>
+[DebuggerDisplay("{Path} (RefCount: {RefCount})")]
 public sealed class TextureHandle<T> : TextureHandle
     where T : Texture
 {

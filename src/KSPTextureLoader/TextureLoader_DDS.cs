@@ -10,6 +10,7 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.IO.LowLevel.Unsafe;
 using Unity.Jobs;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Profiling;
@@ -18,6 +19,8 @@ namespace KSPTextureLoader;
 
 partial class TextureLoader
 {
+    static readonly ProfilerMarker LaunchReadMarker = new("LaunchRead");
+
     internal enum DDSTextureType
     {
         Texture2D,
@@ -66,6 +69,7 @@ partial class TextureLoader
 
             unsafe
             {
+                using var readScope = LaunchReadMarker.Auto();
                 var command = new ReadCommand
                 {
                     Buffer = buffer.GetUnsafePtr(),
@@ -78,6 +82,14 @@ partial class TextureLoader
 
         using var bufGuard = new NativeArrayGuard<byte>(buffer);
         using var readGuard = new SafeReadHandleGuard(readHandle);
+
+#if false
+        {
+            var prefault = new BufferPrefaultJob(buffer).Schedule();
+            readGuard.JobHandle = JobHandle.CombineDependencies(prefault, readGuard.JobHandle);
+            JobHandle.ScheduleBatchedJobs();
+        }
+#endif
 
         var flags = (DDS_HEADER_FLAGS)header.dwFlags;
 
@@ -182,7 +194,7 @@ partial class TextureLoader
 
                     var colors = new NativeArray<byte>(
                         UnsafeUtility.SizeOf<Color32>() * width * height,
-                        Allocator.TempJob,
+                        Allocator.Persistent,
                         NativeArrayOptions.UninitializedMemory
                     );
 
@@ -213,7 +225,7 @@ partial class TextureLoader
 
                     var colors = new NativeArray<byte>(
                         UnsafeUtility.SizeOf<Color32>() * width * height,
-                        Allocator.TempJob,
+                        Allocator.Persistent,
                         NativeArrayOptions.UninitializedMemory
                     );
 
@@ -269,10 +281,8 @@ partial class TextureLoader
 
         if (options.Linear is bool linear)
         {
-            if (linear)
-                format = GraphicsFormatUtility.GetLinearFormat(format);
-            else
-                format = GraphicsFormatUtility.GetSRGBFormat(format);
+            var tformat = GraphicsFormatUtility.GetTextureFormat(format);
+            format = GraphicsFormatUtility.GetGraphicsFormat(tformat, isSRGB: !linear);
         }
 
         switch (type)
@@ -442,7 +452,7 @@ partial class TextureLoader
     {
         if (options.Unreadable)
         {
-            if (DX11.SupportsAsyncUpload(format))
+            if (DX11.SupportsAsyncUpload(width, height, format))
             {
                 return DX11.UploadTexture2D<T>(
                     handle,
@@ -481,11 +491,6 @@ partial class TextureLoader
     )
         where T : Texture
     {
-        if (options.Unreadable)
-        {
-            if (DX11.SupportsAsyncUpload(format)) { }
-        }
-
         var tex2d = TextureUtils.CreateUninitializedTexture2D(width, height, mipCount, format);
         using var guard = new TextureDisposeGuard(tex2d);
         var buffer = bufGuard.array;

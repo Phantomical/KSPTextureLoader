@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace KSPTextureLoader;
 
-[KSPAddon(KSPAddon.Startup.SpaceCentre, once: false)]
+[KSPAddon(KSPAddon.Startup.AllGameScenes, once: false)]
 internal class DebugUI : MonoBehaviour
 {
     const int DefaultWidth = 600;
@@ -121,6 +121,11 @@ internal class DebugUI : MonoBehaviour
             }
         }
 
+        Config.Instance.AllowNativeUploads = GUILayout.Toggle(
+            Config.Instance.AllowNativeUploads,
+            "Allow Native Uploads"
+        );
+
         if (GUILayout.Button("Load Texture"))
         {
             StartCoroutine(LoadTextureCoroutine());
@@ -141,7 +146,7 @@ internal class DebugUI : MonoBehaviour
                     continue;
 
                 var aspect = (float)texture.height / (float)texture.width;
-                var width = Math.Min((window.width - 10f) / textures.Length, 128f);
+                var width = Math.Min(DefaultWidth - 20f, texture.width);
                 var height = width * aspect;
                 GUILayout.Box(texture, GUILayout.Width(width), GUILayout.Height(height));
             }

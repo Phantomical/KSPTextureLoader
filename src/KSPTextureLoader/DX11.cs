@@ -9,18 +9,25 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.IO.LowLevel.Unsafe;
 using Unity.Jobs;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
+using VehiclePhysics;
 using Direct3D11 = SharpDX.Direct3D11;
 
 namespace KSPTextureLoader;
 
 internal static unsafe class DX11
 {
-    static UnityEngine.Texture2D ReferenceTexture = null;
+    static readonly ProfilerMarker GetNativeTexturePtr = new("GetNativeTexturePtr");
+    static readonly ProfilerMarker CreateExternalTexture = new("CreateExternalTexture");
 
-    internal static bool SupportsAsyncUpload(GraphicsFormat format)
+    static UnityEngine.Texture2D ReferenceTexture = null;
+    static uint LastUpdateCount = uint.MaxValue;
+    static Direct3D11.Texture2D Dx11Texture;
+
+    internal static bool SupportsAsyncUpload(int width, int height, GraphicsFormat format)
     {
         if (!Config.Instance.AllowNativeUploads)
             return false;
@@ -32,6 +39,17 @@ internal static unsafe class DX11
         // created in a way that would prevent us from creating textures in a job.
         if (!Texture.allowThreadedTextureCreation)
             return false;
+
+        // Feeding a texture that is not a multiple of the block size will cause
+        // DX11 to error, so we let unity take care of figuring that out.
+        if (GraphicsFormatUtility.IsCompressedFormat(format))
+        {
+            var blockWidth = (int)GraphicsFormatUtility.GetBlockWidth(format);
+            var blockHeight = (int)GraphicsFormatUtility.GetBlockHeight(format);
+
+            if (width % blockWidth != 0 || height % blockHeight != 0)
+                return false;
+        }
 
         return GetDxgiFormat(format) is not null;
     }
@@ -48,19 +66,31 @@ internal static unsafe class DX11
     )
         where T : Texture
     {
-        if (ReferenceTexture == null)
-            ReferenceTexture = new UnityEngine.Texture2D(1, 1);
-
         if (GetDxgiFormat(format) is not Format dx11format)
             throw new NotSupportedException(
                 "DX11.UploadTexture2D called with a graphics format not natively supported by DX11"
             );
 
-        var reftex = new Direct3D11.Texture2D(ReferenceTexture.GetNativeTexturePtr());
-        var device = reftex.Device;
-        var shared = new SharedData();
+        if (ReferenceTexture == null)
+        {
+            ReferenceTexture = new UnityEngine.Texture2D(1, 1);
+            LastUpdateCount = uint.MaxValue;
+        }
 
-        var job = new CreateDX11Texture2DJob
+        var updateCount = ReferenceTexture.updateCount;
+        if (LastUpdateCount != updateCount)
+        {
+            using var nativePtrScope = GetNativeTexturePtr.Auto();
+
+            LastUpdateCount = updateCount;
+            Dx11Texture = new Direct3D11.Texture2D(ReferenceTexture.GetNativeTexturePtr());
+        }
+
+        var reftex = Dx11Texture;
+        var device = reftex.Device;
+        using var shared = new SharedData();
+
+        var job = new CreateTexture2DJob
         {
             buffer = bufGuard.array,
             width = width,
@@ -80,6 +110,9 @@ internal static unsafe class DX11
         using (handle.WithCompleteHandler(new JobHandleCompleteHandler(readGuard.JobHandle)))
             yield return new WaitUntil(() => readGuard.JobHandle.IsCompleted);
 
+        if (readGuard.Status != ReadStatus.Complete)
+            throw new Exception("Failed to read file data");
+
         // If the job failed with an exception then we should rethrow that.
         shared.ex?.Throw();
 
@@ -87,8 +120,7 @@ internal static unsafe class DX11
             throw new Exception("Job failed to create the texture but didn't throw an exception");
 
         UnityEngine.Texture2D texture;
-        try
-        {
+        using (CreateExternalTexture.Auto())
             texture = TextureUtils.CreateExternalTexture2D(
                 width,
                 height,
@@ -96,23 +128,13 @@ internal static unsafe class DX11
                 format,
                 shared.texture.NativePointer
             );
-            shared.texture = null;
-        }
-        finally
-        {
-            shared.Dispose();
-        }
 
-        if (readGuard.Status != ReadStatus.Complete)
-        {
-            GameObject.Destroy(texture);
-            throw new Exception("Failed to read file data");
-        }
+        shared.texture = null;
 
         handle.SetTexture<T>(texture, options);
     }
 
-    class SharedData
+    class SharedData : IDisposable
     {
         public Direct3D11.Texture2D texture = null;
         public ExceptionDispatchInfo ex = null;
@@ -130,7 +152,7 @@ internal static unsafe class DX11
         }
     }
 
-    struct CreateDX11Texture2DJob : IJob
+    struct CreateTexture2DJob : IJob
     {
         [ReadOnly]
         public NativeArray<byte> buffer;
@@ -175,6 +197,7 @@ internal static unsafe class DX11
                 Format = format,
                 SampleDescription = new(1, 0),
                 Usage = ResourceUsage.Default,
+                BindFlags = BindFlags.ShaderResource,
             };
 
             var blockWidth = (int)GraphicsFormatUtility.GetBlockWidth(graphicsFormat);

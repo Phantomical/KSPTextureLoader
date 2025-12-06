@@ -135,7 +135,7 @@ public partial class TextureLoader : MonoBehaviour
         if (textures.TryGetValue(key, out var weakHandle))
         {
             if (weakHandle.TryGetTarget(out handle))
-                return new TextureHandle<T>(handle);
+                return new TextureHandle<T>(handle).Acquire();
         }
 
         handle = new TextureHandleImpl(path);
