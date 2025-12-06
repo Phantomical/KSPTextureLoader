@@ -266,7 +266,13 @@ public partial class TextureLoader : MonoBehaviour
         }
 
         var extension = Path.GetExtension(handle.Path);
-        if (extension == ".png" || extension == ".jpg" || extension == ".jpeg")
+        if (
+            extension == ".png"
+            // truecolor files appear to just be png files with a different name
+            || extension == ".truecolor"
+            || extension == ".jpg"
+            || extension == ".jpeg"
+        )
         {
             foreach (var item in LoadPNGOrJPEG<T>(handle, options))
                 yield return item;
