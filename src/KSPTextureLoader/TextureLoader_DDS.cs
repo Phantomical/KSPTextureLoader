@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
-using KSPTextureLoader.DDS;
 using DDSHeaders;
+using KSPTextureLoader.DDS;
+using KSPTextureLoader.Jobs;
+using KSPTextureLoader.Utils;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.IO.LowLevel.Unsafe;
@@ -58,7 +60,7 @@ partial class TextureLoader
 
             buffer = new NativeArray<byte>(
                 (int)length,
-                Allocator.TempJob,
+                Allocator.Persistent,
                 NativeArrayOptions.UninitializedMemory
             );
 
@@ -263,7 +265,6 @@ partial class TextureLoader
                     depth = 1;
                 }
             }
-
         }
 
         if (options.Linear is bool linear)
@@ -283,53 +284,20 @@ partial class TextureLoader
                     goto case DDSTextureType.Texture2DArray;
                 }
 
-                Profiler.BeginSample("TextureUtils.CreateUninitializedTexture2D");
-                var tex2d = TextureUtils.CreateUninitializedTexture2D(
+                var upload = UploadTexture2D<T>(
+                    handle,
                     width,
                     height,
                     mipCount,
-                    format
-                );
-                Profiler.EndSample();
-
-                // If we are loading synchronously then we want to run UnshareTextureData
-                // now, instead of waiting until after the disk read is complete.
-                if (options.Hint == TextureLoadHint.Synchronous)
-                {
-                    tex2d.GetRawTextureData<byte>();
-
-                    handle.completeHandler = new JobHandleCompleteHandler(readGuard.JobHandle);
-                    yield return new WaitUntil(() => readGuard.JobHandle.IsCompleted);
-                    handle.completeHandler = null;
-
-                    tex2d.LoadRawTextureData(buffer);
-                }
-                else
-                {
-                    // TODO: Actually detect when the texture has finished being uploaded.
-                    yield return null;
-                    yield return null;
-
-                    var texbuffer = tex2d.GetRawTextureData<byte>();
-
-                    var job = new BufferCopyJob { input = buffer, output = texbuffer };
-                    readGuard.JobHandle = job.Schedule(readGuard.JobHandle);
-                    buffer.Dispose(readGuard.JobHandle);
-                    JobHandle.ScheduleBatchedJobs();
-
-                    bufGuard.array = default;
-
-                    handle.completeHandler = new JobHandleCompleteHandler(readGuard.JobHandle);
-                    yield return new WaitUntil(() => readGuard.JobHandle.IsCompleted);
-                    handle.completeHandler = null;
-                }
-
-                tex2d.Apply(
-                    false,
-                    makeNoLongerReadable: options.Unreadable && typeof(T) != typeof(Cubemap)
+                    format,
+                    options,
+                    bufGuard,
+                    readGuard
                 );
 
-                handle.SetTexture<T>(tex2d, options);
+                foreach (var item in upload)
+                    yield return item;
+
                 break;
 
             case DDSTextureType.Texture2DArray:
@@ -458,6 +426,115 @@ partial class TextureLoader
             default:
                 throw new NotImplementedException($"Unknown texture type {type}");
         }
+    }
+
+    static IEnumerable<object> UploadTexture2D<T>(
+        TextureHandleImpl handle,
+        int width,
+        int height,
+        int mipCount,
+        GraphicsFormat format,
+        TextureLoadOptions options,
+        NativeArrayGuard<byte> bufGuard,
+        SafeReadHandleGuard readGuard
+    )
+        where T : Texture
+    {
+        if (options.Unreadable)
+        {
+            if (DX11.SupportsAsyncUpload(format))
+            {
+                return DX11.UploadTexture2D<T>(
+                    handle,
+                    width,
+                    height,
+                    mipCount,
+                    format,
+                    options,
+                    bufGuard,
+                    readGuard
+                );
+            }
+        }
+
+        return UploadTexture2DUnity<T>(
+            handle,
+            width,
+            height,
+            mipCount,
+            format,
+            options,
+            bufGuard,
+            readGuard
+        );
+    }
+
+    static IEnumerable<object> UploadTexture2DUnity<T>(
+        TextureHandleImpl handle,
+        int width,
+        int height,
+        int mipCount,
+        GraphicsFormat format,
+        TextureLoadOptions options,
+        NativeArrayGuard<byte> bufGuard,
+        SafeReadHandleGuard readGuard
+    )
+        where T : Texture
+    {
+        if (options.Unreadable)
+        {
+            if (DX11.SupportsAsyncUpload(format)) { }
+        }
+
+        var tex2d = TextureUtils.CreateUninitializedTexture2D(width, height, mipCount, format);
+        using var guard = new TextureDisposeGuard(tex2d);
+        var buffer = bufGuard.array;
+
+        // If we are loading synchronously then we want to run UnshareTextureData
+        // now, instead of waiting until after the disk read is complete.
+        if (options.Hint == TextureLoadHint.Synchronous)
+        {
+            tex2d.GetRawTextureData<byte>();
+
+            handle.completeHandler = new JobHandleCompleteHandler(readGuard.JobHandle);
+            yield return new WaitUntil(() => readGuard.JobHandle.IsCompleted);
+            handle.completeHandler = null;
+
+            tex2d.LoadRawTextureData(buffer);
+        }
+        else
+        {
+            // TODO: Actually detect when the texture has finished being uploaded.
+            yield return null;
+            yield return null;
+
+            var texbuffer = tex2d.GetRawTextureData<byte>();
+
+            var job = new BufferCopyJob { input = buffer, output = texbuffer };
+            readGuard.JobHandle = job.Schedule(readGuard.JobHandle);
+            buffer.Dispose(readGuard.JobHandle);
+            JobHandle.ScheduleBatchedJobs();
+
+            bufGuard.array = default;
+
+            handle.completeHandler = new JobHandleCompleteHandler(readGuard.JobHandle);
+            yield return new WaitUntil(() => readGuard.JobHandle.IsCompleted);
+            handle.completeHandler = null;
+        }
+
+        if (readGuard.Status != ReadStatus.Complete)
+        {
+            Destroy(tex2d);
+            throw new Exception("Failed to read texture data from file");
+        }
+
+        tex2d.Apply(
+            false,
+            makeNoLongerReadable: options.Unreadable && typeof(T) != typeof(Cubemap)
+        );
+
+        guard.Clear();
+        handle.SetTexture<T>(tex2d, options);
     }
 
     // This is basically a translation of GetDXGIFormat from DirectXTex
@@ -820,30 +897,5 @@ partial class TextureLoader
             for (int i = 0; i < pixels; ++i)
                 colors[i] = palette[data[i]];
         }
-    }
-
-    struct BufferCopyJob : IJob
-    {
-        [ReadOnly]
-        public NativeArray<byte> input;
-
-        [WriteOnly]
-        public NativeArray<byte> output;
-
-        public readonly void Execute()
-        {
-            if (input.Length != output.Length)
-                return;
-
-            output.CopyFrom(input);
-        }
-    }
-
-    class NativeArrayGuard<T>(NativeArray<T> array = default) : IDisposable
-        where T : unmanaged
-    {
-        public NativeArray<T> array = array;
-
-        public void Dispose() => array.Dispose();
     }
 }

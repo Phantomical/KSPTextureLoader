@@ -3,8 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using KSPTextureLoader.Utils;
 using Unity.IO.LowLevel.Unsafe;
-using Unity.Jobs;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -387,29 +387,5 @@ public partial class TextureLoader : MonoBehaviour
     private static string CanonicalizeAssetPath(string path)
     {
         return path.Replace('\\', '/').ToLowerInvariant();
-    }
-
-    private struct ArrayDisposeGuard<T>(T[] array) : IDisposable
-        where T : IDisposable
-    {
-        public readonly void Dispose()
-        {
-            foreach (var item in array)
-                item?.Dispose();
-        }
-    }
-
-    private class SafeReadHandleGuard(ReadHandle handle) : IDisposable
-    {
-        public JobHandle JobHandle = handle.JobHandle;
-
-        public void Dispose()
-        {
-            if (!handle.IsValid())
-                return;
-            if (!handle.JobHandle.IsCompleted)
-                handle.JobHandle.Complete();
-            handle.Dispose();
-        }
     }
 }

@@ -50,6 +50,12 @@ internal class Config : IConfigNode
     public int AsyncUploadBufferSize = 128;
 
     /// <summary>
+    /// Whether to allow direct use of native rendering extensions to upload
+    /// textures.
+    /// </summary>
+    public bool AllowNativeUploads = true;
+
+    /// <summary>
     /// Implicit bundle declarations.
     /// </summary>
     ///
@@ -70,6 +76,7 @@ internal class Config : IConfigNode
     {
         node.TryGetValue(nameof(AssetBundleUnloadDelay), ref AssetBundleUnloadDelay);
         node.TryGetValue(nameof(AsyncUploadBufferSize), ref AsyncUploadBufferSize);
+        node.TryGetValue(nameof(AllowNativeUploads), ref AllowNativeUploads);
 
         var children = node.GetNodes("ImplicitBundle");
         var bundles = new List<ImplicitBundle>(children.Length);
@@ -117,6 +124,7 @@ internal class Config : IConfigNode
     {
         node.AddValue(nameof(AssetBundleUnloadDelay), AssetBundleUnloadDelay);
         node.AddValue(nameof(AsyncUploadBufferSize), AsyncUploadBufferSize);
+        node.AddValue(nameof(AllowNativeUploads), AllowNativeUploads);
 
         foreach (var bundle in ImplicitBundles)
             bundle.Save(node.AddNode("ImplicitBundle"));

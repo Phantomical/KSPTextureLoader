@@ -193,7 +193,7 @@ internal static class TextureUtils
 
         flags |= InternalTextureCreationFlags.DontInitializePixels;
         if (mipCount != 1)
-            flags |= InternalTextureCreationFlags.DontInitializePixels;
+            flags |= InternalTextureCreationFlags.MipChain;
 
         CubemapArray.Internal_Create(
             tex,
@@ -202,6 +202,37 @@ internal static class TextureUtils
             mipCount,
             format,
             (TextureCreationFlags)flags
+        );
+
+        return tex;
+    }
+    #endregion
+
+    #region CreateExternalTexture
+    internal static Texture2D CreateExternalTexture2D(
+        int width,
+        int height,
+        int mipCount,
+        GraphicsFormat format,
+        IntPtr nativePtr,
+        InternalTextureCreationFlags flags = InternalTextureCreationFlags.None
+    )
+    {
+        var tex = (Texture2D)FormatterServices.GetUninitializedObject(typeof(Texture2D));
+        if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
+            return tex;
+
+        if (mipCount != 1)
+            flags |= InternalTextureCreationFlags.MipChain;
+
+        Texture2D.Internal_Create(
+            tex,
+            width,
+            height,
+            mipCount,
+            format,
+            (TextureCreationFlags)flags,
+            nativePtr
         );
 
         return tex;

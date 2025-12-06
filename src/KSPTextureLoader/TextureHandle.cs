@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Runtime.ExceptionServices;
 using JetBrains.Annotations;
+using KSPTextureLoader.Utils;
 using Unity.Profiling;
 using UnityEngine;
 
@@ -94,6 +95,12 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
             if (!coroutine.MoveNext())
                 break;
         }
+    }
+
+    internal CompleteHandlerGuard WithCompleteHandler(ICompleteHandler handler)
+    {
+        completeHandler = handler;
+        return new CompleteHandlerGuard(this);
     }
 
     /// <summary>
