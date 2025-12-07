@@ -43,6 +43,8 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <Publicize Include="UnityEngine.CoreModule:UnityEngine.Object.m_CachedPtr" />
+        <Publicize Include="UnityEngine.CoreModule:UnityEngine.Object.CurrentThreadIsMainThread" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Cubemap.Internal_Create" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.CubemapArray.Internal_Create" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Texture2D.Internal_Create" />

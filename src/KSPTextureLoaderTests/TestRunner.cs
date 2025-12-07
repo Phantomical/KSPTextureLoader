@@ -6,6 +6,8 @@ using System.Linq;
 using DDSHeaders;
 using KSPTextureLoader;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
+using UnityEngine.Rendering;
 
 namespace KSPTextureLoaderTests;
 
@@ -115,7 +117,7 @@ public class TestRunner : MonoBehaviour
         var options = new TextureLoadOptions
         {
             Hint = TextureLoadHint.BatchSynchronous,
-            Unreadable = false,
+            Unreadable = true,
             Linear = tc.linear,
         };
         using var handle = TextureLoader.LoadTexture<Texture2D>(tc.path, options);
@@ -176,11 +178,23 @@ public class TestRunner : MonoBehaviour
                 $"Texture graphics formats did not match! {a.format} != {b.format}"
             );
 
-        var apixels = ReadTexture2D(a);
-        var bpixels = ReadTexture2D(b);
+        var areqs = ReadTexture2D(a);
+        var breqs = ReadTexture2D(b);
 
-        if (!Enumerable.SequenceEqual(apixels, bpixels))
-            throw new Exception($"Loaded pixels were not equal");
+        for (int mip = 0; mip < areqs.Length; ++mip)
+        {
+            var areq = areqs[mip];
+            var breq = breqs[mip];
+
+            if (areq.hasError || breq.hasError)
+                throw new Exception($"An exception occurred during async gpu readback");
+
+            var apixels = areq.GetData<Color32>();
+            var bpixels = breq.GetData<Color32>();
+
+            if (!Enumerable.SequenceEqual(apixels, bpixels))
+                throw new Exception($"Pixels on mipmap level {mip} were not equal");
+        }
     }
 
     IEnumerator RunTestCubemap(TestCase tc)
@@ -240,24 +254,32 @@ public class TestRunner : MonoBehaviour
         }
     }
 
-    Color32[] ReadTexture2D(Texture2D tex)
+    AsyncGPUReadbackRequest[] ReadTexture2D(Texture2D tex)
     {
-        if (tex.isReadable)
-            return tex.GetPixels32();
+        var requests = new AsyncGPUReadbackRequest[tex.mipmapCount];
+        var rt = new RenderTexture(
+            tex.width,
+            tex.height,
+            1,
+            RenderTextureFormat.ARGB32,
+            tex.mipmapCount
+        )
+        {
+            autoGenerateMips = false,
+            useMipMap = true,
+        };
 
-        var staging = new Texture2D(tex.width, tex.height, TextureFormat.ARGB32, false);
-        var rt = new RenderTexture(tex.width, tex.height, 1, RenderTextureFormat.ARGB32);
         Graphics.Blit(tex, rt);
 
-        var active = RenderTexture.active;
-        RenderTexture.active = rt;
-        staging.ReadPixels(new Rect(0f, 0f, tex.width, tex.height), 0, 0, false);
-        RenderTexture.active = active;
+        for (int i = 0; i < tex.mipmapCount; ++i)
+        {
+            requests[i] = AsyncGPUReadback.Request(rt, i, TextureFormat.RGBA32);
+        }
+
+        AsyncGPUReadback.WaitAllRequests();
         rt.Release();
 
-        var pixels = staging.GetPixels32();
-        Destroy(staging);
-        return pixels;
+        return requests;
     }
 
     Color32[][] ReadCubemapFaces(Cubemap cubemap)

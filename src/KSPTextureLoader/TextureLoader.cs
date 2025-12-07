@@ -178,15 +178,38 @@ public partial class TextureLoader : MonoBehaviour
     private TextureHandle<T> LoadTextureImpl<T>(string path, TextureLoadOptions options)
         where T : Texture
     {
-        TextureHandleImpl handle;
-        var key = CanonicalizeResourcePath(path);
-        if (textures.TryGetValue(key, out var weakHandle))
+        TextureHandleImpl GetApplicableExistingHandle(string key)
         {
-            if (weakHandle.TryGetTarget(out handle))
-                return new TextureHandle<T>(handle).Acquire();
+            if (!textures.TryGetValue(key, out var weakHandle))
+                return null;
+            if (!weakHandle.TryGetTarget(out var handle))
+                return null;
+
+            // If the caller doesn't want a readable texture then they'll be
+            // happy regardless of whether the texture is readable or not.
+            if (options.Unreadable)
+                return handle;
+
+            // If the texture is readable and the caller wants a readable texture
+            // then everyone is happy.
+            if (handle.IsReadable)
+                return handle;
+
+            // This texture is not what the caller wants, but it was loaded from
+            // an asset bundle so we can't change anything by reloading it.
+            if (handle.AssetBundle is not null)
+                return handle;
+
+            Debug.LogWarning($"[KSPTextureLoader] Reloading {path} to get readable texture");
+            return null;
         }
 
-        handle = new TextureHandleImpl(path);
+        var key = CanonicalizeResourcePath(path);
+        var handle = GetApplicableExistingHandle(key);
+        if (handle is not null)
+            return new TextureHandle<T>(handle).Acquire();
+
+        handle = new TextureHandleImpl(path, options.Unreadable);
         textures[key] = new WeakReference<TextureHandleImpl>(handle);
 
         var assetBundles = GetAssetBundlesForKey(key, options.AssetBundles);

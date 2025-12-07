@@ -1,5 +1,7 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;

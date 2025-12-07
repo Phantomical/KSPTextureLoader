@@ -15,6 +15,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
     internal int RefCount { get; private set; } = 1;
     internal string Path { get; private set; }
     internal string AssetBundle { get; private set; }
+    internal bool IsReadable { get; private set; }
 
     private Texture texture;
     private ExceptionDispatchInfo exception;
@@ -24,13 +25,14 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
     public bool IsComplete => coroutine is null;
     public bool IsError => exception is not null;
 
-    internal TextureHandleImpl(string path)
+    internal TextureHandleImpl(string path, bool unreadable)
     {
         Path = path;
+        IsReadable = !unreadable;
     }
 
     internal TextureHandleImpl(string path, ExceptionDispatchInfo ex)
-        : this(path)
+        : this(path, false)
     {
         exception = ex;
     }
