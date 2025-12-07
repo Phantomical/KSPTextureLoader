@@ -41,7 +41,7 @@ internal class Config : IConfigNode
     /// load all assets from asset bundles. When an asset bundle is unloaded it
     /// needs to sync with the loading thread which can take a while.
     /// </remarks>
-    public int AssetBundleUnloadDelay = 30;
+    public int BundleUnloadDelay = 30;
 
     /// <summary>
     /// Controls the size of the buffer unity will use to buffer uploads
@@ -74,7 +74,7 @@ internal class Config : IConfigNode
 
     public void Load(ConfigNode node)
     {
-        node.TryGetValue(nameof(AssetBundleUnloadDelay), ref AssetBundleUnloadDelay);
+        node.TryGetValue(nameof(BundleUnloadDelay), ref BundleUnloadDelay);
         node.TryGetValue(nameof(AsyncUploadBufferSize), ref AsyncUploadBufferSize);
         node.TryGetValue(nameof(AllowNativeUploads), ref AllowNativeUploads);
 
@@ -122,7 +122,7 @@ internal class Config : IConfigNode
 
     public void Save(ConfigNode node)
     {
-        node.AddValue(nameof(AssetBundleUnloadDelay), AssetBundleUnloadDelay);
+        node.AddValue(nameof(BundleUnloadDelay), BundleUnloadDelay);
         node.AddValue(nameof(AsyncUploadBufferSize), AsyncUploadBufferSize);
         node.AddValue(nameof(AllowNativeUploads), AllowNativeUploads);
 
