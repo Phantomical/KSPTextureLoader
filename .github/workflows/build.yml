@@ -25,8 +25,8 @@ jobs:
       - run: tree
       - uses: actions/upload-artifact@v4
         with:
-          path: KSPTextureLoader.zip
-          name: KSPTextureLoader
+          path: /tmp/release/KSPTextureLoader.zip
+          name: KSPTextureLoader.zip
       - uses: actions/upload-artifact@v4
         with:
           path: GameData/KSPTextureLoader/KSPTextureLoader.version
