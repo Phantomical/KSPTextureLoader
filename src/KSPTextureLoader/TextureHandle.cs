@@ -163,7 +163,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 /// </summary>
 ///
 /// <remarks>
-/// You get one of these by calling <see cref="TextureLoader.LoadTexture"/>.
+/// You get one of these by calling <see cref="TextureLoader.LoadTexture(string, TextureLoadOptions)"/>.
 /// It will start off in a pending state and then will become complete at a
 /// later time (unless cached, in which case it will be ready immediately).
 ///
@@ -264,7 +264,7 @@ public class TextureHandle : CustomYieldInstruction, IDisposable
 /// </summary>
 ///
 /// <remarks>
-/// You get one of these by calling <see cref="TextureLoader.LoadTexture"/>.
+/// You get one of these by calling <see cref="TextureLoader.LoadTexture(string, TextureLoadOptions)"/>.
 /// It will start off in a pending state and then will become complete at a
 /// later time (unless cached, in which case it will be ready immediately).
 ///

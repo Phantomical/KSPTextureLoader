@@ -2,17 +2,22 @@
     <PropertyGroup>
         <Description>Fast and asynchronous texture loading for KSP</Description>
 
-        <Version>1.0.0</Version>
+        <Version>0.0.1</Version>
 
         <TargetFramework>net4.8</TargetFramework>
-        <!-- <DebugType>portable</DebugType> -->
         <LangVersion>13</LangVersion>
+        
+        <!-- Generate an XML documentation file so that others can see the doc comments -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <!-- Generate a nuget lockfile so that we can cache stuff in CI -->
+        <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+        <NoWarn>CS1591</NoWarn>
 
         <RepoRootPath>$(MSBuildThisFileDirectory)\..\..</RepoRootPath>
 
         <KSPBT_ModRoot>$(RepoRootPath)\GameData\$(MSBuildProjectName)</KSPBT_ModRoot>
 
-        <BinariesOutputRelativePath>GameData\KSPTextureLoader</BinariesOutputRelativePath>
+        <KSPBT_ModPluginFolder>PluginData\</KSPBT_ModPluginFolder>
         <KSPBT_GenerateKSPAssemblyAttribute>true</KSPBT_GenerateKSPAssemblyAttribute>
         <KSPBT_GenerateKSPAssemblyDependencyAttributes>true</KSPBT_GenerateKSPAssemblyDependencyAttributes>
     </PropertyGroup>
@@ -38,10 +43,6 @@
         <PackageReference Include="SharpDX.DXGI" Version="4.2.0" />
     </ItemGroup>
 
-    <PropertyGroup>
-        <GameDataOutDir>$(RepoRootPath)\GameData\$(MSBuildProjectName)</GameDataOutDir>
-    </PropertyGroup>
-
     <ItemGroup>
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Object.m_CachedPtr" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Object.CurrentThreadIsMainThread" />
@@ -62,23 +63,23 @@
             Make sure to delete the output mod directory on clean so we don't have
             outdated artifacts lying around.
         -->
-        <RemoveDir Directories="$(GameDataOutDir)" />
+        <RemoveDir Directories="$(KSPBT_ModRoot)" />
         <!--
             KSP gets borked if there are invalid junctions in GameData. We fix this
             by recreating the directory after we delete it.
         -->
-        <MakeDir Directories="$(GameDataOutDir)" />
+        <MakeDir Directories="$(KSPBT_ModRoot)" />
     </Target>
 
     <Target Name="CopyUnityAssets" AfterTargets="CopyFilesToOutputDirectory">
         <ItemGroup>
             <Patches Include="$(RepoRootPath)\src\GameData\**\*.*" />
         </ItemGroup>
-        <Copy SourceFiles="@(Patches)" DestinationFolder="$(GameDataOutDir)\%(RecursiveDir)" />
+        <Copy SourceFiles="@(Patches)" DestinationFolder="$(KSPBT_ModRoot)\%(RecursiveDir)" />
     </Target>
 
     <Target Name="CopyLicenseAndReadme" AfterTargets="CopyFilesToOutputDirectory">
-        <Copy SourceFiles="$(RepoRootPath)\LICENSE" DestinationFolder="$(GameDataOutDir)" />
-        <!-- <Copy SourceFiles="$(RepoRootPath)\README.md" DestinationFolder="$(GameDataOutDir)" /> -->
+        <Copy SourceFiles="$(RepoRootPath)\LICENSE" DestinationFolder="$(KSPBT_ModRoot)" />
+        <!-- <Copy SourceFiles="$(RepoRootPath)\README.md" DestinationFolder="$(KSPBT_ModRoot)" /> -->
     </Target>
 </Project>
