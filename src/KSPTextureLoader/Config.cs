@@ -64,7 +64,7 @@ internal class Config : IConfigNode
     /// look these up. Use module manager to apply a patch, or save/load the
     /// whole config in order to apply an update.
     /// </remarks>
-    public List<ImplicitBundle> ImplicitBundles = [];
+    public List<ImplicitBundle> AssetBundles = [];
 
     internal void Apply()
     {
@@ -78,7 +78,7 @@ internal class Config : IConfigNode
         node.TryGetValue(nameof(AsyncUploadBufferSize), ref AsyncUploadBufferSize);
         node.TryGetValue(nameof(AllowNativeUploads), ref AllowNativeUploads);
 
-        var children = node.GetNodes("ImplicitBundle");
+        var children = node.GetNodes("AssetBundle");
         var bundles = new List<ImplicitBundle>(children.Length);
         foreach (var child in children)
         {
@@ -115,7 +115,7 @@ internal class Config : IConfigNode
             bundles.Add(bundle);
         }
 
-        ImplicitBundles = bundles;
+        AssetBundles = bundles;
 
         BuildBundlePrefixMap();
     }
@@ -126,8 +126,8 @@ internal class Config : IConfigNode
         node.AddValue(nameof(AsyncUploadBufferSize), AsyncUploadBufferSize);
         node.AddValue(nameof(AllowNativeUploads), AllowNativeUploads);
 
-        foreach (var bundle in ImplicitBundles)
-            bundle.Save(node.AddNode("ImplicitBundle"));
+        foreach (var bundle in AssetBundles)
+            bundle.Save(node.AddNode("AssetBundle"));
     }
 
     struct PrefixEntry
@@ -150,7 +150,7 @@ internal class Config : IConfigNode
 
     void BuildBundlePrefixMap()
     {
-        var sorted = ImplicitBundles
+        var sorted = AssetBundles
             .Select(bundle =>
             {
                 bundle.prefix = TextureLoader
