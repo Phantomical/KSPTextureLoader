@@ -22,7 +22,7 @@ jobs:
           # The build step already copies the relevant files into GameData so we
           # don't need to include the defaults here
           artifacts: GameData
-          artifacts-exclude: KSPTextureLoaderTests
+          artifacts-exclude: GameData/KSPTextureLoaderTests
 
       - run: tree
       - uses: actions/upload-artifact@v4
