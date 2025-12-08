@@ -12,8 +12,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: KSPModdingLibs/KSPBuildTools/.github/actions/setup-ckan@1.1.1
       - uses: KSPModdingLibs/KSPBuildTools/.github/actions/install-dependencies@1.1.1
-        with:
-          dependency-identifiers: Harmony2
 
       - uses: KSPModdingLibs/KSPBuildTools/.github/actions/compile@1.1.1
       - uses: KSPModdingLibs/KSPBuildTools/.github/actions/assemble-release@1.1.1
