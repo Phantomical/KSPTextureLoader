@@ -57,6 +57,8 @@ public partial class TextureLoader
         var path = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", handle.Path);
         var request = AssetBundle.LoadFromFileAsync(path);
 
+        Debug.Log($"[AsyncTextureLoad] Loading asset bundle {handle.Path}");
+
         if (!sync)
         {
             handle.completeHandler = new AssetBundleCompleteHandler(request);

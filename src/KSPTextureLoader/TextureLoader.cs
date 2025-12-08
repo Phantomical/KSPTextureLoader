@@ -190,6 +190,11 @@ public partial class TextureLoader : MonoBehaviour
             if (options.Unreadable)
                 return handle;
 
+            // The handle is in an error state, the texture being readable or not
+            // won't make a difference here.
+            if (handle.IsError)
+                return handle;
+
             // If the texture is readable and the caller wants a readable texture
             // then everyone is happy.
             if (handle.IsReadable)
@@ -421,19 +426,22 @@ public partial class TextureLoader : MonoBehaviour
         if (src is T tex)
             return tex;
 
-        if (src is Texture2D tex2d)
+        if (options.AllowImplicitConversions)
         {
-            if (typeof(T) == typeof(Cubemap))
-                return (T)(Texture)TextureUtils.ConvertTexture2dToCubemap(tex2d);
+            if (src is Texture2D tex2d)
+            {
+                if (typeof(T) == typeof(Cubemap))
+                    return (T)(Texture)TextureUtils.ConvertTexture2dToCubemap(tex2d);
 
-            if (typeof(T) == typeof(Texture2DArray))
-                return (T)(Texture)TextureUtils.ConvertTexture2DToArray(tex2d);
-        }
+                if (typeof(T) == typeof(Texture2DArray))
+                    return (T)(Texture)TextureUtils.ConvertTexture2DToArray(tex2d);
+            }
 
-        if (src is Cubemap cubemap)
-        {
-            if (typeof(T) == typeof(CubemapArray))
-                return (T)(Texture)TextureUtils.ConvertCubemapToArray(cubemap);
+            if (src is Cubemap cubemap)
+            {
+                if (typeof(T) == typeof(CubemapArray))
+                    return (T)(Texture)TextureUtils.ConvertCubemapToArray(cubemap);
+            }
         }
 
         throw new NotSupportedException(
@@ -463,5 +471,21 @@ public partial class TextureLoader : MonoBehaviour
     private static string CanonicalizeAssetPath(string path)
     {
         return path.Replace('\\', '/').ToLowerInvariant();
+    }
+
+    // UniverseExplorerKSP isn't really usefully able to call TryGetTarget.
+    // This property allows actually inspecting the live textures _way_ more easily.
+    private Dictionary<string, TextureHandleImpl> DebugTextures
+    {
+        get
+        {
+            var debug = new Dictionary<string, TextureHandleImpl>(textures.Count);
+            foreach (var (key, weak) in textures)
+            {
+                if (weak.TryGetTarget(out var handle))
+                    debug.Add(key, handle);
+            }
+            return debug;
+        }
     }
 }

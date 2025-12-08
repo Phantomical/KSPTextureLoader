@@ -12,10 +12,10 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 {
     private static readonly ProfilerMarker CompleteMarker = new("TextureHandle.Complete");
 
+    private readonly bool isReadable;
     internal int RefCount { get; private set; } = 1;
     internal string Path { get; private set; }
     internal string AssetBundle { get; private set; }
-    internal bool IsReadable { get; private set; }
 
     private Texture texture;
     private ExceptionDispatchInfo exception;
@@ -24,11 +24,12 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 
     public bool IsComplete => coroutine is null;
     public bool IsError => exception is not null;
+    internal bool IsReadable => texture?.isReadable ?? isReadable;
 
     internal TextureHandleImpl(string path, bool unreadable)
     {
         Path = path;
-        IsReadable = !unreadable;
+        isReadable = !unreadable;
     }
 
     internal TextureHandleImpl(string path, ExceptionDispatchInfo ex)
@@ -73,7 +74,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         if (RefCount == 1)
             this.texture = null;
         else
-            texture = TextureUtils.CloneTexture(this.texture);
+            texture = Texture.Instantiate<Texture>(texture);
 
         return texture;
     }

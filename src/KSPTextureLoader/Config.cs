@@ -199,7 +199,10 @@ internal class Config : IConfigNode
 
         while (!string.IsNullOrEmpty(key))
         {
-            key = Path.GetDirectoryName(key);
+            var index = key.LastIndexOf('/');
+            if (index == -1)
+                break;
+            key = key.Substring(0, index);
             if (BundlePrefixMap.TryGetValue(key, out var entry))
             {
                 for (int i = entry.start; i < entry.end; ++i)

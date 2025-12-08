@@ -3,7 +3,7 @@ using Unity.Collections;
 
 namespace KSPTextureLoader.Utils;
 
-public class NativeArrayGuard<T>(NativeArray<T> array = default) : IDisposable
+internal class NativeArrayGuard<T>(NativeArray<T> array = default) : IDisposable
     where T : unmanaged
 {
     public NativeArray<T> array = array;

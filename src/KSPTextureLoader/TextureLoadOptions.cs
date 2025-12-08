@@ -77,6 +77,11 @@ public struct TextureLoadOptions()
     public bool Unreadable { get; set; } = true;
 
     /// <summary>
+    /// Allow textures to be implicitly converted to the requested texture type.
+    /// </summary>
+    public bool AllowImplicitConversions { get; set; } = true;
+
+    /// <summary>
     /// A hint to the loader so that it can optimize loading patterns for the
     /// best results.
     /// </summary>

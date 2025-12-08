@@ -9,6 +9,7 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.IO.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Profiling;
+using Unity.Profiling.LowLevel;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
@@ -88,7 +89,7 @@ internal static unsafe class DDSLoader
                 UnsafeUtility.Malloc(
                     sizeof(ObjectHandle<SignalUploadCompleteData>),
                     16,
-                    Allocator.TempJob
+                    Allocator.Persistent
                 );
             *uploadHandle = new(signal);
 
@@ -104,6 +105,11 @@ internal static unsafe class DDSLoader
 
         handle.completeHandler = null;
         yield return signal;
+
+        // If we are fully sync then we want to get this done while waiting for
+        // the disk read to complete.
+        if (options.Hint == TextureLoadHint.Synchronous)
+            texture.GetRawTextureData<byte>();
 
         if (!readGuard.JobHandle.IsCompleted)
         {
@@ -134,6 +140,8 @@ internal static unsafe class DDSLoader
         SignalUploadComplete
     );
 
+    static readonly ProfilerMarker SignalUploadMarker = new("SignalUploadComplete");
+
     /// <summary>
     /// This blocks the render thread until it is signaled by the
     /// <see cref="CountdownEvent"/>.
@@ -142,8 +150,9 @@ internal static unsafe class DDSLoader
     /// <param name="data"></param>
     static void SignalUploadComplete(uint eventID, ObjectHandle<SignalUploadCompleteData>* data)
     {
+        using var scope = SignalUploadMarker.Auto();
         using var handle = *data;
-        UnsafeUtility.Free(data, Allocator.TempJob);
+        UnsafeUtility.Free(data, Allocator.Persistent);
         handle.Target.complete = true;
     }
 }
