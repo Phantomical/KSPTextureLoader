@@ -17,7 +17,7 @@
 
         <KSPBT_ModRoot>$(RepoRootPath)\GameData\$(MSBuildProjectName)</KSPBT_ModRoot>
 
-        <KSPBT_ModPluginFolder>PluginData\</KSPBT_ModPluginFolder>
+        <KSPBT_ModPluginFolder>Plugins\</KSPBT_ModPluginFolder>
         <KSPBT_GenerateKSPAssemblyAttribute>true</KSPBT_GenerateKSPAssemblyAttribute>
         <KSPBT_GenerateKSPAssemblyDependencyAttributes>true</KSPBT_GenerateKSPAssemblyDependencyAttributes>
     </PropertyGroup>
@@ -80,6 +80,13 @@
 
     <Target Name="CopyLicenseAndReadme" AfterTargets="CopyFilesToOutputDirectory">
         <Copy SourceFiles="$(RepoRootPath)\LICENSE" DestinationFolder="$(KSPBT_ModRoot)" />
-        <!-- <Copy SourceFiles="$(RepoRootPath)\README.md" DestinationFolder="$(KSPBT_ModRoot)" /> -->
+        <Copy SourceFiles="$(RepoRootPath)\README.md" DestinationFolder="$(KSPBT_ModRoot)" />
+    </Target>
+
+    <Target Name="CopyXmlDocs" AfterTargets="CopyFilesToOuputDirectory">
+        <Copy
+            SourceFiles="$(MSBuildProjectDirectory)\$(OutputPath)\$(AssemblyName).xml"
+            DestinationFolder="$(KSPBT_ModRoot)\$(KSPBT_ModPluginFolder)"
+        />
     </Target>
 </Project>
