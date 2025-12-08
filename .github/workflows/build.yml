@@ -10,18 +10,19 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: KSPModdingLibs/KSPBuildTools/.github/actions/setup-ckan@0.0.4
-      - uses: KSPModdingLibs/KSPBuildTools/.github/actions/install-dependencies@0.0.4
+      - uses: KSPModdingLibs/KSPBuildTools/.github/actions/setup-ckan@1.1.1
+      - uses: KSPModdingLibs/KSPBuildTools/.github/actions/install-dependencies@1.1.1
         with:
           dependency-identifiers: Harmony2
 
-      - uses: KSPModdingLibs/KSPBuildTools/.github/actions/compile@0.0.4
-      - uses: KSPModdingLibs/KSPBuildTools/.github/actions/assemble-release@0.0.4
+      - uses: KSPModdingLibs/KSPBuildTools/.github/actions/compile@1.1.1
+      - uses: KSPModdingLibs/KSPBuildTools/.github/actions/assemble-release@1.1.1
         with:
           output-file-name: KSPTextureLoader
           # The build step already copies the relevant files into GameData so we
           # don't need to include the defaults here
           artifacts: GameData
+          artifacts-exclude: KSPTextureLoaderTests
 
       - run: tree
       - uses: actions/upload-artifact@v4
