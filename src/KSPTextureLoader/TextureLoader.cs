@@ -384,7 +384,7 @@ public partial class TextureLoader : MonoBehaviour
             // We cannot block on the completion of a web request. That just results
             // in an infinite hang. If the web request isn't complete then we fall
             // back to a synchronous read off disk.
-            if (!request.isDone)
+            if (request.isDone)
             {
                 if (request.isNetworkError || request.isHttpError)
                     throw new Exception($"Failed to load image: {request.error}");
