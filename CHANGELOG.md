@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v0.0.4
+### Fixed
+* Fixed a number of bugs related to PNG loading.
+
+### Added
+* Added support for doing file reads from jobs instead of AsyncReadManager.
+  This is currently disabled by default.
+
 ## v0.0.3
 ### Added
 * Allow controlling `QualitySettings.asyncUploadPersistentBuffer` via the config.
