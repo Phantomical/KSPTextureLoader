@@ -50,6 +50,12 @@ internal class Config : IConfigNode
     public int AsyncUploadBufferSize = 128;
 
     /// <summary>
+    /// Controls whether unity holds on to the persistent buffer when there are
+    /// no pending asset bundle loads.
+    /// </summary>
+    public bool AsyncUploadPersistentBuffer = true;
+
+    /// <summary>
     /// Whether to allow direct use of native rendering extensions to upload
     /// textures.
     /// </summary>
@@ -70,12 +76,14 @@ internal class Config : IConfigNode
     {
         if (QualitySettings.asyncUploadBufferSize != AsyncUploadBufferSize)
             QualitySettings.asyncUploadBufferSize = Clamp(AsyncUploadBufferSize, 2, 2047);
+        QualitySettings.asyncUploadPersistentBuffer = AsyncUploadPersistentBuffer;
     }
 
     public void Load(ConfigNode node)
     {
         node.TryGetValue(nameof(BundleUnloadDelay), ref BundleUnloadDelay);
         node.TryGetValue(nameof(AsyncUploadBufferSize), ref AsyncUploadBufferSize);
+        node.TryGetValue(nameof(AsyncUploadPersistentBuffer), ref AsyncUploadPersistentBuffer);
         node.TryGetValue(nameof(AllowNativeUploads), ref AllowNativeUploads);
 
         var children = node.GetNodes("AssetBundle");
@@ -124,6 +132,7 @@ internal class Config : IConfigNode
     {
         node.AddValue(nameof(BundleUnloadDelay), BundleUnloadDelay);
         node.AddValue(nameof(AsyncUploadBufferSize), AsyncUploadBufferSize);
+        node.AddValue(nameof(AsyncUploadPersistentBuffer), AsyncUploadPersistentBuffer);
         node.AddValue(nameof(AllowNativeUploads), AllowNativeUploads);
 
         foreach (var bundle in AssetBundles)
