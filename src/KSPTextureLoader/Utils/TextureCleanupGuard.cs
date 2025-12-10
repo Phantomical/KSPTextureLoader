@@ -1,11 +1,13 @@
 using System;
 using UnityEngine;
 
-namespace KSPTextureLoader;
+namespace KSPTextureLoader.Utils;
 
 internal class TextureCleanupGuard(Texture texture) : IDisposable
 {
     internal Texture texture = texture;
+
+    public void Clear() => texture = null;
 
     public void Dispose()
     {

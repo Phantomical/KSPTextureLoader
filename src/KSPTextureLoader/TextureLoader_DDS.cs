@@ -39,8 +39,10 @@ partial class TextureLoader
         var diskPath = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", handle.Path);
         DDSHeader header;
         DDSHeaderDX10 header10 = null;
-        ReadHandle readHandle;
         NativeArray<byte> buffer;
+
+        JobHandle jobHandle;
+        IFileReadStatus readStatus;
 
         using (var file = File.OpenRead(diskPath))
         {
@@ -73,21 +75,42 @@ partial class TextureLoader
                 NativeArrayOptions.UninitializedMemory
             );
 
-            unsafe
+            if (Config.Instance.UseAsyncReadManager)
             {
-                using var readScope = LaunchReadMarker.Auto();
-                var command = new ReadCommand
+                unsafe
                 {
-                    Buffer = buffer.GetUnsafePtr(),
-                    Offset = file.Position,
-                    Size = length,
+                    using var readScope = LaunchReadMarker.Auto();
+                    var command = new ReadCommand
+                    {
+                        Buffer = buffer.GetUnsafePtr(),
+                        Offset = file.Position,
+                        Size = length,
+                    };
+                    var readHandle = LaunchRead(diskPath, command);
+
+                    readStatus = new ReadHandleStatus(readHandle);
+                    jobHandle = readHandle.JobHandle;
+                }
+            }
+            else
+            {
+                var exceptionStatus = new SavedExceptionStatus();
+                var job = new FileReadJob
+                {
+                    data = buffer,
+                    path = new(diskPath),
+                    status = new(exceptionStatus),
+                    offset = file.Position,
                 };
-                readHandle = LaunchRead(diskPath, command);
+
+                readStatus = exceptionStatus;
+                jobHandle = job.Schedule();
+                JobHandle.ScheduleBatchedJobs();
             }
         }
 
         using var bufGuard = new NativeArrayGuard<byte>(buffer);
-        using var readGuard = new SafeReadHandleGuard(readHandle);
+        using var jobGuard = new JobCompleteGuard(jobHandle);
 
 #if false
         {
@@ -211,7 +234,7 @@ partial class TextureLoader
                         pixels = width * height,
                     };
 
-                    readGuard.JobHandle = job.Schedule(readGuard.JobHandle);
+                    jobGuard.JobHandle = job.Schedule(jobGuard.JobHandle);
                     bufGuard.array = colors;
                     buffer = colors;
                 }
@@ -242,7 +265,7 @@ partial class TextureLoader
                         pixels = width * height,
                     };
 
-                    readGuard.JobHandle = job.Schedule(readGuard.JobHandle);
+                    jobGuard.JobHandle = job.Schedule(jobGuard.JobHandle);
                     bufGuard.array = colors;
                     buffer = colors;
                 }
@@ -308,7 +331,8 @@ partial class TextureLoader
                     format,
                     options,
                     bufGuard,
-                    readGuard
+                    readStatus,
+                    jobGuard
                 );
 
                 foreach (var item in upload)
@@ -324,30 +348,34 @@ partial class TextureLoader
                     mipCount,
                     format
                 );
-
-                handle.completeHandler = new JobHandleCompleteHandler(readGuard.JobHandle);
-                yield return new WaitUntil(() => readGuard.JobHandle.IsCompleted);
-                handle.completeHandler = null;
-
-                int offset = 0;
-                for (int element = 0; element < arraySize; ++element)
+                using (var texGuard = new TextureCleanupGuard(tex2dArray))
                 {
-                    for (int mip = 0; mip < mipCount; ++mip)
+                    using (
+                        handle.WithCompleteHandler(new JobHandleCompleteHandler(jobGuard.JobHandle))
+                    )
+                        yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
+
+                    int offset = 0;
+                    for (int element = 0; element < arraySize; ++element)
                     {
-                        int mipSize = Get2DMipMapSize(width, height, mip, format);
+                        for (int mip = 0; mip < mipCount; ++mip)
+                        {
+                            int mipSize = Get2DMipMapSize(width, height, mip, format);
 
-                        if (offset + mipSize > buffer.Length)
-                            throw new Exception(
-                                "Invalid DDS file: not enough data for specified texture size"
-                            );
+                            if (offset + mipSize > buffer.Length)
+                                throw new Exception(
+                                    "Invalid DDS file: not enough data for specified texture size"
+                                );
 
-                        tex2dArray.SetPixelData(buffer, mip, element, offset);
+                            tex2dArray.SetPixelData(buffer, mip, element, offset);
+                        }
                     }
-                }
 
-                tex2dArray.Apply(false, options.Unreadable);
-                handle.SetTexture<T>(tex2dArray, options);
-                break;
+                    tex2dArray.Apply(false, options.Unreadable);
+                    handle.SetTexture<T>(tex2dArray, options);
+                    texGuard.Clear();
+                    break;
+                }
 
             case DDSTextureType.Cubemap:
                 if (typeof(T) == typeof(CubemapArray))
@@ -355,29 +383,34 @@ partial class TextureLoader
 
                 var cubemap = TextureUtils.CreateUninitializedCubemap(width, mipCount, format);
 
-                handle.completeHandler = new JobHandleCompleteHandler(readGuard.JobHandle);
-                yield return new WaitUntil(() => readGuard.JobHandle.IsCompleted);
-                handle.completeHandler = null;
-
-                offset = 0;
-                for (int face = 0; face < 6; ++face)
+                using (var texGuard = new TextureCleanupGuard(cubemap))
                 {
-                    for (int mip = 0; mip < mipCount; ++mip)
+                    using (
+                        handle.WithCompleteHandler(new JobHandleCompleteHandler(jobGuard.JobHandle))
+                    )
+                        yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
+
+                    int offset = 0;
+                    for (int face = 0; face < 6; ++face)
                     {
-                        int mipSize = Get2DMipMapSize(width, height, mip, format);
+                        for (int mip = 0; mip < mipCount; ++mip)
+                        {
+                            int mipSize = Get2DMipMapSize(width, height, mip, format);
 
-                        if (offset + mipSize > buffer.Length)
-                            throw new Exception(
-                                "Invalid DDS file: not enough data for specified texture size"
-                            );
+                            if (offset + mipSize > buffer.Length)
+                                throw new Exception(
+                                    "Invalid DDS file: not enough data for specified texture size"
+                                );
 
-                        cubemap.SetPixelData(buffer, mip, (CubemapFace)face, offset);
-                        offset += mipSize;
+                            cubemap.SetPixelData(buffer, mip, (CubemapFace)face, offset);
+                            offset += mipSize;
+                        }
                     }
+                    cubemap.Apply(false, options.Unreadable);
+                    handle.SetTexture<T>(cubemap, options);
+                    texGuard.Clear();
+                    break;
                 }
-                cubemap.Apply(false, options.Unreadable);
-                handle.SetTexture<T>(cubemap, options);
-                break;
 
             case DDSTextureType.CubemapArray:
                 var cubeArray = TextureUtils.CreateUninitializedCubemapArray(
@@ -387,30 +420,35 @@ partial class TextureLoader
                     format
                 );
 
-                handle.completeHandler = new JobHandleCompleteHandler(readGuard.JobHandle);
-                yield return new WaitUntil(() => readGuard.JobHandle.IsCompleted);
-                handle.completeHandler = null;
-
-                offset = 0;
-                for (int element = 0; element < arraySize; ++element)
+                using (var texGuard = new TextureCleanupGuard(cubeArray))
                 {
-                    int face = element % 6;
-                    for (int mip = 0; mip < mipCount; ++mip)
+                    using (
+                        handle.WithCompleteHandler(new JobHandleCompleteHandler(jobGuard.JobHandle))
+                    )
+                        yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
+
+                    int offset = 0;
+                    for (int element = 0; element < arraySize; ++element)
                     {
-                        int mipSize = Get2DMipMapSize(width, height, mip, format);
+                        int face = element % 6;
+                        for (int mip = 0; mip < mipCount; ++mip)
+                        {
+                            int mipSize = Get2DMipMapSize(width, height, mip, format);
 
-                        if (offset + mipSize > buffer.Length)
-                            throw new Exception(
-                                "Invalid DDS file: not enough data for specified texture size"
-                            );
+                            if (offset + mipSize > buffer.Length)
+                                throw new Exception(
+                                    "Invalid DDS file: not enough data for specified texture size"
+                                );
 
-                        cubeArray.SetPixelData(buffer, mip, (CubemapFace)face, element, offset);
-                        offset += mipSize;
+                            cubeArray.SetPixelData(buffer, mip, (CubemapFace)face, element, offset);
+                            offset += mipSize;
+                        }
                     }
+                    cubeArray.Apply(false, options.Unreadable);
+                    handle.SetTexture<T>(cubeArray, options);
+                    texGuard.Clear();
+                    break;
                 }
-                cubeArray.Apply(false, options.Unreadable);
-                handle.SetTexture<T>(cubeArray, options);
-                break;
 
             case DDSTextureType.Texture3D:
                 var tex3d = TextureUtils.CreateUninitializedTexture3D(
@@ -421,23 +459,32 @@ partial class TextureLoader
                     format
                 );
 
-                offset = 0;
-                for (int mip = 0; mip < mipCount; ++mip)
+                using (var texGuard = new TextureCleanupGuard(tex3d))
                 {
-                    var mipSize = Get3DMipMapSize(width, height, depth, mip, format);
+                    using (
+                        handle.WithCompleteHandler(new JobHandleCompleteHandler(jobGuard.JobHandle))
+                    )
+                        yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
 
-                    if (offset + mipSize > buffer.Length)
-                        throw new Exception(
-                            "Invalid DDS file: not enough data for specified texture size"
-                        );
+                    int offset = 0;
+                    for (int mip = 0; mip < mipCount; ++mip)
+                    {
+                        var mipSize = Get3DMipMapSize(width, height, depth, mip, format);
 
-                    tex3d.SetPixelData(buffer, mip, offset);
-                    offset += mipSize;
+                        if (offset + mipSize > buffer.Length)
+                            throw new Exception(
+                                "Invalid DDS file: not enough data for specified texture size"
+                            );
+
+                        tex3d.SetPixelData(buffer, mip, offset);
+                        offset += mipSize;
+                    }
+
+                    tex3d.Apply(false, makeNoLongerReadable: true);
+                    handle.SetTexture<T>(tex3d, options);
+                    texGuard.Clear();
+                    break;
                 }
-
-                tex3d.Apply(false, makeNoLongerReadable: true);
-                handle.SetTexture<T>(tex3d, options);
-                break;
 
             default:
                 throw new NotImplementedException($"Unknown texture type {type}");

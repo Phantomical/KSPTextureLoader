@@ -62,7 +62,8 @@ internal static unsafe class DX11
         GraphicsFormat format,
         TextureLoadOptions options,
         NativeArrayGuard<byte> bufGuard,
-        SafeReadHandleGuard readGuard
+        IFileReadStatus readStatus,
+        JobCompleteGuard jobGuard
     )
         where T : Texture
     {
@@ -100,18 +101,15 @@ internal static unsafe class DX11
             format = dx11format,
             handle = new(shared),
             device = device.NativePointer,
-            readHandle = readGuard.Handle,
+            readStatus = new(readStatus),
         };
-        readGuard.JobHandle = job.Schedule(readGuard.JobHandle);
-        bufGuard.array.Dispose(readGuard.JobHandle);
+        jobGuard.JobHandle = job.Schedule(jobGuard.JobHandle);
+        bufGuard.array.Dispose(jobGuard.JobHandle);
         bufGuard.array = default;
         JobHandle.ScheduleBatchedJobs();
 
-        using (handle.WithCompleteHandler(new JobHandleCompleteHandler(readGuard.JobHandle)))
-            yield return new WaitUntil(() => readGuard.JobHandle.IsCompleted);
-
-        if (readGuard.Status != ReadStatus.Complete)
-            throw new Exception("Failed to read file data");
+        using (handle.WithCompleteHandler(new JobHandleCompleteHandler(jobGuard.JobHandle)))
+            yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
 
         // If the job failed with an exception then we should rethrow that.
         shared.ex?.Throw();
@@ -165,11 +163,12 @@ internal static unsafe class DX11
 
         public ObjectHandle<SharedData> handle;
         public IntPtr device;
-        public ReadHandle readHandle;
+        public ObjectHandle<IFileReadStatus> readStatus;
 
         public void Execute()
         {
             using var guard = handle;
+            using var rs = readStatus;
             using var device = new Direct3D11.Device(this.device);
             var shared = handle.Target;
 
@@ -185,8 +184,7 @@ internal static unsafe class DX11
 
         void ExecuteImpl(Direct3D11.Device device, SharedData shared)
         {
-            if (readHandle.Status != ReadStatus.Complete)
-                return;
+            readStatus.Target.ThrowIfError();
 
             var desc = new Texture2DDescription
             {

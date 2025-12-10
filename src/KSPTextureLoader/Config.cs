@@ -62,6 +62,12 @@ internal class Config : IConfigNode
     public bool AllowNativeUploads = true;
 
     /// <summary>
+    /// Whether to use Unity's AsyncReadManager to dispatch reads. If false
+    /// then reads are done in a job.
+    /// </summary>
+    public bool UseAsyncReadManager = true;
+
+    /// <summary>
     /// Implicit bundle declarations.
     /// </summary>
     ///

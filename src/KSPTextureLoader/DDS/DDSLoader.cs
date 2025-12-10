@@ -28,7 +28,8 @@ internal static unsafe class DDSLoader
         GraphicsFormat format,
         TextureLoadOptions options,
         NativeArrayGuard<byte> bufGuard,
-        SafeReadHandleGuard readGuard
+        IFileReadStatus readStatus,
+        JobCompleteGuard jobGuard
     )
         where T : Texture
     {
@@ -43,7 +44,8 @@ internal static unsafe class DDSLoader
                 format,
                 options,
                 bufGuard,
-                readGuard
+                readStatus,
+                jobGuard
             );
         }
 
@@ -55,7 +57,8 @@ internal static unsafe class DDSLoader
             format,
             options,
             bufGuard,
-            readGuard
+            readStatus,
+            jobGuard
         );
     }
 
@@ -72,7 +75,8 @@ internal static unsafe class DDSLoader
         GraphicsFormat format,
         TextureLoadOptions options,
         NativeArrayGuard<byte> bufGuard,
-        SafeReadHandleGuard readGuard
+        IFileReadStatus readStatus,
+        JobCompleteGuard jobGuard
     )
         where T : Texture
     {
@@ -111,18 +115,17 @@ internal static unsafe class DDSLoader
         if (options.Hint <= TextureLoadHint.BatchSynchronous)
             texture.GetRawTextureData<byte>();
 
-        if (!readGuard.JobHandle.IsCompleted)
+        if (!jobGuard.JobHandle.IsCompleted)
         {
-            handle.completeHandler = new JobHandleCompleteHandler(readGuard.JobHandle);
-            yield return new WaitUntil(() => readGuard.JobHandle.IsCompleted);
+            handle.completeHandler = new JobHandleCompleteHandler(jobGuard.JobHandle);
+            yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
             handle.completeHandler = null;
         }
 
         texture.LoadRawTextureData(bufGuard.array);
         bufGuard.array.Dispose(default);
 
-        if (readGuard.Status != ReadStatus.Complete)
-            throw new Exception("Failed to read texture data from file");
+        readStatus.ThrowIfError();
 
         texture.Apply(false, options.Unreadable);
         texGuard.Clear();
