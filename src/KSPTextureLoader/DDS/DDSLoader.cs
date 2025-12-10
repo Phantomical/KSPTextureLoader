@@ -108,7 +108,7 @@ internal static unsafe class DDSLoader
 
         // If we are fully sync then we want to get this done while waiting for
         // the disk read to complete.
-        if (options.Hint == TextureLoadHint.Synchronous)
+        if (options.Hint <= TextureLoadHint.BatchSynchronous)
             texture.GetRawTextureData<byte>();
 
         if (!readGuard.JobHandle.IsCompleted)
