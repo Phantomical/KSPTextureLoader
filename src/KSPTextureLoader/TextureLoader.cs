@@ -374,7 +374,7 @@ public partial class TextureLoader : MonoBehaviour
         // Cubemap textures need to be converted, so they must be readable.
         var unreadable = typeof(T) != typeof(Cubemap) && options.Unreadable;
 
-        if (options.Hint > TextureLoadHint.BatchSynchronous)
+        if (options.Hint < TextureLoadHint.BatchSynchronous)
         {
             var url = new Uri(diskPath);
             using var request = UnityWebRequestTexture.GetTexture(url, unreadable);
