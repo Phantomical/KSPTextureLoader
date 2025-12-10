@@ -7,5 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-### v0.0.1
+## v0.0.3
+### Fixed
+* Fixed an infinite hang when synchronously loading a PNG/JPEG texture.
+
+## v0.0.1
 This is the initial release of KSPTextureLoader.
