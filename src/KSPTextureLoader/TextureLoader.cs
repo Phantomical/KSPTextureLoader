@@ -391,6 +391,7 @@ public partial class TextureLoader : MonoBehaviour
 
                 texture = DownloadHandlerTexture.GetContent(request);
                 handle.SetTexture<T>(texture, options);
+                yield break;
             }
         }
 
@@ -404,36 +405,33 @@ public partial class TextureLoader : MonoBehaviour
                 "image was too large to be loaded. Only images up to 2GB in size are supported."
             );
 
-        using var data = new NativeArray<byte>(
-            (int)length,
-            Allocator.Persistent,
-            NativeArrayOptions.UninitializedMemory
-        );
+        var array = new byte[(int)length];
+        ulong gchandle;
 
         ReadHandle readHandle;
         unsafe
         {
+            var ptr = UnsafeUtility.PinGCArrayAndGetDataAddress(array, out gchandle);
             var command = new ReadCommand
             {
-                Buffer = data.GetUnsafePtr(),
+                Buffer = ptr,
                 Offset = 0,
                 Size = length,
             };
             readHandle = LaunchRead(diskPath, command);
         }
 
+        using var gcHandleGuard = new GcHandleGuard(gchandle);
         using var readGuard = new SafeReadHandleGuard(readHandle);
 
-        handle.completeHandler = new JobHandleCompleteHandler(readGuard.JobHandle);
-        yield return new WaitUntil(() => readGuard.JobHandle.IsCompleted);
-        handle.completeHandler = null;
+        using (handle.WithCompleteHandler(new JobHandleCompleteHandler(readGuard.JobHandle)))
+            yield return new WaitUntil(() => readGuard.JobHandle.IsCompleted);
 
         if (readHandle.Status != ReadStatus.Complete)
             throw new Exception("an error occurred while reading from the file");
 
         texture = new Texture2D(1, 1);
-        texture.LoadRawTextureData(data);
-        texture.Apply(false, unreadable);
+        texture.LoadImage(array, unreadable);
         handle.SetTexture<T>(texture, options);
     }
 
