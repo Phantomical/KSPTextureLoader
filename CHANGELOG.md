@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Added an OnComplete callback for when a texture load completes successfully.
 * Added an OnError callback for when a texture load fails.
 
+### Fixed
+* Fixed the `AssetBundle` property not being set when the texture is loaded from
+  an asset bundle.
+
 ## v0.0.6
 ### Fixed
 * Fixed a case where textures being unloaded before the asset bundle is would

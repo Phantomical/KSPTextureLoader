@@ -324,7 +324,7 @@ public partial class TextureLoader : MonoBehaviour
                 }
 
                 abHandle.AddLoadedTexture(handle.Acquire());
-                handle.SetTexture<T>(asset, options);
+                handle.SetTexture<T>(asset, options, abHandle.Path);
                 yield break;
             }
         }
