@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 * Fixed the `AssetBundle` property not being set when the texture is loaded from
   an asset bundle.
+* Avoid addon binder errors by properly depending on SharpDX dlls.
 
 ## v0.0.6
 ### Fixed
