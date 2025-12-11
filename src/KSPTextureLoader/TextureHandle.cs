@@ -158,7 +158,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 
         try
         {
-            OnCompleted(new TextureHandle(this));
+            OnCompleted?.Invoke(new TextureHandle(this));
         }
         catch (Exception ex)
         {
@@ -175,7 +175,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 
         try
         {
-            OnError(new TextureHandle(this), ex.SourceException);
+            OnError?.Invoke(new TextureHandle(this), ex.SourceException);
         }
         catch (Exception e)
         {
