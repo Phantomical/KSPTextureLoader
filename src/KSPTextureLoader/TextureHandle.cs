@@ -26,6 +26,9 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
     public bool IsError => exception is not null;
     internal bool IsReadable => texture?.isReadable ?? isReadable;
 
+    internal event Action<TextureHandle> OnCompleted;
+    internal event Action<TextureHandle, Exception> OnError;
+
     internal TextureHandleImpl(string path, bool unreadable)
     {
         Path = path;
@@ -152,6 +155,16 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         AssetBundle = assetBundle;
         coroutine = null;
         completeHandler = null;
+
+        try
+        {
+            OnCompleted(new TextureHandle(this));
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[KSPTextureLoader] OnCompleted event threw an exception");
+            Debug.LogException(ex);
+        }
     }
 
     void ISetException.SetException(ExceptionDispatchInfo ex)
@@ -159,6 +172,16 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         exception = ex;
         coroutine = null;
         completeHandler = null;
+
+        try
+        {
+            OnError(new TextureHandle(this), ex.SourceException);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[KSPTextureLoader] OnError event threw an exception");
+            Debug.LogException(e);
+        }
     }
 }
 
@@ -213,6 +236,24 @@ public class TextureHandle : CustomYieldInstruction, IDisposable
     /// Indicates whether the texture load completed with an error.
     /// </summary>
     public bool IsError => handle.IsError;
+
+    /// <summary>
+    /// An event that gets fired when the texture load completes successfully.
+    /// </summary>
+    public event Action<TextureHandle> OnCompleted
+    {
+        add => handle.OnCompleted += value;
+        remove => handle.OnCompleted -= value;
+    }
+
+    /// <summary>
+    /// An event that gets fired when the texture load completes with an error.
+    /// </summary>
+    public event Action<TextureHandle, Exception> OnError
+    {
+        add => handle.OnError += value;
+        remove => handle.OnError -= value;
+    }
 
     public override bool keepWaiting => !IsComplete;
 
