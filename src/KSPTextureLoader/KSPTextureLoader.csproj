@@ -13,6 +13,12 @@
         <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
         <NoWarn>CS1591</NoWarn>
 
+        <!--
+            These pretty much only go around expensive operations. It is better
+            to have them so that other people can see what is going on when profiling.
+        -->
+        <DefineConstants>$(DefineConstants);ENABLE_PROFILER</DefineConstants>
+
         <RepoRootPath>$(MSBuildThisFileDirectory)\..\..</RepoRootPath>
 
         <KSPBT_ModRoot>$(RepoRootPath)\GameData\$(MSBuildProjectName)</KSPBT_ModRoot>
