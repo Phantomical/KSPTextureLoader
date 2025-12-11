@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Runtime.ExceptionServices;
 using Unity.Profiling;
 using UnityEngine;
@@ -22,6 +23,7 @@ public class AssetBundleHandle
     private ExceptionDispatchInfo exception;
     internal ICompleteHandler completeHandler;
     internal IEnumerator coroutine;
+    private List<TextureHandleImpl> loadedTextures;
 
     /// <summary>
     /// The path that this asset bundle was loaded from within GameData.
@@ -79,7 +81,18 @@ public class AssetBundleHandle
             Debug.LogError(
                 $"AssetBundleHandle for asset bundle at {Path} has been disposed of too many times!"
             );
+            return;
         }
+    }
+
+    internal void DisposeTextures()
+    {
+        if (loadedTextures is null)
+            return;
+
+        foreach (var handle in loadedTextures)
+            handle.Dispose();
+        loadedTextures = null;
     }
 
     public void WaitUntilComplete()
@@ -101,6 +114,12 @@ public class AssetBundleHandle
             if (!coroutine.MoveNext())
                 break;
         }
+    }
+
+    internal void AddLoadedTexture(TextureHandleImpl handle)
+    {
+        loadedTextures ??= [];
+        loadedTextures.Add(handle);
     }
 
     internal void SetBundle(AssetBundle bundle)

@@ -104,6 +104,7 @@ public partial class TextureLoader
             yield break;
         var bundle = handle.GetBundle();
         bundle.Unload(false);
+        handle.DisposeTextures();
     }
 
     internal static string CanonicalizeResourcePath(string path)

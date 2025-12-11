@@ -141,6 +141,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 
         if (texture != null)
             UnityEngine.Object.Destroy(texture);
+        texture = null;
     }
 
     internal void SetTexture<T>(Texture tex, TextureLoadOptions options, string assetBundle = null)
