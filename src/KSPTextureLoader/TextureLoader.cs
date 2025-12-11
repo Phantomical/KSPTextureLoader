@@ -365,6 +365,8 @@ public partial class TextureLoader : MonoBehaviour
         }
     }
 
+    static readonly ProfilerMarker LoadImageMarker = new("LoadImage");
+
     IEnumerable<object> LoadPNGOrJPEG<T>(TextureHandleImpl handle, TextureLoadOptions options)
         where T : Texture
     {
@@ -430,7 +432,8 @@ public partial class TextureLoader : MonoBehaviour
             throw new Exception("an error occurred while reading from the file");
 
         texture = new Texture2D(1, 1);
-        texture.LoadImage(array, unreadable);
+        using (LoadImageMarker.Auto())
+            texture.LoadImage(array, unreadable);
         handle.SetTexture<T>(texture, options);
     }
 
