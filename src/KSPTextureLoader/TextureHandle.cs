@@ -91,10 +91,13 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 
         while (true)
         {
+            completeHandler?.WaitUntilComplete();
+
+            // When blocking on an asset bundle request unity will take the time
+            // to run other coroutines, which could set this to null.
+            // This means that we need to do the null check after.
             if (coroutine is null)
                 break;
-
-            completeHandler?.WaitUntilComplete();
             if (!coroutine.MoveNext())
                 break;
         }
