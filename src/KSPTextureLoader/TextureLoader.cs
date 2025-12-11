@@ -318,7 +318,7 @@ public partial class TextureLoader : MonoBehaviour
                 if (asset is null)
                 {
                     Debug.LogWarning(
-                        $"[KSPTextureLoader] Asset {handle.Path} exists in asset bundle {options.AssetBundles[i]} but was not a texture."
+                        $"[KSPTextureLoader] Asset {handle.Path} exists in asset bundle {assetBundles[i]} but could not be read as a texture."
                     );
                     continue;
                 }
