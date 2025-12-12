@@ -260,23 +260,14 @@ internal static class TextureUtils
 
     internal static Texture2D CloneTexture(Texture2D src)
     {
-        var dst = (Texture2D)FormatterServices.GetUninitializedObject(typeof(Texture2D));
-
-        var flags = InternalTextureCreationFlags.DontInitializePixels;
-        if (src.mipmapCount != 1)
-            flags |= InternalTextureCreationFlags.MipChain;
-        if (!src.isReadable)
-            flags |= InternalTextureCreationFlags.DontCreateSharedTextureData;
-
-        Texture2D.Internal_Create(
-            dst,
+        var dst = CreateUninitializedTexture2D(
             src.width,
             src.height,
             src.mipmapCount,
-            src.graphicsFormat,
-            (TextureCreationFlags)flags,
-            IntPtr.Zero
+            src.graphicsFormat
         );
+        if (!src.isReadable)
+            dst.Apply(false, true);
 
         Graphics.CopyTexture(src, dst);
         return dst;
@@ -284,23 +275,15 @@ internal static class TextureUtils
 
     internal static Texture2DArray CloneTexture(Texture2DArray src)
     {
-        var dst = (Texture2DArray)FormatterServices.GetUninitializedObject(typeof(Texture2DArray));
-
-        var flags = InternalTextureCreationFlags.DontInitializePixels;
-        if (src.mipmapCount != 1)
-            flags |= InternalTextureCreationFlags.MipChain;
-        if (!src.isReadable)
-            flags |= InternalTextureCreationFlags.DontCreateSharedTextureData;
-
-        Texture2DArray.Internal_Create(
-            dst,
+        var dst = CreateUninitializedTexture2DArray(
             src.width,
             src.height,
             src.depth,
             src.mipmapCount,
-            src.graphicsFormat,
-            (TextureCreationFlags)flags
+            src.graphicsFormat
         );
+        if (!src.isReadable)
+            dst.Apply(false, true);
 
         Graphics.CopyTexture(src, dst);
         return dst;
@@ -308,23 +291,15 @@ internal static class TextureUtils
 
     internal static Texture3D CloneTexture(Texture3D src)
     {
-        var dst = (Texture3D)FormatterServices.GetUninitializedObject(typeof(Texture2D));
-
-        var flags = InternalTextureCreationFlags.DontInitializePixels;
-        if (src.mipmapCount != 1)
-            flags |= InternalTextureCreationFlags.MipChain;
-        if (!src.isReadable)
-            flags |= InternalTextureCreationFlags.DontCreateSharedTextureData;
-
-        Texture3D.Internal_Create(
-            dst,
+        var dst = CreateUninitializedTexture3D(
             src.width,
             src.height,
             src.depth,
             src.mipmapCount,
-            src.graphicsFormat,
-            (TextureCreationFlags)flags
+            src.graphicsFormat
         );
+        if (!src.isReadable)
+            dst.Apply(false, true);
 
         Graphics.CopyTexture(src, dst);
         return dst;
@@ -332,22 +307,9 @@ internal static class TextureUtils
 
     internal static Cubemap CloneTexture(Cubemap src)
     {
-        var dst = (Cubemap)FormatterServices.GetUninitializedObject(typeof(Cubemap));
-
-        var flags = InternalTextureCreationFlags.DontInitializePixels;
-        if (src.mipmapCount != 1)
-            flags |= InternalTextureCreationFlags.MipChain;
+        var dst = CreateUninitializedCubemap(src.width, src.mipmapCount, src.graphicsFormat);
         if (!src.isReadable)
-            flags |= InternalTextureCreationFlags.DontCreateSharedTextureData;
-
-        Cubemap.Internal_Create(
-            dst,
-            src.width,
-            src.mipmapCount,
-            src.graphicsFormat,
-            (TextureCreationFlags)flags,
-            IntPtr.Zero
-        );
+            dst.Apply(false, true);
 
         Graphics.CopyTexture(src, dst);
         return dst;
@@ -355,22 +317,14 @@ internal static class TextureUtils
 
     internal static CubemapArray CloneTexture(CubemapArray src)
     {
-        var dst = (CubemapArray)FormatterServices.GetUninitializedObject(typeof(CubemapArray));
-
-        var flags = InternalTextureCreationFlags.DontInitializePixels;
-        if (src.mipmapCount != 1)
-            flags |= InternalTextureCreationFlags.MipChain;
-        if (!src.isReadable)
-            flags |= InternalTextureCreationFlags.DontCreateSharedTextureData;
-
-        CubemapArray.Internal_Create(
-            dst,
+        var dst = CreateUninitializedCubemapArray(
             src.width,
             src.cubemapCount,
             src.mipmapCount,
-            src.graphicsFormat,
-            (TextureCreationFlags)flags
+            src.graphicsFormat
         );
+        if (!src.isReadable)
+            dst.Apply(false, true);
 
         Graphics.CopyTexture(src, dst);
         return dst;

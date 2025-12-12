@@ -74,10 +74,11 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         using var guard = this;
 
         var texture = GetTexture();
-        if (RefCount == 1)
+
+        if (RefCount == 1 && AssetBundle is null)
             this.texture = null;
         else
-            texture = Texture.Instantiate<Texture>(texture);
+            texture = TextureUtils.CloneTexture(texture);
 
         return texture;
     }
