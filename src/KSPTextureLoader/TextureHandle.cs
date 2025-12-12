@@ -1,5 +1,7 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.ExceptionServices;
 using KSPTextureLoader.Utils;
 using Unity.Profiling;
@@ -93,18 +95,39 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 
         using var scope = CompleteMarker.Auto();
 
-        while (true)
-        {
-            completeHandler?.WaitUntilComplete();
+        while (!Step()) { }
+    }
 
-            // When blocking on an asset bundle request unity will take the time
-            // to run other coroutines, which could set this to null.
-            // This means that we need to do the null check after.
-            if (coroutine is null)
-                break;
-            if (!coroutine.MoveNext())
-                break;
+    /// <summary>
+    /// Execute one step of the internal coroutine, if the current blocker has
+    /// completed.
+    /// </summary>
+    /// <returns>true if complete</returns>
+    internal bool Tick()
+    {
+        if (completeHandler is not null)
+        {
+            if (!completeHandler.IsComplete)
+                return false;
         }
+
+        if (coroutine is null)
+            return true;
+
+        return !coroutine.MoveNext();
+    }
+
+    /// <summary>
+    /// Execute one step of the internal coroutine, blocking if necessary.
+    /// </summary>
+    /// <returns>true if complete</returns>
+    internal bool Step()
+    {
+        completeHandler?.WaitUntilComplete();
+
+        if (coroutine is null)
+            return true;
+        return !coroutine.MoveNext();
     }
 
     internal CompleteHandlerGuard WithCompleteHandler(ICompleteHandler handler)
@@ -146,6 +169,94 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         if (texture != null)
             UnityEngine.Object.Destroy(texture);
         texture = null;
+    }
+
+    /// <summary>
+    /// Efficiently wait for multiple texture handles to complete.
+    /// </summary>
+    /// <param name="handles"></param>
+    /// <returns>An enumerator that yields textures in order in which they completed.</returns>
+    ///
+    /// <remarks>
+    /// <para>
+    /// When synchronously waiting for multiple textures to complete it is easy
+    /// for progress to get serialized. You wait for one texture after another
+    /// to complete and they only get the chance to kick off new work once you
+    /// block on them.
+    /// </para>
+    ///
+    /// <para>
+    /// This method takes care of ensuring that all handles within can make progress
+    /// while you are waiting for them to complete.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<KeyValuePair<int, TextureHandle>> WaitBatch(
+        IEnumerable<TextureHandle> handles
+    )
+    {
+        var pairs = handles.Select((handle, index) => KeyValuePair.Create(index, handle)).ToArray();
+        int count = pairs.Length;
+
+        while (true)
+        {
+            int i = 0;
+            int j = 0;
+            for (; i < count; ++i)
+            {
+                var pair = pairs[i];
+                if (pair.Value.handle.Tick())
+                {
+                    yield return pair;
+                    continue;
+                }
+
+                pairs[j++] = pair;
+            }
+
+            if (i != j)
+            {
+                count = j;
+                continue;
+            }
+
+            if (count == 0)
+                break;
+
+            // Only block on the very first handle, afterwards we will go back
+            // and tick every handle again.
+            pairs[0].Value.handle.Step();
+        }
+
+        yield break;
+    }
+
+    /// <summary>
+    /// Efficiently wait for multiple texture handles to complete.
+    /// </summary>
+    /// <param name="handles"></param>
+    /// <returns>An enumerator that yields textures in order in which they completed.</returns>
+    ///
+    /// <remarks>
+    /// <para>
+    /// When synchronously waiting for multiple textures to complete it is easy
+    /// for progress to get serialized. You wait for one texture after another
+    /// to complete and they only get the chance to kick off new work once you
+    /// block on them.
+    /// </para>
+    ///
+    /// <para>
+    /// This method takes care of ensuring that all handles within can make progress
+    /// while you are waiting for them to complete.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<KeyValuePair<int, TextureHandle<T>>> WaitBatch<T>(
+        IEnumerable<TextureHandle<T>> handles
+    )
+        where T : Texture
+    {
+        var generic = handles.Select(handle => (TextureHandle)handle);
+        foreach (var (index, handle) in WaitBatch(generic))
+            yield return KeyValuePair.Create(index, (TextureHandle<T>)handle);
     }
 
     internal void SetTexture<T>(Texture tex, TextureLoadOptions options, string assetBundle = null)
