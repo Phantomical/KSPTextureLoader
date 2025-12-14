@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Changed file reads to happen using jobs by default, instead of Unity's
   AsyncReadManager.
 * Change the async upload buffer back to persistent by default.
+* Use `Marshal.AllocHGlobal` to allocate file buffers instead of `Allocator.Persistent`.
+* Enabled native texture uploading for unreadable dds textures.
 
 ### v0.0.7
 ### Added
