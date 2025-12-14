@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+
+## v0.0.8
 ### Changed
 * Moved the debug UI behind a `DebugMode` config options, disabled by default.
 * Changed file reads to happen using jobs by default, instead of Unity's
