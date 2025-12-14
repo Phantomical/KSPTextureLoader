@@ -129,6 +129,19 @@ internal static unsafe class DX11
 
         shared.texture = null;
 
+        // Unity doesn't configure anisotropic filtering for external textures
+        // by default. Enable it if configured by default.
+        //
+        // 9 seems to match what is picked when loading textures via Texture2D
+        // normally in RenderDoc.
+        switch (Texture.anisotropicFiltering)
+        {
+            case AnisotropicFiltering.ForceEnable:
+            case AnisotropicFiltering.Enable:
+                texture.anisoLevel = 9;
+                break;
+        }
+
         handle.SetTexture<T>(texture, options);
     }
 
@@ -182,6 +195,41 @@ internal static unsafe class DX11
             }
         }
 
+        void FillInitData(DataBox[] boxes)
+        {
+            int w = width;
+            int h = height;
+
+            var blockWidth = (int)GraphicsFormatUtility.GetBlockWidth(graphicsFormat);
+            var blockHeight = (int)GraphicsFormatUtility.GetBlockHeight(graphicsFormat);
+            var blockSize = (int)GraphicsFormatUtility.GetBlockSize(graphicsFormat);
+
+            var data = (byte*)buffer.GetUnsafePtr();
+            var offset = 0;
+
+            for (int m = 0; m < mipCount; ++m)
+            {
+                var rowbytes = DivCeil(w, blockWidth) * blockSize;
+                var allbytes = DivCeil(h, blockHeight) * rowbytes;
+
+                boxes[m] = new DataBox((IntPtr)(data + offset), rowbytes, allbytes);
+                offset += allbytes;
+
+                if (offset > buffer.Length)
+                    throw new IndexOutOfRangeException(
+                        "image buffer was too small for specified image dimensions and mipmaps"
+                    );
+
+                w >>= 1;
+                h >>= 1;
+
+                if (w < 1)
+                    w = 1;
+                if (h < 1)
+                    h = 1;
+            }
+        }
+
         void ExecuteImpl(Direct3D11.Device device, SharedData shared)
         {
             readStatus.Target.ThrowIfError();
@@ -198,36 +246,13 @@ internal static unsafe class DX11
                 BindFlags = BindFlags.ShaderResource,
             };
 
-            var blockWidth = (int)GraphicsFormatUtility.GetBlockWidth(graphicsFormat);
-            var blockHeight = (int)GraphicsFormatUtility.GetBlockHeight(graphicsFormat);
-            var blockSize = (int)GraphicsFormatUtility.GetBlockSize(graphicsFormat);
-
             var boxes = new DataBox[mipCount];
-            var data = (byte*)buffer.GetUnsafePtr();
-            var offset = 0;
-
-            var mipWidth = width;
-            var mipHeight = height;
-
-            for (int i = 0; i < mipCount; ++i)
-            {
-                var rowPitch = DivCeil(mipWidth, blockWidth) * blockSize;
-                var mipSize = rowPitch * DivCeil(mipHeight, blockHeight);
-
-                if (offset + mipSize > buffer.Length)
-                    throw new Exception("loaded data was too small for texture size");
-
-                boxes[i] = new DataBox((IntPtr)(data + offset), rowPitch, mipSize);
-                offset += mipSize;
-
-                mipWidth >>= 1;
-                mipHeight >>= 1;
-            }
+            FillInitData(boxes);
 
             shared.texture = new Direct3D11.Texture2D(device, desc, boxes);
         }
 
-        static int DivCeil(int x, int y) => (x + y - 1) / y;
+        static int DivCeil(int x, int y) => (x + (y - 1)) / y;
     }
 
     static Format? GetDxgiFormat(GraphicsFormat format)
