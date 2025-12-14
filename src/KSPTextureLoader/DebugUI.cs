@@ -27,6 +27,12 @@ internal class DebugUI : MonoBehaviour
 
     void Start()
     {
+        if (!Config.Instance.DebugMode)
+        {
+            Destroy(this);
+            return;
+        }
+
         if (!InitializedStatics)
         {
             ButtonTexture = GameDatabase.Instance.GetTexture(

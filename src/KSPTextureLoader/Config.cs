@@ -32,6 +32,11 @@ internal class Config : IConfigNode
     public static readonly Config Instance = new();
 
     /// <summary>
+    /// Enable the debug UI.
+    /// </summary>
+    public bool DebugMode = false;
+
+    /// <summary>
     /// How many frames should we hold on to asset bundles for before they are
     /// unloaded.
     /// </summary>
@@ -87,6 +92,7 @@ internal class Config : IConfigNode
 
     public void Load(ConfigNode node)
     {
+        node.TryGetValue(nameof(DebugMode), ref DebugMode);
         node.TryGetValue(nameof(BundleUnloadDelay), ref BundleUnloadDelay);
         node.TryGetValue(nameof(AsyncUploadBufferSize), ref AsyncUploadBufferSize);
         node.TryGetValue(nameof(AsyncUploadPersistentBuffer), ref AsyncUploadPersistentBuffer);
@@ -137,6 +143,7 @@ internal class Config : IConfigNode
 
     public void Save(ConfigNode node)
     {
+        node.AddValue(nameof(DebugMode), DebugMode);
         node.AddValue(nameof(BundleUnloadDelay), BundleUnloadDelay);
         node.AddValue(nameof(AsyncUploadBufferSize), AsyncUploadBufferSize);
         node.AddValue(nameof(AsyncUploadPersistentBuffer), AsyncUploadPersistentBuffer);

@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 ### Changed
+* Moved the debug UI behind a `DebugMode` config options, disabled by default.
 * Changed file reads to happen using jobs by default, instead of Unity's
   AsyncReadManager.
 * Change the async upload buffer back to persistent by default.
