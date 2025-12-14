@@ -91,6 +91,7 @@ internal class Config : IConfigNode
         node.TryGetValue(nameof(AsyncUploadBufferSize), ref AsyncUploadBufferSize);
         node.TryGetValue(nameof(AsyncUploadPersistentBuffer), ref AsyncUploadPersistentBuffer);
         node.TryGetValue(nameof(AllowNativeUploads), ref AllowNativeUploads);
+        node.TryGetValue(nameof(UseAsyncReadManager), ref UseAsyncReadManager);
 
         var children = node.GetNodes("AssetBundle");
         var bundles = new List<ImplicitBundle>(children.Length);
@@ -140,6 +141,7 @@ internal class Config : IConfigNode
         node.AddValue(nameof(AsyncUploadBufferSize), AsyncUploadBufferSize);
         node.AddValue(nameof(AsyncUploadPersistentBuffer), AsyncUploadPersistentBuffer);
         node.AddValue(nameof(AllowNativeUploads), AllowNativeUploads);
+        node.AddValue(nameof(UseAsyncReadManager), UseAsyncReadManager);
 
         foreach (var bundle in AssetBundles)
             bundle.Save(node.AddNode("AssetBundle"));
