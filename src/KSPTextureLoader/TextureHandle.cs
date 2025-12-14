@@ -414,6 +414,18 @@ public class TextureHandle : CustomYieldInstruction, IDisposable
     /// count is decreased to zero then the texture will be destroyed.
     /// </summary>
     public void Dispose() => handle.Dispose();
+
+    /// <summary>
+    /// Run a single iteration of the internal load coroutine, if it is not
+    /// waiting on an operation to complete.
+    /// </summary>
+    /// <returns>true if the handle is ready</returns>
+    ///
+    /// <remarks>
+    /// This allows you to make forward progress in a sync context even if you
+    /// don't necessarily want to block on the handle at this moment.
+    /// </remarks>
+    public bool Tick() => handle.Tick();
 }
 
 /// <summary>
