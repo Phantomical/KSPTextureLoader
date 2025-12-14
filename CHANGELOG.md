@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Changed
+* Changed file reads to happen using jobs by default, instead of Unity's
+  AsyncReadManager.
+* Change the async upload buffer back to persistent by default.
+
 ### v0.0.7
 ### Added
 * Added an OnComplete callback for when a texture load completes successfully.
