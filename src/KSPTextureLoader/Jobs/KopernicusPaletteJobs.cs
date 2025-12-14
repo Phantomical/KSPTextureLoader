@@ -11,7 +11,6 @@ namespace KSPTextureLoader.Jobs;
 struct DecodeKopernicusPalette4bitJob : IJob
 {
     [ReadOnly]
-    [DeallocateOnJobCompletion]
     public NativeArray<byte> data;
 
     [WriteOnly]
@@ -39,7 +38,6 @@ struct DecodeKopernicusPalette4bitJob : IJob
 struct DecodeKopernicusPalette8bitJob : IJob
 {
     [ReadOnly]
-    [DeallocateOnJobCompletion]
     public NativeArray<byte> data;
 
     [WriteOnly]

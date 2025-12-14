@@ -69,9 +69,8 @@ partial class TextureLoader
                     "DDS file is too large to load. Only files < 2GB in size are supported"
                 );
 
-            buffer = new NativeArray<byte>(
+            buffer = AllocatorUtil.CreateNativeArrayHGlobal<byte>(
                 (int)length,
-                Allocator.Persistent,
                 NativeArrayOptions.UninitializedMemory
             );
 
@@ -221,9 +220,8 @@ partial class TextureLoader
                     arraySize = 1;
                     depth = 1;
 
-                    var colors = new NativeArray<byte>(
+                    var colors = AllocatorUtil.CreateNativeArrayHGlobal<byte>(
                         UnsafeUtility.SizeOf<Color32>() * width * height,
-                        Allocator.Persistent,
                         NativeArrayOptions.UninitializedMemory
                     );
 
@@ -235,6 +233,7 @@ partial class TextureLoader
                     };
 
                     jobGuard.JobHandle = job.Schedule(jobGuard.JobHandle);
+                    buffer.DisposeExt(jobGuard.JobHandle);
                     bufGuard.array = colors;
                     buffer = colors;
                 }
@@ -252,9 +251,8 @@ partial class TextureLoader
                     arraySize = 1;
                     depth = 1;
 
-                    var colors = new NativeArray<byte>(
+                    var colors = AllocatorUtil.CreateNativeArrayHGlobal<byte>(
                         UnsafeUtility.SizeOf<Color32>() * width * height,
-                        Allocator.Persistent,
                         NativeArrayOptions.UninitializedMemory
                     );
 
@@ -266,6 +264,7 @@ partial class TextureLoader
                     };
 
                     jobGuard.JobHandle = job.Schedule(jobGuard.JobHandle);
+                    buffer.DisposeExt(jobGuard.JobHandle);
                     bufGuard.array = colors;
                     buffer = colors;
                 }

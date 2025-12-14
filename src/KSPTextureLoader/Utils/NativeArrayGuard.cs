@@ -8,5 +8,5 @@ internal class NativeArrayGuard<T>(NativeArray<T> array = default) : IDisposable
 {
     public NativeArray<T> array = array;
 
-    public void Dispose() => array.Dispose();
+    public void Dispose() => array.DisposeExt();
 }

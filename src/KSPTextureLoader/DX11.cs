@@ -104,8 +104,7 @@ internal static unsafe class DX11
             readStatus = new(readStatus),
         };
         jobGuard.JobHandle = job.Schedule(jobGuard.JobHandle);
-        bufGuard.array.Dispose(jobGuard.JobHandle);
-        bufGuard.array = default;
+        bufGuard.array.DisposeExt(jobGuard.JobHandle);
         JobHandle.ScheduleBatchedJobs();
 
         using (handle.WithCompleteHandler(new JobHandleCompleteHandler(jobGuard.JobHandle)))

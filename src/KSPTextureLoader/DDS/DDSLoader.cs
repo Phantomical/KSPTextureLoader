@@ -123,7 +123,7 @@ internal static unsafe class DDSLoader
         }
 
         texture.LoadRawTextureData(bufGuard.array);
-        bufGuard.array.Dispose(default);
+        bufGuard.array.DisposeExt(default);
 
         readStatus.ThrowIfError();
 
