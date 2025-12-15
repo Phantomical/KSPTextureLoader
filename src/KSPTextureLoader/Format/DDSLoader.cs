@@ -293,7 +293,7 @@ internal static unsafe class DDSLoader
             format = GraphicsFormatUtility.GetGraphicsFormat(tformat, isSRGB: !linear);
         }
 
-        // if (Config.Instance.DebugMode)
+        if (Config.Instance.DebugMode)
         {
             Debug.Log(
                 $"[KSPTextureLoader] Loading DDS file: {handle.Path}\n"
