@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using KSPTextureLoader.Format;
 using KSPTextureLoader.Utils;
 using Unity.IO.LowLevel.Unsafe;
 using Unity.Profiling;
@@ -355,7 +356,7 @@ public partial class TextureLoader : MonoBehaviour
         }
         else if (extension == ".dds")
         {
-            foreach (var item in LoadDDSTexture<T>(handle, options))
+            foreach (var item in DDSLoader.LoadDDSTexture<T>(handle, options))
                 yield return item;
         }
         else
