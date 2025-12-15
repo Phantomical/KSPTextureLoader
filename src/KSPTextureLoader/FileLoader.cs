@@ -1,3 +1,4 @@
+using System.IO;
 using KSPTextureLoader.Jobs;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -15,7 +16,10 @@ internal static unsafe class FileLoader
         out JobHandle jobHandle
     )
     {
-        if (Config.Instance.UseAsyncReadManager)
+        // FileReadJob doesn't use Seek since it appears to not work reliably
+        // on all systems. To avoid lots of extra work we use AsyncReadManager
+        // if the offset is large since it handles offsets correctly.
+        if (Config.Instance.UseAsyncReadManager || offset > 1024)
         {
             var command = new ReadCommand
             {

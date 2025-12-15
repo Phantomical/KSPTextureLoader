@@ -47,6 +47,9 @@ internal static unsafe class DDSLoader
         JobHandle jobHandle;
         IFileReadStatus readStatus;
 
+        long fileLength;
+        long fileOffset;
+
         using (var file = File.OpenRead(diskPath))
         {
             var br = new BinaryReader(file);
@@ -55,31 +58,34 @@ internal static unsafe class DDSLoader
                 throw new Exception("Invalid DDS file: incorrect magic number");
 
             header = new DDSHeader(br);
+
+            // file.Position doesn't reliably return the amount of bytes read
+            // under certain conditions on some systems. To avoid this being an
+            // issue we manually track the offset ourselves.
+            fileOffset = 128;
             if (header.ddspf.dwFourCC == DDSValues.uintDX10)
+            {
                 header10 = new DDSHeaderDX10(br);
+                fileOffset += 24;
+            }
 
             if (header.dwSize != 124)
                 throw new Exception("Invalid DDS file: incorrect header size");
             if (header.ddspf.dwSize != 32)
                 throw new Exception("Invalid DDS file: invalid pixel format size");
 
-            var length = file.Length - file.Position;
-            if (length > int.MaxValue)
+            fileLength = file.Length - fileOffset;
+            if (fileLength > int.MaxValue)
                 throw new Exception(
                     "DDS file is too large to load. Only files < 2GB in size are supported"
                 );
 
             buffer = AllocatorUtil.CreateNativeArrayHGlobal<byte>(
-                (int)length,
+                (int)fileLength,
                 NativeArrayOptions.UninitializedMemory
             );
 
-            readStatus = FileLoader.ReadFileContents(
-                diskPath,
-                file.Position,
-                buffer,
-                out jobHandle
-            );
+            readStatus = FileLoader.ReadFileContents(diskPath, fileOffset, buffer, out jobHandle);
         }
 
         using var bufGuard = new NativeArrayGuard<byte>(buffer);
@@ -285,6 +291,21 @@ internal static unsafe class DDSLoader
         {
             var tformat = GraphicsFormatUtility.GetTextureFormat(format);
             format = GraphicsFormatUtility.GetGraphicsFormat(tformat, isSRGB: !linear);
+        }
+
+        // if (Config.Instance.DebugMode)
+        {
+            Debug.Log(
+                $"[KSPTextureLoader] Loading DDS file: {handle.Path}\n"
+                    + $"  - width:     {width}\n"
+                    + $"  - height:    {height}\n"
+                    + $"  - depth:     {depth}\n"
+                    + $"  - arraySize: {arraySize}\n"
+                    + $"  - mipCount:  {mipCount}\n"
+                    + $"  - format:    {format}\n"
+                    + $"  - data start  {fileOffset}\n"
+                    + $"  - data length {fileLength}"
+            );
         }
 
         switch (type)

@@ -44,11 +44,23 @@ internal struct FileReadJob : IJob
         using var reader = File.OpenRead(path);
         var ptr = (byte*)data.GetUnsafePtr();
 
-        reader.Position = this.offset;
-
         int offset = 0;
         int length = data.Length;
-        var buffer = new byte[Math.Min(length, 64 * 1024)];
+        var buffer = new byte[64 * 1024];
+
+        // Seek doesn't appear to reliably actually set the stream to the right
+        // position on some systems (notably Win10).
+        //
+        // We sidestep this by just reading from the start, since all offsets
+        // used for this job are fairly small.
+        while (offset < this.offset)
+        {
+            var remaining = (int)this.offset - offset;
+            int count = reader.Read(buffer, 0, Math.Min(remaining, buffer.Length));
+            offset += count;
+        }
+
+        offset = 0;
 
         fixed (byte* bufptr = buffer)
         {
@@ -56,7 +68,9 @@ internal struct FileReadJob : IJob
             {
                 int count = reader.Read(buffer, 0, buffer.Length);
                 if (count > length - offset || count <= 0)
-                    throw new Exception("the length of the file changed while it was being read");
+                    throw new Exception(
+                        $"the length of the file changed while it was being read (read {offset + count} bytes but expected {length} bytes)"
+                    );
 
                 UnsafeUtility.MemCpy(ptr + offset, bufptr, count);
                 offset += count;
