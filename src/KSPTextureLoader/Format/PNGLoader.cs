@@ -2,19 +2,24 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using KSPTextureLoader.Utils;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
-using Unity.IO.LowLevel.Unsafe;
+using Unity.Jobs;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Networking;
 
-namespace KSPTextureLoader;
+namespace KSPTextureLoader.Format;
 
-partial class TextureLoader
+// This also handles JPEG, since that goes through the same path in unity.
+internal static class PNGLoader
 {
     static readonly ProfilerMarker LoadImageMarker = new("LoadImage");
 
-    IEnumerable<object> LoadPNGOrJPEG<T>(TextureHandleImpl handle, TextureLoadOptions options)
+    public static IEnumerable<object> LoadPNGOrJPEG<T>(
+        TextureHandleImpl handle,
+        TextureLoadOptions options
+    )
         where T : Texture
     {
         Texture2D texture;
@@ -56,27 +61,27 @@ partial class TextureLoader
         var array = new byte[(int)length];
         ulong gchandle;
 
-        ReadHandle readHandle;
+        IFileReadStatus readStatusTmp;
+        JobHandle jobHandle;
         unsafe
         {
             var ptr = UnsafeUtility.PinGCArrayAndGetDataAddress(array, out gchandle);
-            var command = new ReadCommand
-            {
-                Buffer = ptr,
-                Offset = 0,
-                Size = length,
-            };
-            readHandle = LaunchRead(diskPath, command);
+            var buffer = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<byte>(
+                ptr,
+                (int)length,
+                Allocator.Invalid
+            );
+
+            readStatusTmp = FileLoader.ReadFileContents(diskPath, 0, buffer, out jobHandle);
         }
 
+        using var readStatus = readStatusTmp;
         using var gcHandleGuard = new GcHandleGuard(gchandle);
-        using var readGuard = new SafeReadHandleGuard(readHandle);
 
-        using (handle.WithCompleteHandler(new JobHandleCompleteHandler(readGuard.JobHandle)))
-            yield return new WaitUntil(() => readGuard.JobHandle.IsCompleted);
+        using (handle.WithCompleteHandler(new JobHandleCompleteHandler(jobHandle)))
+            yield return new WaitUntil(() => jobHandle.IsCompleted);
 
-        if (readHandle.Status != ReadStatus.Complete)
-            throw new Exception("an error occurred while reading from the file");
+        readStatus.ThrowIfError();
 
         texture = new Texture2D(1, 1);
         using (LoadImageMarker.Auto())

@@ -111,4 +111,20 @@ public partial class TextureLoader
     {
         return path.Replace('\\', '/');
     }
+
+    private static List<string> GetAssetBundlesForKey(string key, string[] assetBundles)
+    {
+        var bundles = new List<string>(assetBundles?.Length ?? 0);
+        if (assetBundles is not null)
+        {
+            foreach (var bundle in assetBundles)
+            {
+                if (bundle is not null)
+                    bundles.Add(bundle);
+            }
+        }
+
+        Config.Instance.GetImplicitBundlesForCanonicalPath(key, bundles);
+        return bundles;
+    }
 }
