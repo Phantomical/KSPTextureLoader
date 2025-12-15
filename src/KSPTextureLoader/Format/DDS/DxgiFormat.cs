@@ -1,4 +1,4 @@
-namespace KSPTextureLoader;
+namespace KSPTextureLoader.Format.DDS;
 
 internal enum DxgiFormat : uint
 {

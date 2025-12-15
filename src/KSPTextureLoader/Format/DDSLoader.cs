@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
-using KSPTextureLoader.Jobs;
+using KSPTextureLoader.Format.DDS;
 using KSPTextureLoader.Utils;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -14,7 +14,7 @@ using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 
-namespace KSPTextureLoader.DDS;
+namespace KSPTextureLoader.Format;
 
 internal static unsafe class DDSLoader
 {
@@ -158,4 +158,8 @@ internal static unsafe class DDSLoader
         UnsafeUtility.Free(data, Allocator.Persistent);
         handle.Target.complete = true;
     }
+
+    #region DXGIFormat
+
+    #endregion
 }

@@ -4,7 +4,7 @@ using DDSHeaders;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 
-namespace KSPTextureLoader.DDS;
+namespace KSPTextureLoader.Format.DDS;
 
 internal static class DDSUtil
 {
