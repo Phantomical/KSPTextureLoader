@@ -7,6 +7,7 @@ using KSPTextureLoader.Utils;
 using Unity.IO.LowLevel.Unsafe;
 using Unity.Profiling;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace KSPTextureLoader;
 
@@ -244,6 +245,20 @@ public partial class TextureLoader
         return false;
     }
 
+    internal static bool Texture2DShouldBeReadable<T>(TextureLoadOptions options)
+    {
+        if (!options.Unreadable)
+            return true;
+
+        if (SystemInfo.copyTextureSupport.HasFlag(CopyTextureSupport.DifferentTypes))
+            return false;
+
+        if (typeof(T) == typeof(Cubemap))
+            return true;
+
+        return false;
+    }
+
     internal static T ConvertTexture<T>(Texture src, TextureLoadOptions options)
         where T : Texture
     {
@@ -255,7 +270,8 @@ public partial class TextureLoader
             if (src is Texture2D tex2d)
             {
                 if (typeof(T) == typeof(Cubemap))
-                    return (T)(Texture)TextureUtils.ConvertTexture2dToCubemap(tex2d);
+                    return (T)
+                        (Texture)TextureUtils.ConvertTexture2dToCubemap(tex2d, options.Unreadable);
 
                 if (typeof(T) == typeof(Texture2DArray))
                     return (T)(Texture)TextureUtils.ConvertTexture2DToArray(tex2d);

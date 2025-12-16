@@ -317,7 +317,7 @@ internal static unsafe class DDSLoader
                     goto case DDSTextureType.Texture2DArray;
                 }
 
-                var upload = DDSLoader.UploadTexture2D<T>(
+                var upload = UploadTexture2D<T>(
                     handle,
                     width,
                     height,
@@ -498,8 +498,10 @@ internal static unsafe class DDSLoader
     )
         where T : Texture
     {
+        bool unreadable = TextureLoader.Texture2DShouldBeReadable<T>(options);
+
         // Prefer a native texture upload if available.
-        if (options.Unreadable && DX11.SupportsAsyncUpload(width, height, format))
+        if (unreadable && DX11.SupportsAsyncUpload(width, height, format))
         {
             return DX11.UploadTexture2D<T>(
                 handle,
@@ -592,7 +594,7 @@ internal static unsafe class DDSLoader
 
         readStatus.ThrowIfError();
 
-        texture.Apply(false, options.Unreadable);
+        texture.Apply(false, TextureLoader.Texture2DShouldBeReadable<T>(options));
         texGuard.Clear();
         handle.SetTexture<T>(texture, options);
     }

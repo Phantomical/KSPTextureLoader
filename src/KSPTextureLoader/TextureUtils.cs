@@ -5,6 +5,7 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
+using UnityEngine.Rendering;
 
 namespace KSPTextureLoader;
 
@@ -332,7 +333,7 @@ internal static class TextureUtils
     #endregion
 
     #region Cubemap Conversion
-    internal static Cubemap ConvertTexture2dToCubemap(Texture2D src)
+    internal static Cubemap ConvertTexture2dToCubemap(Texture2D src, bool unreadable)
     {
         var cubedim = src.width / 4;
         if (src.width != cubedim * 4 || src.height != cubedim * 3)
@@ -346,11 +347,18 @@ internal static class TextureUtils
         if (mips > src.mipmapCount)
             mips = src.mipmapCount;
 
+        bool doItManually = !SystemInfo.copyTextureSupport.HasFlag(
+            CopyTextureSupport.DifferentTypes
+        );
+
         // Graphics.CopyTexture doesn't support copying the readable texture data
         // for compressed formats when copying regions.
         //
         // So to make that case work we need to use SetPixels/GetPixels instead.
-        if (GraphicsFormatUtility.IsCompressedFormat(src.graphicsFormat) && src.isReadable)
+        if (GraphicsFormatUtility.IsCompressedFormat(src.graphicsFormat) && unreadable)
+            doItManually = true;
+
+        if (doItManually)
         {
             cube = CreateUninitializedCubemap(
                 cubedim,

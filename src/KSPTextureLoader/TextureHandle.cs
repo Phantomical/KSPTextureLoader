@@ -262,6 +262,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
     internal void SetTexture<T>(Texture tex, TextureLoadOptions options, string assetBundle = null)
         where T : Texture
     {
+        tex.name = Path;
         texture = TextureLoader.ConvertTexture<T>(tex, options);
         texture.name = Path;
         AssetBundle = assetBundle;
