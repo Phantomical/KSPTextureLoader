@@ -7,10 +7,6 @@ along with your current mod list. For best results, follow the instructions at
 
 [0]: https://forum.kerbalspaceprogram.com/topic/163863-how-to-get-support/
 
-## Installing Dependencies
-KSPTextureLoader depends on HarmonyKSP. You will need to have it installed in the
-KSP instance you are building against.
-
 ## Building
 In order to build the mod you will need:
 - the `dotnet` CLI
