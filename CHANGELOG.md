@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+
+## v0.0.10
+### Added
+* Added extra debug logging behind a DebugMode=true flag.
+* Correctly handle readability when loading 2D textures that must be converted
+  into cubemaps.
+
+### Fixed
+* Fixed a bug where we were reading a file offset using `FileStream.Position`,
+  which is not valid on all platforms due to buffering.
+
 ## v0.0.9
 ### Changed
 * Actually enable native texture uploads by default.
