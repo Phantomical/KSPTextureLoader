@@ -44,11 +44,6 @@ public partial class TextureLoader
             if (handle.IsReadable)
                 return handle;
 
-            // This texture is not what the caller wants, but it was loaded from
-            // an asset bundle so we can't change anything by reloading it.
-            if (handle.AssetBundle is not null)
-                return handle;
-
             Debug.LogWarning($"[KSPTextureLoader] Reloading {path} to get readable texture");
             return null;
         }
