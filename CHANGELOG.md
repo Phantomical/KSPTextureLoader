@@ -7,8 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v0.0.13
+### Fixed
+* Fix textures being incorrectly marked as unreadable.
+
 ## v0.0.12
-### Added
+### Fixed
 * Fix a NRE due to a typo.
 
 ## v0.0.11
