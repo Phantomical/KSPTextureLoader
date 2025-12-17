@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v0.0.14
+### Changed
+* Disable native texture uploads by default.
+
 ## v0.0.13
 ### Fixed
 * Fix textures being incorrectly marked as unreadable.
