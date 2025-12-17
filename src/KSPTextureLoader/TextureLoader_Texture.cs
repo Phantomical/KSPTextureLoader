@@ -198,6 +198,11 @@ public partial class TextureLoader
             foreach (var item in DDSLoader.LoadDDSTexture<T>(handle, options))
                 yield return item;
         }
+        else if (extension == ".qoi")
+        {
+            foreach (var item in QOILoader.LoadQOITexture<T>(handle, options))
+                yield return item;
+        }
         else
         {
             throw new Exception($"{extension} files are not supported");
