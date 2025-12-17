@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v0.0.12
+### Added
+* Fix a NRE due to a typo.
+
 ## v0.0.11
 ### Added
 * Automatically convert unreadable textures loaded from asset bundles to be

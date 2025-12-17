@@ -284,7 +284,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 
         texture = tex;
         texture.name = Path;
-        AssetBundle = assetBundle.Path;
+        AssetBundle = assetBundle?.Path;
         coroutine = null;
         completeHandler = null;
 
