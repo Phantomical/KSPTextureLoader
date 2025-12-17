@@ -162,7 +162,7 @@ public partial class TextureLoader
                 }
 
                 abHandle.AddLoadedTexture(handle.Acquire());
-                handle.SetTexture<T>(asset, options, abHandle.Path);
+                handle.SetTexture<T>(asset, options, abHandle);
                 yield break;
             }
         }

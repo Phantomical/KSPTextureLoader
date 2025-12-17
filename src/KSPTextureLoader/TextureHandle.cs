@@ -263,7 +263,11 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
             yield return KeyValuePair.Create(index, (TextureHandle<T>)handle);
     }
 
-    internal void SetTexture<T>(Texture tex, TextureLoadOptions options, string assetBundle = null)
+    internal void SetTexture<T>(
+        Texture tex,
+        TextureLoadOptions options,
+        AssetBundleHandle assetBundle = null
+    )
         where T : Texture
     {
         tex.name = Path;
@@ -275,12 +279,12 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
                 $"[KSPTextureLoader] Texture {Path} was requested as readable but was not readable. It will be manually converted to be readable."
             );
 
-            tex = MakeTexture2DReadable(tex2d);
+            tex = MakeTexture2DReadable(tex2d, assetBundle);
         }
 
         texture = tex;
         texture.name = Path;
-        AssetBundle = assetBundle;
+        AssetBundle = assetBundle.Path;
         coroutine = null;
         completeHandler = null;
 
@@ -295,9 +299,10 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         }
     }
 
-    private unsafe Texture2D MakeTexture2DReadable(Texture2D tex2d)
+    private unsafe Texture2D MakeTexture2DReadable(Texture2D tex2d, AssetBundleHandle assetBundle)
     {
-        using var texGuard = new TextureCleanupGuard(tex2d);
+        // We don't know when to destroy the original texture if loaded from an asset bundle
+        using var texGuard = assetBundle is null ? new TextureCleanupGuard(tex2d) : null;
         Texture2D readable = null;
 
         if (
