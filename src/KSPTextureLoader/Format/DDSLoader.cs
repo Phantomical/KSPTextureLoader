@@ -498,7 +498,7 @@ internal static unsafe class DDSLoader
     )
         where T : Texture
     {
-        bool unreadable = TextureLoader.Texture2DShouldBeReadable<T>(options);
+        bool unreadable = !TextureLoader.Texture2DShouldBeReadable<T>(options);
 
         // Prefer a native texture upload if available.
         if (unreadable && DX11.SupportsAsyncUpload(width, height, format))
@@ -594,7 +594,7 @@ internal static unsafe class DDSLoader
 
         readStatus.ThrowIfError();
 
-        texture.Apply(false, TextureLoader.Texture2DShouldBeReadable<T>(options));
+        texture.Apply(false, !TextureLoader.Texture2DShouldBeReadable<T>(options));
         texGuard.Clear();
         handle.SetTexture<T>(texture, options);
     }

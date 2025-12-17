@@ -350,27 +350,17 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         errored:
         // AsyncGPUReadback failed so fall back to using a render texture and read pixels.
 
-        if (readable is null)
-        {
-            readable = TextureUtils.CreateUninitializedTexture2D(
-                tex2d.width,
-                tex2d.height,
-                tex2d.mipmapCount,
-                GraphicsFormatUtility.GetGraphicsFormat(
-                    TextureFormat.RGBA32,
-                    GraphicsFormatUtility.IsSRGBFormat(tex2d.graphicsFormat)
-                )
-            );
-        }
-        else
-        {
-            readable.Resize(
-                tex2d.width,
-                tex2d.height,
-                TextureFormat.ARGB32,
-                tex2d.mipmapCount != 1
-            );
-        }
+        if (readable is not null)
+            Texture.Destroy(readable);
+        readable = TextureUtils.CreateUninitializedTexture2D(
+            tex2d.width,
+            tex2d.height,
+            tex2d.mipmapCount,
+            GraphicsFormatUtility.GetGraphicsFormat(
+                TextureFormat.RGBA32,
+                GraphicsFormatUtility.IsSRGBFormat(tex2d.graphicsFormat)
+            )
+        );
 
         var rt = new RenderTexture(
             tex2d.width,
