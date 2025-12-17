@@ -4,8 +4,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.ExceptionServices;
 using KSPTextureLoader.Utils;
+using Smooth.Delegates;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Profiling;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
+using UnityEngine.Rendering;
 using DebuggerDisplayAttribute = System.Diagnostics.DebuggerDisplayAttribute;
 
 namespace KSPTextureLoader;
@@ -263,7 +267,18 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         where T : Texture
     {
         tex.name = Path;
-        texture = TextureLoader.ConvertTexture<T>(tex, options);
+        tex = TextureLoader.ConvertTexture<T>(tex, options);
+
+        if (tex is Texture2D tex2d && !tex2d.isReadable && !options.Unreadable)
+        {
+            Debug.LogWarning(
+                $"[KSPTextureLoader] Texture {Path} was requested as readable but was not readable. It will be manually converted to be readable."
+            );
+
+            tex = MakeTexture2DReadable(tex2d);
+        }
+
+        texture = tex;
         texture.name = Path;
         AssetBundle = assetBundle;
         coroutine = null;
@@ -278,6 +293,97 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
             Debug.LogError($"[KSPTextureLoader] OnCompleted event threw an exception");
             Debug.LogException(ex);
         }
+    }
+
+    private unsafe Texture2D MakeTexture2DReadable(Texture2D tex2d)
+    {
+        using var texGuard = new TextureCleanupGuard(tex2d);
+        Texture2D readable = null;
+
+        if (
+            SystemInfo.supportsAsyncGPUReadback
+            && !GraphicsFormatUtility.IsCompressedFormat(tex2d.graphicsFormat)
+        )
+        {
+            readable = TextureUtils.CreateUninitializedTexture2D(
+                tex2d.width,
+                tex2d.height,
+                tex2d.mipmapCount,
+                tex2d.graphicsFormat
+            );
+
+            var reqs = new AsyncGPUReadbackRequest[tex2d.mipmapCount];
+            for (int mip = 0; mip < tex2d.mipmapCount; ++mip)
+                reqs[mip] = AsyncGPUReadback.Request(tex2d, mip);
+
+            AsyncGPUReadback.WaitAllRequests();
+
+            var data = readable.GetRawTextureData<byte>();
+            int offset = 0;
+
+            for (int mip = 0; mip < tex2d.mipmapCount; ++mip)
+            {
+                var req = reqs[mip];
+                if (req.hasError)
+                    goto errored;
+
+                var src = req.GetData<byte>();
+                var dst = (byte*)data.GetUnsafePtr() + offset;
+
+                if (offset + src.Length > data.Length)
+                    throw new IndexOutOfRangeException(
+                        "async readback data was larger than texture size"
+                    );
+
+                UnsafeUtility.MemCpy(dst, src.GetUnsafePtr(), src.Length);
+            }
+
+            readable.Apply(false, false);
+            return readable;
+        }
+
+        errored:
+        // AsyncGPUReadback failed so fall back to using a render texture and read pixels.
+
+        if (readable is null)
+        {
+            readable = TextureUtils.CreateUninitializedTexture2D(
+                tex2d.width,
+                tex2d.height,
+                tex2d.mipmapCount,
+                GraphicsFormatUtility.GetGraphicsFormat(
+                    TextureFormat.RGBA32,
+                    GraphicsFormatUtility.IsSRGBFormat(tex2d.graphicsFormat)
+                )
+            );
+        }
+        else
+        {
+            readable.Resize(
+                tex2d.width,
+                tex2d.height,
+                TextureFormat.ARGB32,
+                tex2d.mipmapCount != 1
+            );
+        }
+
+        var rt = new RenderTexture(
+            tex2d.width,
+            tex2d.height,
+            1,
+            RenderTextureFormat.ARGB32,
+            tex2d.mipmapCount
+        );
+        Graphics.Blit(tex2d, rt);
+
+        var prev = RenderTexture.active;
+        RenderTexture.active = rt;
+        readable.ReadPixels(new Rect(0f, 0f, tex2d.width, tex2d.height), 0, 0);
+        RenderTexture.active = prev;
+        rt.Release();
+
+        readable.Apply(true, false);
+        return readable;
     }
 
     void ISetException.SetException(ExceptionDispatchInfo ex)
