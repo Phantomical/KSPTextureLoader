@@ -163,6 +163,19 @@ public partial class TextureLoader : MonoBehaviour
     /// </remarks>
     public static bool TextureExists(string path) => TextureExists(path, new());
 
+    /// <summary>
+    /// Get a list of asset bundles that would be checked when loading a texture
+    /// with the requested path.
+    /// </summary>
+    /// <param name="path">A path within GameData.</param>
+    /// <returns></returns>
+    public static string[] GetAssetBundlesForPath(string path)
+    {
+        var key = CanonicalizeResourcePath(path);
+        var bundles = GetAssetBundlesForKey(key, []);
+        return [.. bundles];
+    }
+
     private static string CanonicalizeAssetPath(string path)
     {
         return path.Replace('\\', '/').ToLowerInvariant();
