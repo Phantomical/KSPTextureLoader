@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v0.0.15
+### Added
+* Added a function to get which asset bundles are checked for a given path.
+
 ## v0.0.14
 ### Changed
 * Disable native texture uploads by default.
