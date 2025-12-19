@@ -139,6 +139,8 @@ internal static unsafe class DX11
                 break;
         }
 
+        TextureUtils.MarkExternalTextureAsUnreadable(texture);
+
         handle.SetTexture<T>(texture, options);
     }
 

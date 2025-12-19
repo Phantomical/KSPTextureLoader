@@ -458,6 +458,59 @@ internal static class TextureUtils
     }
     #endregion
 
+    internal static void MarkExternalTextureAsUnreadable(Texture2D tex)
+    {
+        if (!tex.isReadable)
+            return;
+
+        switch (Application.platform)
+        {
+            case RuntimePlatform.WindowsPlayer:
+                if (IntPtr.Size != sizeof(ulong))
+                    goto default;
+
+                if (TryMarkExternalTextureAsUnreadableWin64(tex))
+                    break;
+
+                goto default;
+
+            default:
+                // This works but results in a warning being emitted from the
+                // render thread.
+                //
+                // Pretty much all users of DX11 should be on Win64, so the
+                // special case above should avoid that warning in most cases.
+                tex.Apply(false, true);
+                break;
+        }
+    }
+
+    static unsafe bool TryMarkExternalTextureAsUnreadableWin64(Texture2D tex)
+    {
+        var wintex = (Internals.Win64Texture2D*)tex.m_CachedPtr;
+        if (wintex is null)
+            return false;
+
+        if (wintex->m_IsReadable != 1)
+        {
+            Debug.LogWarning(
+                "[KSPTextureLoader] Attempted to access Texture2D.m_IsReadable but it had the wrong value"
+            );
+            return false;
+        }
+
+        wintex->m_IsReadable = 0;
+
+        if (tex.isReadable)
+        {
+            wintex->m_IsReadable = 1;
+            Debug.LogWarning("[KSPTextureLoader] Texture2D.m_IsReadable offset was incorrect");
+            return false;
+        }
+
+        return true;
+    }
+
     static unsafe int TrailingZeroCount(int value)
     {
         uint v = (uint)value;
