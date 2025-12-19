@@ -579,18 +579,41 @@ internal static unsafe class DDSLoader
 
         // If we are fully sync then we want to get this done while waiting for
         // the disk read to complete.
-        if (options.Hint <= TextureLoadHint.BatchSynchronous)
+        if (options.Hint == TextureLoadHint.Synchronous)
             texture.GetRawTextureData<byte>();
 
-        if (!jobGuard.JobHandle.IsCompleted)
+        if (options.Hint < TextureLoadHint.BatchSynchronous)
         {
-            handle.completeHandler = new JobHandleCompleteHandler(jobGuard.JobHandle);
-            yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
-            handle.completeHandler = null;
-        }
+            var data = texture.GetRawTextureData<byte>();
+            if (data.Length != bufGuard.array.Length)
+                throw new Exception(
+                    "the texture file length did not match the requested image size"
+                );
 
-        texture.LoadRawTextureData(bufGuard.array);
-        bufGuard.array.DisposeExt(default);
+            var job = new BufferCopyJob { input = bufGuard.array, output = data };
+            jobGuard.JobHandle = job.Schedule(jobGuard.JobHandle);
+            bufGuard.array.DisposeExt(jobGuard.JobHandle);
+            JobHandle.ScheduleBatchedJobs();
+
+            if (!jobGuard.JobHandle.IsCompleted)
+            {
+                handle.completeHandler = new JobHandleCompleteHandler(jobGuard.JobHandle);
+                yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
+                handle.completeHandler = null;
+            }
+        }
+        else
+        {
+            if (!jobGuard.JobHandle.IsCompleted)
+            {
+                handle.completeHandler = new JobHandleCompleteHandler(jobGuard.JobHandle);
+                yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
+                handle.completeHandler = null;
+            }
+
+            texture.LoadRawTextureData(bufGuard.array);
+            bufGuard.array.DisposeExt(default);
+        }
 
         readStatus.ThrowIfError();
 
