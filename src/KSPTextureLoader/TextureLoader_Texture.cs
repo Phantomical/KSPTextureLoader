@@ -1,15 +1,24 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using KSPTextureLoader.Format;
 using KSPTextureLoader.Utils;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.IO.LowLevel.Unsafe;
 using Unity.Profiling;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 
 namespace KSPTextureLoader;
+
+internal struct TextureConvertOptions
+{
+    public bool UpdateMipmaps;
+    public AssetBundleHandle AssetBundle;
+}
 
 public partial class TextureLoader
 {
@@ -162,7 +171,11 @@ public partial class TextureLoader
                 }
 
                 abHandle.AddLoadedTexture(handle.Acquire());
-                handle.SetTexture<T>(asset, options, abHandle);
+                handle.SetTexture<T>(
+                    asset,
+                    options,
+                    new TextureConvertOptions { AssetBundle = abHandle }
+                );
                 yield break;
             }
         }
@@ -242,46 +255,164 @@ public partial class TextureLoader
 
     internal static bool Texture2DShouldBeReadable<T>(TextureLoadOptions options)
     {
-        if (!options.Unreadable)
-            return true;
-
-        if (SystemInfo.copyTextureSupport.HasFlag(CopyTextureSupport.DifferentTypes))
-            return false;
-
         if (typeof(T) == typeof(Cubemap))
             return true;
 
-        return false;
+        return !options.Unreadable;
     }
 
-    internal static T ConvertTexture<T>(Texture src, TextureLoadOptions options)
+    internal static T ConvertForHandle<T>(
+        Texture src,
+        ref TextureLoadOptions loadOpts,
+        TextureConvertOptions convertOpts
+    )
         where T : Texture
     {
-        if (src is T tex)
-            return tex;
+        using var texGuard = new TextureCleanupGuard(src, convertOpts.AssetBundle);
 
-        if (options.AllowImplicitConversions)
+        bool converted = false;
+        if (src is Texture2D tex2d)
         {
-            if (src is Texture2D tex2d)
+            if (!src.isReadable && !loadOpts.Unreadable)
             {
-                if (typeof(T) == typeof(Cubemap))
-                    return (T)
-                        (Texture)TextureUtils.ConvertTexture2dToCubemap(tex2d, options.Unreadable);
-
-                if (typeof(T) == typeof(Texture2DArray))
-                    return (T)(Texture)TextureUtils.ConvertTexture2DToArray(tex2d);
+                Debug.LogWarning(
+                    $"[KSPTextureLoader] Texture {src.name} was requested as readable but was not readable"
+                );
+                src = tex2d = MakeTexture2DReadable(tex2d, ref convertOpts);
+                texGuard.Update(src);
+                converted = true;
             }
 
-            if (src is Cubemap cubemap)
+            if (typeof(T) == typeof(Cubemap))
             {
-                if (typeof(T) == typeof(CubemapArray))
-                    return (T)(Texture)TextureUtils.ConvertCubemapToArray(cubemap);
+                if (!src.isReadable)
+                {
+                    src = tex2d = MakeTexture2DReadable(tex2d, ref convertOpts);
+                    texGuard.Update(src);
+                }
+
+                src = TextureUtils.ConvertTexture2dToCubemap(tex2d);
+                texGuard.Update(src);
+                converted = true;
             }
         }
 
-        throw new NotSupportedException(
-            $"Cannot convert a texture of type {src.GetType().Name} to a texture of type {typeof(T).Name}"
+        if (src.isReadable)
+        {
+            if (convertOpts.AssetBundle is not null && !converted)
+            {
+                // Assume that the people who are packaging asset bundles know what they are
+                // doing when they mark a texture as readable.
+            }
+            else if (convertOpts.UpdateMipmaps || loadOpts.Unreadable)
+            {
+                src.ApplyGeneric(convertOpts.UpdateMipmaps, loadOpts.Unreadable);
+            }
+        }
+        else if (convertOpts.UpdateMipmaps)
+        {
+            Debug.LogWarning(
+                $"[KSPTextureLoader] Mipmap update requested but texture {src.name} was not readable. This is an internal error."
+            );
+        }
+
+        if (src is not T tex)
+            throw new Exception(
+                $"Cannot convert a texture of type {src.GetType().Name} to a texture of type {typeof(T).Name}"
+            );
+
+        texGuard.texture = null;
+        return tex;
+    }
+
+    private static unsafe Texture2D MakeTexture2DReadable(
+        Texture2D tex2d,
+        ref TextureConvertOptions options
+    )
+    {
+        // We don't know when to destroy the original texture if loaded from an asset bundle
+        Texture2D readable = null;
+
+        Debug.LogWarning(
+            $"[KSPTextureLoader] Forcibly converting texture {tex2d.name} to be readable"
         );
+
+        if (
+            SystemInfo.supportsAsyncGPUReadback
+            && !GraphicsFormatUtility.IsCompressedFormat(tex2d.graphicsFormat)
+        )
+        {
+            readable = TextureUtils.CreateUninitializedTexture2D(
+                tex2d.width,
+                tex2d.height,
+                tex2d.mipmapCount,
+                tex2d.graphicsFormat
+            );
+            readable.name = tex2d.name;
+
+            var reqs = new AsyncGPUReadbackRequest[tex2d.mipmapCount];
+            for (int mip = 0; mip < tex2d.mipmapCount; ++mip)
+                reqs[mip] = AsyncGPUReadback.Request(tex2d, mip);
+
+            AsyncGPUReadback.WaitAllRequests();
+
+            var data = readable.GetRawTextureData<byte>();
+            int offset = 0;
+
+            for (int mip = 0; mip < tex2d.mipmapCount; ++mip)
+            {
+                var req = reqs[mip];
+                if (req.hasError)
+                    goto errored;
+
+                var src = req.GetData<byte>();
+                var dst = (byte*)data.GetUnsafePtr() + offset;
+
+                if (offset + src.Length > data.Length)
+                    throw new IndexOutOfRangeException(
+                        "async readback data was larger than texture size"
+                    );
+
+                UnsafeUtility.MemCpy(dst, src.GetUnsafePtr(), src.Length);
+            }
+
+            return readable;
+        }
+
+        errored:
+        // AsyncGPUReadback failed so fall back to using a render texture and read pixels.
+
+        if (readable is not null)
+            Texture.Destroy(readable);
+
+        readable = TextureUtils.CreateUninitializedTexture2D(
+            tex2d.width,
+            tex2d.height,
+            tex2d.mipmapCount,
+            GraphicsFormatUtility.GetGraphicsFormat(
+                TextureFormat.RGBA32,
+                GraphicsFormatUtility.IsSRGBFormat(tex2d.graphicsFormat)
+            )
+        );
+        readable.name = tex2d.name;
+
+        var rt = new RenderTexture(
+            tex2d.width,
+            tex2d.height,
+            1,
+            RenderTextureFormat.ARGB32,
+            tex2d.mipmapCount
+        );
+        Graphics.Blit(tex2d, rt);
+
+        var prev = RenderTexture.active;
+        RenderTexture.active = rt;
+        readable.ReadPixels(new Rect(0f, 0f, tex2d.width, tex2d.height), 0, 0);
+        RenderTexture.active = prev;
+        rt.Release();
+
+        options.UpdateMipmaps = true;
+        return readable;
     }
 
     private static unsafe ReadHandle LaunchRead(string path, ReadCommand command) =>

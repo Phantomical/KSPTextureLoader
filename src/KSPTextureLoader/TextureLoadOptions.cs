@@ -1,5 +1,15 @@
 namespace KSPTextureLoader;
 
+/// <summary>
+/// A hint to the loader indicating if and when it intends to block on the
+/// the texture being loaded.
+/// </summary>
+///
+/// <remarks>
+/// This is used to optimize how much main thread overhead will be used while
+/// loading the texture. With more asynchronous loads more work can be pushed
+/// to background jobs.
+/// </remarks>
 public enum TextureLoadHint
 {
     /// <summary>

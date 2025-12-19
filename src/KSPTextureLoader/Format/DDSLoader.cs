@@ -594,7 +594,6 @@ internal static unsafe class DDSLoader
 
         readStatus.ThrowIfError();
 
-        texture.Apply(false, !TextureLoader.Texture2DShouldBeReadable<T>(options));
         texGuard.Clear();
         handle.SetTexture<T>(texture, options);
     }

@@ -3,9 +3,16 @@ using UnityEngine;
 
 namespace KSPTextureLoader.Utils;
 
-internal class TextureCleanupGuard(Texture texture) : IDisposable
+internal class TextureCleanupGuard(Texture texture, AssetBundleHandle bundle = null) : IDisposable
 {
+    internal AssetBundleHandle bundle = bundle;
     internal Texture texture = texture;
+
+    public void Update(Texture newtex)
+    {
+        Dispose();
+        texture = newtex;
+    }
 
     public void Clear() => texture = null;
 
@@ -14,6 +21,12 @@ internal class TextureCleanupGuard(Texture texture) : IDisposable
         if (texture == null)
             return;
 
-        UnityEngine.Object.Destroy(texture);
+        if (bundle is not null)
+            bundle.AddLeakedTexture(texture);
+        else
+            Texture.Destroy(texture);
+
+        texture = null;
+        bundle = null;
     }
 }

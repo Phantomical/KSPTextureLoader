@@ -24,6 +24,7 @@ public class AssetBundleHandle
     internal ICompleteHandler completeHandler;
     internal IEnumerator coroutine;
     private List<TextureHandleImpl> loadedTextures;
+    private List<Texture> leakedTextures;
 
     /// <summary>
     /// The path that this asset bundle was loaded from within GameData.
@@ -87,12 +88,16 @@ public class AssetBundleHandle
 
     internal void DisposeTextures()
     {
-        if (loadedTextures is null)
-            return;
+        if (loadedTextures is not null)
+            foreach (var handle in loadedTextures)
+                handle.Dispose();
 
-        foreach (var handle in loadedTextures)
-            handle.Dispose();
+        if (leakedTextures is not null)
+            foreach (var texture in leakedTextures)
+                Texture.Destroy(texture);
+
         loadedTextures = null;
+        leakedTextures = null;
     }
 
     public void WaitUntilComplete()
@@ -120,6 +125,12 @@ public class AssetBundleHandle
     {
         loadedTextures ??= [];
         loadedTextures.Add(handle);
+    }
+
+    internal void AddLeakedTexture(Texture texture)
+    {
+        leakedTextures ??= [];
+        leakedTextures.Add(texture);
     }
 
     internal void SetBundle(AssetBundle bundle)

@@ -11,6 +11,37 @@ namespace KSPTextureLoader;
 
 internal static class TextureUtils
 {
+    internal static void ApplyGeneric(
+        this Texture tex,
+        bool updateMipmaps,
+        bool makeNoLongerReadable
+    )
+    {
+        switch (tex)
+        {
+            case Texture2D tex2d:
+                tex2d.Apply(updateMipmaps, makeNoLongerReadable);
+                break;
+            case Texture2DArray texture2DArray:
+                texture2DArray.Apply(updateMipmaps, makeNoLongerReadable);
+                break;
+            case Texture3D texture3D:
+                texture3D.Apply(updateMipmaps, makeNoLongerReadable);
+                break;
+            case Cubemap cubemap:
+                cubemap.Apply(updateMipmaps, makeNoLongerReadable);
+                break;
+            case CubemapArray cubemapArray:
+                cubemapArray.Apply(updateMipmaps, makeNoLongerReadable);
+                break;
+
+            default:
+                throw new NotSupportedException(
+                    $"Cannot apply a texture of type {tex.GetType().Name}"
+                );
+        }
+    }
+
     #region CreateUninitializedTexture
     // This reflects the actual creation flags in
     // https://github.com/Unity-Technologies/UnityCsReference/blob/59b03b8a0f179c0b7e038178c90b6c80b340aa9f/Runtime/Export/Graphics/GraphicsEnums.cs#L626
@@ -332,8 +363,24 @@ internal static class TextureUtils
     }
     #endregion
 
-    #region Cubemap Conversion
-    internal static Cubemap ConvertTexture2dToCubemap(Texture2D src, bool unreadable)
+    #region Cubemap
+
+    static int GetSupportedMipMapLevels(int cubedim, GraphicsFormat format)
+    {
+        var tzcnt = TrailingZeroCount(cubedim);
+
+        // We cannot subdivide compressed formats to smaller than supported by
+        // their block size.
+        if (GraphicsFormatUtility.IsCompressedFormat(format))
+            tzcnt -= TrailingZeroCount((int)GraphicsFormatUtility.GetBlockHeight(format));
+
+        if (tzcnt < 1)
+            tzcnt = 1;
+
+        return tzcnt;
+    }
+
+    internal static Cubemap ConvertTexture2dToCubemap(Texture2D src)
     {
         var cubedim = src.width / 4;
         if (src.width != cubedim * 4 || src.height != cubedim * 3)
@@ -341,107 +388,33 @@ internal static class TextureUtils
                 "2D texture was not in the right format for a cubemap. Dimensions need to be 4*cubedim x 3*cubedim."
             );
 
-        Cubemap cube;
-
         var mips = GetSupportedMipMapLevels(cubedim, src.graphicsFormat);
         if (mips > src.mipmapCount)
             mips = src.mipmapCount;
 
-        bool doItManually = !SystemInfo.copyTextureSupport.HasFlag(
-            CopyTextureSupport.DifferentTypes
+        Cubemap cube = CreateUninitializedCubemap(
+            cubedim,
+            mips,
+            GraphicsFormatUtility.GetGraphicsFormat(TextureFormat.RGBA32, false)
         );
 
-        // Graphics.CopyTexture doesn't support copying the readable texture data
-        // for compressed formats when copying regions.
-        //
-        // So to make that case work we need to use SetPixels/GetPixels instead.
-        if (GraphicsFormatUtility.IsCompressedFormat(src.graphicsFormat) && unreadable)
-            doItManually = true;
+        cube.SetPixels(
+            src.GetPixels(2 * cubedim, 2 * cubedim, cubedim, cubedim),
+            CubemapFace.NegativeY
+        );
+        cube.SetPixels(
+            src.GetPixels(3 * cubedim, cubedim, cubedim, cubedim),
+            CubemapFace.PositiveX
+        );
+        cube.SetPixels(
+            src.GetPixels(2 * cubedim, cubedim, cubedim, cubedim),
+            CubemapFace.PositiveZ
+        );
+        cube.SetPixels(src.GetPixels(cubedim, cubedim, cubedim, cubedim), CubemapFace.NegativeX);
+        cube.SetPixels(src.GetPixels(0, cubedim, cubedim, cubedim), CubemapFace.NegativeZ);
+        cube.SetPixels(src.GetPixels(2 * cubedim, 0, cubedim, cubedim), CubemapFace.PositiveY);
 
-        if (doItManually)
-        {
-            cube = CreateUninitializedCubemap(
-                cubedim,
-                mips,
-                GraphicsFormatUtility.GetGraphicsFormat(TextureFormat.RGBA32, false)
-            );
-
-            cube.SetPixels(
-                src.GetPixels(2 * cubedim, 2 * cubedim, cubedim, cubedim),
-                CubemapFace.NegativeY
-            );
-            cube.SetPixels(
-                src.GetPixels(3 * cubedim, cubedim, cubedim, cubedim),
-                CubemapFace.PositiveX
-            );
-            cube.SetPixels(
-                src.GetPixels(2 * cubedim, cubedim, cubedim, cubedim),
-                CubemapFace.PositiveZ
-            );
-            cube.SetPixels(
-                src.GetPixels(cubedim, cubedim, cubedim, cubedim),
-                CubemapFace.NegativeX
-            );
-            cube.SetPixels(src.GetPixels(0, cubedim, cubedim, cubedim), CubemapFace.NegativeZ);
-            cube.SetPixels(src.GetPixels(2 * cubedim, 0, cubedim, cubedim), CubemapFace.PositiveY);
-
-            cube.Apply(true, false);
-            return cube;
-        }
-
-        // TODO: Use blits to copy the cubemap faces in this case.
-        if (cubedim % GraphicsFormatUtility.GetBlockHeight(src.graphicsFormat) != 0)
-            throw new Exception(
-                "Cubemap side dimension was not a multiple of compressed texture block height"
-            );
-
-        static int GetSupportedMipMapLevels(int cubedim, GraphicsFormat format)
-        {
-            var tzcnt = TrailingZeroCount(cubedim);
-
-            // We cannot subdivide compressed formats to smaller than supported by
-            // their block size.
-            if (GraphicsFormatUtility.IsCompressedFormat(format))
-                tzcnt -= TrailingZeroCount((int)GraphicsFormatUtility.GetBlockHeight(format));
-
-            if (tzcnt < 1)
-                tzcnt = 1;
-
-            return tzcnt;
-        }
-
-        cube = CreateUninitializedCubemap(cubedim, mips, src.graphicsFormat);
-        if (!src.isReadable)
-            cube.Apply(false, makeNoLongerReadable: true);
-
-        void CopyFace(int mip, int srcX, int srcY, CubemapFace dstFace)
-        {
-            Graphics.CopyTexture(
-                src,
-                srcElement: 0,
-                srcMip: mip,
-                srcX: srcX >> mip,
-                srcY: srcY >> mip,
-                srcWidth: cubedim >> mip,
-                srcHeight: cubedim >> mip,
-                cube,
-                dstElement: (int)dstFace,
-                dstMip: mip,
-                dstX: 0,
-                dstY: 0
-            );
-        }
-
-        for (int mip = 0; mip < mips; ++mip)
-        {
-            CopyFace(mip, 2 * cubedim, 2 * cubedim, CubemapFace.NegativeY);
-            CopyFace(mip, 3 * cubedim, cubedim, CubemapFace.PositiveX);
-            CopyFace(mip, 2 * cubedim, cubedim, CubemapFace.PositiveZ);
-            CopyFace(mip, cubedim, cubedim, CubemapFace.NegativeX);
-            CopyFace(mip, 0, cubedim, CubemapFace.NegativeZ);
-            CopyFace(mip, 2 * cubedim, 0, CubemapFace.PositiveY);
-        }
-
+        cube.name = src.name;
         return cube;
     }
 
