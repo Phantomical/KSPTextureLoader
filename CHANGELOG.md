@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v0.0.17
+### Fixed
+* Fixed incorrect warnings about textures not being readable when loading from
+  a PNG.
+
 ## v0.0.16
 ### Fixed
 * Simplified texture2d to cubemap conversion.
