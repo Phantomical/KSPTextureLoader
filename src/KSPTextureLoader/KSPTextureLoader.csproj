@@ -2,7 +2,7 @@
     <PropertyGroup>
         <Description>Fast and asynchronous texture loading for KSP</Description>
 
-        <Version>0.0.18</Version>
+        <Version>0.0.19</Version>
 
         <TargetFramework>net4.8</TargetFramework>
         <LangVersion>13</LangVersion>
