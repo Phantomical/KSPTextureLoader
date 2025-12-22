@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v0.0.18
 ### Fixed
 * Fixed a bug where palette DDS textures would fail to load with an exception
   an unsupported texture format.
