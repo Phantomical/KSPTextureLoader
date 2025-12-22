@@ -92,7 +92,7 @@ internal class DebugUI : MonoBehaviour
             GetInstanceID(),
             window,
             DrawWindow,
-            "Async Texture Load",
+            "KSP Texture Loader",
             HighLogic.Skin.window
         );
     }
