@@ -107,6 +107,11 @@ public partial class TextureLoader
     )
         where T : Texture
     {
+        if (Config.Instance.DebugMode)
+        {
+            Debug.Log($"[KSPTextureLoader] Loading texture {handle.Path}");
+        }
+
         List<Exception> assetBundleExceptions = null;
         if (assetBundles.Count != 0)
         {
