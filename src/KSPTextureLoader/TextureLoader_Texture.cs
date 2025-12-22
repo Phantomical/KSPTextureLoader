@@ -330,67 +330,17 @@ public partial class TextureLoader
         return tex;
     }
 
-    private static unsafe Texture2D MakeTexture2DReadable(
+    private static Texture2D MakeTexture2DReadable(
         Texture2D tex2d,
         ref TextureConvertOptions options
     )
     {
-        // We don't know when to destroy the original texture if loaded from an asset bundle
-        Texture2D readable = null;
-
         Debug.LogWarning(
             $"[KSPTextureLoader] Forcibly converting texture {tex2d.name} to be readable"
         );
 
-        if (
-            SystemInfo.supportsAsyncGPUReadback
-            && !GraphicsFormatUtility.IsCompressedFormat(tex2d.graphicsFormat)
-        )
-        {
-            readable = TextureUtils.CreateUninitializedTexture2D(
-                tex2d.width,
-                tex2d.height,
-                tex2d.mipmapCount,
-                tex2d.graphicsFormat
-            );
-            readable.name = tex2d.name;
-
-            var reqs = new AsyncGPUReadbackRequest[tex2d.mipmapCount];
-            for (int mip = 0; mip < tex2d.mipmapCount; ++mip)
-                reqs[mip] = AsyncGPUReadback.Request(tex2d, mip);
-
-            AsyncGPUReadback.WaitAllRequests();
-
-            var data = readable.GetRawTextureData<byte>();
-            int offset = 0;
-
-            for (int mip = 0; mip < tex2d.mipmapCount; ++mip)
-            {
-                var req = reqs[mip];
-                if (req.hasError)
-                    goto errored;
-
-                var src = req.GetData<byte>();
-                var dst = (byte*)data.GetUnsafePtr() + offset;
-
-                if (offset + src.Length > data.Length)
-                    throw new IndexOutOfRangeException(
-                        "async readback data was larger than texture size"
-                    );
-
-                UnsafeUtility.MemCpy(dst, src.GetUnsafePtr(), src.Length);
-            }
-
-            return readable;
-        }
-
-        errored:
-        // AsyncGPUReadback failed so fall back to using a render texture and read pixels.
-
-        if (readable is not null)
-            Texture.Destroy(readable);
-
-        readable = TextureUtils.CreateUninitializedTexture2D(
+        // We don't know when to destroy the original texture if loaded from an asset bundle
+        Texture2D readable = TextureUtils.CreateUninitializedTexture2D(
             tex2d.width,
             tex2d.height,
             tex2d.mipmapCount,
@@ -419,7 +369,4 @@ public partial class TextureLoader
         options.UpdateMipmaps = true;
         return readable;
     }
-
-    private static unsafe ReadHandle LaunchRead(string path, ReadCommand command) =>
-        AsyncReadManager.Read(path, &command, 1);
 }
