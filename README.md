@@ -15,8 +15,8 @@ Features:
   more! Future changes for texture formats become my problem, not yours.
 
 Mods using KSPTextureLoader:
-* None, at the moment. Support for Parallax Continued and Kopernicus is a work
-  in progress.
+* [Kopernicus](https://forum.kerbalspaceprogram.com/topic/200143-112x-kopernicus-stable-branch-last-updated-december-22nd-2025/).
+* Support for Parallax Continued is currently in the works.
 
 ## Working with KSPTextureLoader
 
