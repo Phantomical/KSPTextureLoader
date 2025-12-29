@@ -66,7 +66,7 @@ internal static unsafe class DDSLoader
             if (header.ddspf.dwFourCC == DDSValues.uintDX10)
             {
                 header10 = new DDSHeaderDX10(br);
-                fileOffset += 24;
+                fileOffset += 20;
             }
 
             if (header.dwSize != 124)
@@ -589,7 +589,7 @@ internal static unsafe class DDSLoader
             var data = texture.GetRawTextureData<byte>();
             if (data.Length != bufGuard.array.Length)
                 throw new Exception(
-                    "the texture file length did not match the requested image size"
+                    $"the texture file length is too large for the requested image size (expected {data.Length} but got {bufGuard.array.Length})"
                 );
 
             var job = new BufferCopyJob { input = bufGuard.array, output = data };
