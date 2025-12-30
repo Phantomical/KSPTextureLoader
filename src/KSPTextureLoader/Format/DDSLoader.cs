@@ -185,7 +185,7 @@ internal static unsafe class DDSLoader
 
             if (format == GraphicsFormat.None)
             {
-                format = GraphicsFormatUtility.GetGraphicsFormat(TextureFormat.ARGB32, false);
+                format = GraphicsFormatUtility.GetGraphicsFormat(TextureFormat.RGBA32, false);
 
                 // Try using Kopernicus' special palette based formats
                 if (header.ddspf.dwRGBBitCount == 4)

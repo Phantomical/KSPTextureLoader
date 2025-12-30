@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 * Fixed an issue where DDS textures with a DX10 header would fail to load correctly
   due to using the wrong size for DX10 headers.
+* Fixed an issue where palette biome maps were being loaded as ARGB32 instead of
+  RGBA32.
 
 ## v0.0.19
 ### Fixed
