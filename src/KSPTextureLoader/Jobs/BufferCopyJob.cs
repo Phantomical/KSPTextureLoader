@@ -1,3 +1,4 @@
+using System;
 using Unity.Collections;
 using Unity.Jobs;
 
@@ -14,7 +15,9 @@ struct BufferCopyJob : IJob
     public readonly void Execute()
     {
         if (input.Length != output.Length)
-            return;
+            throw new InvalidOperationException(
+                $"input and output lengths do not match (input {input.Length}, output {output.Length})"
+            );
 
         output.CopyFrom(input);
     }
