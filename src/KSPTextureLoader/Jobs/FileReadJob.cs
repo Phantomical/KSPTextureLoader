@@ -58,23 +58,23 @@ internal struct FileReadJob : IJob
             var remaining = (int)this.offset - offset;
             int count = reader.Read(buffer, 0, Math.Min(remaining, buffer.Length));
             offset += count;
+
+            if (count == 0)
+                throw new Exception("unexpected EOF when reading file");
         }
 
         offset = 0;
 
-        fixed (byte* bufptr = buffer)
+        while (offset < length)
         {
-            while (offset < length)
-            {
-                int count = reader.Read(buffer, 0, buffer.Length);
-                if (count > length - offset || count <= 0)
-                    throw new Exception(
-                        $"the length of the file changed while it was being read (read {offset + count} bytes but expected {length} bytes)"
-                    );
+            int count = reader.Read(buffer, 0, buffer.Length);
+            if (count > length - offset || count <= 0)
+                throw new Exception(
+                    $"the length of the file changed while it was being read (read {offset + count} bytes but expected {length} bytes)"
+                );
 
-                UnsafeUtility.MemCpy(ptr + offset, bufptr, count);
-                offset += count;
-            }
+            data.CopyRangeFrom(offset, buffer, count);
+            offset += count;
         }
     }
 }
