@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Added
+* Added a configurable limit to the amount of temporary memory that can be used at
+  once when loading textures.
+
 ### Fixed
 * Fixed an issue where DDS textures with a DX10 header would fail to load correctly
   due to using the wrong size for DX10 headers.

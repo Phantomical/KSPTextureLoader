@@ -80,6 +80,9 @@ internal static unsafe class DDSLoader
                     "DDS file is too large to load. Only files < 2GB in size are supported"
                 );
 
+            if (options.Hint < TextureLoadHint.BatchSynchronous && AllocatorUtil.IsAboveWatermark)
+                yield return AllocatorUtil.WaitUntilMemoryBelowWatermark();
+
             buffer = AllocatorUtil.CreateNativeArrayHGlobal<byte>(
                 (int)fileLength,
                 NativeArrayOptions.UninitializedMemory

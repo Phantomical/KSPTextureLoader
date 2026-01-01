@@ -58,6 +58,9 @@ internal static class PNGLoader
                 "image was too large to be loaded. Only images up to 2GB in size are supported."
             );
 
+        if (options.Hint < TextureLoadHint.BatchSynchronous && AllocatorUtil.IsAboveWatermark)
+            yield return AllocatorUtil.WaitUntilMemoryBelowWatermark();
+
         var array = new byte[(int)length];
         ulong gchandle;
 

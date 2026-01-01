@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Steamworks;
 using UnityEngine;
 
 namespace KSPTextureLoader;
@@ -73,6 +74,17 @@ internal class Config : IConfigNode
     public bool UseAsyncReadManager = true;
 
     /// <summary>
+    /// The maximum amount of temporary memory that can be used at once when loading
+    /// textures asynchronously, in MB. Defaults to 1GB.
+    /// </summary>
+    ///
+    /// <remarks>
+    /// This does not include the memory used by the textures themselves, even if
+    /// that memory will be cleared when the texture is fully uploaded.
+    /// </remarks>
+    public ulong MaxTextureLoadMemory = 1024;
+
+    /// <summary>
     /// Implicit bundle declarations.
     /// </summary>
     ///
@@ -98,6 +110,7 @@ internal class Config : IConfigNode
         node.TryGetValue(nameof(AsyncUploadPersistentBuffer), ref AsyncUploadPersistentBuffer);
         node.TryGetValue(nameof(AllowNativeUploads), ref AllowNativeUploads);
         node.TryGetValue(nameof(UseAsyncReadManager), ref UseAsyncReadManager);
+        node.TryGetValue(nameof(MaxTextureLoadMemory), ref MaxTextureLoadMemory);
 
         var children = node.GetNodes("AssetBundle");
         var bundles = new List<ImplicitBundle>(children.Length);
@@ -149,6 +162,7 @@ internal class Config : IConfigNode
         node.AddValue(nameof(AsyncUploadPersistentBuffer), AsyncUploadPersistentBuffer);
         node.AddValue(nameof(AllowNativeUploads), AllowNativeUploads);
         node.AddValue(nameof(UseAsyncReadManager), UseAsyncReadManager);
+        node.AddValue(nameof(MaxTextureLoadMemory), MaxTextureLoadMemory);
 
         foreach (var bundle in AssetBundles)
             bundle.Save(node.AddNode("AssetBundle"));
