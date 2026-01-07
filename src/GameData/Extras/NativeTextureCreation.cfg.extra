@@ -1,0 +1,8 @@
+// On DX11 KSPTextureLoader can take advantage of the native APIs to load
+// textures fully off the main thread. This can have much lower overhead since
+// it can happen completely on background threads.
+
+@KSPTextureLoader
+{
+    @AllowNativeUploads = true
+}

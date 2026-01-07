@@ -1,0 +1,11 @@
+// By default, KSPTextureLoader uses multiple threads to read files off disk.
+// This works really well when KSP is on a SSD, but not so well when KSP is on
+// a hard drive.
+//
+// This config changes things so that all disk reads are done on a single
+// thread, which should improve performance on a HDD.
+
+@KSPTextureLoader
+{
+    @UseAsyncReadManager = true
+}
