@@ -4,12 +4,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.ExceptionServices;
 using KSPTextureLoader.Utils;
-using Smooth.Delegates;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Profiling;
 using UnityEngine;
-using UnityEngine.Experimental.Rendering;
-using UnityEngine.Rendering;
 using DebuggerDisplayAttribute = System.Diagnostics.DebuggerDisplayAttribute;
 
 namespace KSPTextureLoader;
@@ -167,11 +163,23 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         if (RefCount != 0)
             return;
 
+        // The destroy queue will clear out the textures at the end of the frame.
+        TextureLoader.Instance.QueueForDestroy(this);
+    }
+
+    internal void Destroy(bool immediate = false)
+    {
         var key = TextureLoader.CanonicalizeResourcePath(Path);
         TextureLoader.Instance.textures.Remove(key);
 
-        if (texture != null)
-            UnityEngine.Object.Destroy(texture);
+        if (texture == null)
+            return;
+
+        if (immediate)
+            Texture.DestroyImmediate(texture);
+        else
+            Texture.Destroy(texture);
+
         texture = null;
     }
 

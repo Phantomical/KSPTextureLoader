@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Unity.Profiling;
 using UnityEngine;
 
 namespace KSPTextureLoader;
@@ -175,6 +176,30 @@ public partial class TextureLoader : MonoBehaviour
         var bundles = GetAssetBundlesForKey(key, []);
         return [.. bundles];
     }
+
+    /// <summary>
+    /// Immediately unload all asset bundles and dispose of any textures whose
+    /// reference count has hit zero but have not yet been destroyed.
+    /// </summary>
+    ///
+    /// <remarks>
+    /// <para>
+    /// Normally, textures whose reference count hits zero are destroyed at the
+    /// end of the frame. This means they are available if they end up being
+    /// needed again during the frame, and also allows unity to be more efficient
+    /// in how it destroys them.
+    /// </para>
+    ///
+    /// <para>
+    /// However, if you are loading a lot of textures that are only needed for a
+    /// single frame then the memory used for these textures adds up. This
+    /// provides an escape hatch where so you can reduce memory usage by
+    /// immediately destroying these textures. Note that it is quite slow, so
+    /// avoid calling it unless you explicitly need to.
+    /// </para>
+    /// </remarks>
+    public static void ImmediatelyDestroyUnusedTextures() =>
+        Instance?.DoImmediateDestroyUnusedTextures();
 
     private static string CanonicalizeAssetPath(string path)
     {

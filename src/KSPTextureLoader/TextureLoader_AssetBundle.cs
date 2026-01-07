@@ -98,13 +98,7 @@ public partial class TextureLoader
                 break;
         }
 
-        assetBundles.Remove(handle.Path);
-
-        if (handle.IsError)
-            yield break;
-        var bundle = handle.GetBundle();
-        bundle.Unload(false);
-        handle.DisposeTextures();
+        handle.Destroy();
     }
 
     internal static string CanonicalizeResourcePath(string path)

@@ -86,18 +86,28 @@ public class AssetBundleHandle
         }
     }
 
-    internal void DisposeTextures()
+    internal void Destroy()
     {
+        bundle?.Unload(false);
+        bundle = null;
+
+        TextureLoader.Instance.assetBundles.Remove(Path);
+
         if (loadedTextures is not null)
+        {
             foreach (var handle in loadedTextures)
                 handle.Dispose();
 
+            loadedTextures = null;
+        }
+
         if (leakedTextures is not null)
+        {
             foreach (var texture in leakedTextures)
                 Texture.Destroy(texture);
 
-        loadedTextures = null;
-        leakedTextures = null;
+            leakedTextures = null;
+        }
     }
 
     public void WaitUntilComplete()
@@ -123,12 +133,24 @@ public class AssetBundleHandle
 
     internal void AddLoadedTexture(TextureHandleImpl handle)
     {
+        if (IsError)
+        {
+            handle.Dispose();
+            return;
+        }
+
         loadedTextures ??= [];
         loadedTextures.Add(handle);
     }
 
     internal void AddLeakedTexture(Texture texture)
     {
+        if (IsError)
+        {
+            Texture.Destroy(texture);
+            return;
+        }
+
         leakedTextures ??= [];
         leakedTextures.Add(texture);
     }
