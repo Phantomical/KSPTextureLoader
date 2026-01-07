@@ -110,7 +110,11 @@ internal class Config : IConfigNode
         node.TryGetValue(nameof(AsyncUploadPersistentBuffer), ref AsyncUploadPersistentBuffer);
         node.TryGetValue(nameof(AllowNativeUploads), ref AllowNativeUploads);
         node.TryGetValue(nameof(UseAsyncReadManager), ref UseAsyncReadManager);
-        node.TryGetValue(nameof(MaxTextureLoadMemory), ref MaxTextureLoadMemory);
+
+        if (!node.TryGetValue(nameof(MaxTextureLoadMemory), ref MaxTextureLoadMemory))
+        {
+            MaxTextureLoadMemory = (ulong)Math.Max(SystemInfo.systemMemorySize / 10, 1024);
+        }
 
         var children = node.GetNodes("AssetBundle");
         var bundles = new List<ImplicitBundle>(children.Length);
