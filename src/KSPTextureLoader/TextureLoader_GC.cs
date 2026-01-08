@@ -10,7 +10,6 @@ namespace KSPTextureLoader;
 
 partial class TextureLoader
 {
-    private static readonly WaitForEndOfFrame WaitForEndOfFrame = new();
     private static readonly ProfilerMarker DestroyUnusedTexturesMarker = new(
         "TextureLoader.ImmediatelyDestroyUnusedTextures"
     );
@@ -22,7 +21,6 @@ partial class TextureLoader
     );
 
     private readonly List<TextureHandleImpl> destroyQueue = [];
-    private readonly HashSet<TextureHandleImpl> destroyed = [];
     private Coroutine gcCoroutine = null;
 
     internal void QueueForDestroy(TextureHandleImpl handle)
@@ -34,7 +32,7 @@ partial class TextureLoader
     IEnumerator GcCoroutine()
     {
         using var guard = new ClearCoroutineGuard(this);
-        yield return WaitForEndOfFrame;
+        yield return null;
 
         DestroyTextures();
     }
@@ -78,29 +76,27 @@ partial class TextureLoader
 
     void DestroyTextures(bool immediate = false)
     {
+        const uint MAX_PER_FRAME = 128 * 1024 * 1024;
+
         if (destroyQueue.Count == 0)
             return;
 
         using var scope = DestroyTexturesMarker.Auto();
 
-        try
+        uint unloadedBytes = 0;
+        while (destroyQueue.TryPop(out var handle))
         {
-            while (destroyQueue.TryPop(out var handle))
-            {
-                // A handle can be resurrected in the same frame as its reference
-                // count went to zero.
-                if (handle.RefCount > 0)
-                    continue;
+            // A handle can be resurrected in the same frame as its reference
+            // count went to zero.
+            if (handle.RefCount > 0)
+                continue;
 
-                if (!destroyed.Add(handle))
-                    continue;
+            unloadedBytes += handle.Destroy(immediate);
 
-                handle.Destroy(immediate);
-            }
-        }
-        finally
-        {
-            destroyed.Clear();
+            // Freeing large allocations is actually quite slow, limit ourselves to a certain
+            // amount of memory per frame in order to spread the slowness across multiple frames.
+            if (!immediate && unloadedBytes >= MAX_PER_FRAME)
+                break;
         }
     }
 

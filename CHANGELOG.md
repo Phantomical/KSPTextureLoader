@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+* Added an API to immediately unload textures that are not actively being used
+  instead of waiting until the end of the frame.
+
+### Changed
+* Limited the number of textures that will be destroyed every frame to limit frame
+  stutter.
+* Default the allowed amount of memory used to load textures to
+  max(10% of system memory, 1GB) instead of 1GB.
+
+### Fixed
+* Fixed harmless error logspam when native texture loading is enabled, under some
+  conditions.
+
 ## v0.0.20
 ### Added
 * Added a configurable limit to the amount of temporary memory that can be used at

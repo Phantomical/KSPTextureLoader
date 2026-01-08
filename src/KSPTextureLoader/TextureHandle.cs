@@ -167,16 +167,18 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         TextureLoader.Instance.QueueForDestroy(this);
     }
 
-    internal void Destroy(bool immediate = false)
+    internal uint Destroy(bool immediate = false)
     {
         var key = TextureLoader.CanonicalizeResourcePath(Path);
         TextureLoader.Instance.textures.Remove(key);
 
         if (texture == null)
-            return;
+            return 0;
 
         if (Config.Instance.DebugMode >= DebugLevel.Debug)
             Debug.Log($"[KSPTextureLoader] Unloading texture {Path}");
+
+        uint size = texture.isReadable ? TextureUtils.GetTextureSizeInMemory(texture) : 0;
 
         if (immediate)
             Texture.DestroyImmediate(texture);
@@ -184,6 +186,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
             Texture.Destroy(texture);
 
         texture = null;
+        return size;
     }
 
     /// <summary>

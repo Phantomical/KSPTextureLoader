@@ -38,6 +38,50 @@ internal static class TextureUtils
         }
     }
 
+    internal static uint GetTextureSizeInMemory(Texture texture)
+    {
+        int w = texture.width;
+        int h = texture.height;
+        int d = 1;
+        int arraySize = 1;
+        int mipmaps = texture.mipmapCount;
+        var format = texture.graphicsFormat;
+
+        switch (texture)
+        {
+            case Texture2D texture2d:
+                break;
+
+            case Texture2DArray texture2DArray:
+                arraySize = texture2DArray.depth;
+                break;
+
+            case Texture3D texture3D:
+                d = texture3D.depth;
+                break;
+
+            case Cubemap cubemap:
+                arraySize = 6;
+                break;
+
+            case CubemapArray cubemapArray:
+                arraySize = 6 * cubemapArray.cubemapCount;
+                break;
+        }
+
+        uint size = 0;
+        for (int i = 0; i < mipmaps; ++i)
+        {
+            size += GraphicsFormatUtility.ComputeMipmapSize(w, h, d, format) * (uint)arraySize;
+
+            w = (w + 1) >> 1;
+            h = (h + 1) >> 1;
+            d = (d + 1) >> 1;
+        }
+
+        return size;
+    }
+
     #region CreateUninitializedTexture
     // This reflects the actual creation flags in
     // https://github.com/Unity-Technologies/UnityCsReference/blob/59b03b8a0f179c0b7e038178c90b6c80b340aa9f/Runtime/Export/Graphics/GraphicsEnums.cs#L626
