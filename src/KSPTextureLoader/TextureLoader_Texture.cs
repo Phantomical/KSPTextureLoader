@@ -1,16 +1,14 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.IO;
+using Experience.Effects;
 using KSPTextureLoader.Format;
 using KSPTextureLoader.Utils;
-using Unity.Collections.LowLevel.Unsafe;
-using Unity.IO.LowLevel.Unsafe;
+using Unity.Jobs.LowLevel.Unsafe;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
-using UnityEngine.Rendering;
 
 namespace KSPTextureLoader;
 
@@ -28,7 +26,10 @@ public partial class TextureLoader
         StringComparer.OrdinalIgnoreCase
     );
 
+    private static uint MaxConcurrentLoads => (uint)Math.Max(JobsUtility.JobWorkerCount - 1, 1);
+
     private uint activeAssetBundleLoads = 0;
+    private uint activeTextureLoads = 0;
 
     private TextureHandle<T> LoadTextureImpl<T>(string path, TextureLoadOptions options)
         where T : Texture
@@ -202,6 +203,16 @@ public partial class TextureLoader
                 assetBundleExceptions
             );
         }
+
+        // If we can, try to avoid saturating the job workers. That should help prevent texture
+        // loading jobs from being run on the main thread, which can cause frame stalls.
+        if (options.Hint <= TextureLoadHint.BatchAsynchronous)
+        {
+            while (activeTextureLoads >= MaxConcurrentLoads)
+                yield return null;
+        }
+
+        using var loadGuard = new ActiveTextureLoadGuard(this);
 
         var extension = Path.GetExtension(handle.Path);
         if (
@@ -386,7 +397,23 @@ public partial class TextureLoader
 
         public void Dispose()
         {
-            this.loader.activeAssetBundleLoads -= 1;
+            loader.activeAssetBundleLoads -= 1;
+        }
+    }
+
+    readonly struct ActiveTextureLoadGuard : IDisposable
+    {
+        readonly TextureLoader loader;
+
+        public ActiveTextureLoadGuard(TextureLoader loader)
+        {
+            this.loader = loader;
+            this.loader.activeTextureLoads += 1;
+        }
+
+        public void Dispose()
+        {
+            loader.activeTextureLoads -= 1;
         }
     }
 }
