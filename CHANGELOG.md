@@ -12,8 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of waiting until the end of the frame.
 
 ### Changed
-* Limited the number of textures that will be destroyed every frame to limit frame
-  stutter.
+* Many small optimizations to reduce frame stutter in a variety of cases.
 * Default the allowed amount of memory used to load textures to
   max(10% of system memory, 1GB) instead of 1GB.
 

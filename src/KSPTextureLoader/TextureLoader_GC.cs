@@ -20,12 +20,12 @@ partial class TextureLoader
         "TextureLoader.DestroyTextures"
     );
 
-    private readonly List<TextureHandleImpl> destroyQueue = [];
+    private readonly Queue<TextureHandleImpl> destroyQueue = [];
     private Coroutine gcCoroutine = null;
 
     internal void QueueForDestroy(TextureHandleImpl handle)
     {
-        destroyQueue.Add(handle);
+        destroyQueue.Enqueue(handle);
         gcCoroutine ??= StartCoroutine(GcCoroutine());
     }
 
@@ -85,12 +85,20 @@ partial class TextureLoader
         using var scope = DestroyTexturesMarker.Auto();
 
         uint unloadedBytes = 0;
-        while (destroyQueue.TryPop(out var handle))
+        while (destroyQueue.TryDequeue(out var handle))
         {
             // A handle can be resurrected in the same frame as its reference
             // count went to zero.
             if (handle.RefCount > 0)
                 continue;
+
+            // Destroying a texture sometimes needs to sync with the loading thread. This is slow so it is
+            // better to wait until those loads are completed.
+            if (handle.AssetBundle is not null && activeAssetBundleLoads > 0)
+            {
+                destroyQueue.Enqueue(handle);
+                return false;
+            }
 
             unloadedBytes += handle.Destroy(false);
 
@@ -110,7 +118,7 @@ partial class TextureLoader
 
         using var scope = DestroyTexturesMarker.Auto();
 
-        while (destroyQueue.TryPop(out var handle))
+        while (destroyQueue.TryDequeue(out var handle))
         {
             // A handle can be resurrected in the same frame as its reference
             // count went to zero.

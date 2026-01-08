@@ -94,6 +94,12 @@ public partial class TextureLoader
 
             delayCount += 1;
 
+            if (activeAssetBundleLoads > 0)
+            {
+                yield return null;
+                continue;
+            }
+
             if (delayCount >= Config.Instance.BundleUnloadDelay)
                 break;
         }

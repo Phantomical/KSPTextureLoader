@@ -10,6 +10,7 @@ using DebuggerDisplayAttribute = System.Diagnostics.DebuggerDisplayAttribute;
 
 namespace KSPTextureLoader;
 
+[DebuggerDisplay("{Path} (RefCount: {RefCount})")]
 internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 {
     private static readonly ProfilerMarker CompleteMarker = new("TextureHandle.Complete");

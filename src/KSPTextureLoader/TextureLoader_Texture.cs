@@ -25,8 +25,10 @@ public partial class TextureLoader
     // Use weak references so that textures that get leaked will at least get
     // cleaned up during a scene switch.
     internal readonly Dictionary<string, WeakReference<TextureHandleImpl>> textures = new(
-        StringComparer.InvariantCultureIgnoreCase
+        StringComparer.OrdinalIgnoreCase
     );
+
+    private uint activeAssetBundleLoads = 0;
 
     private TextureHandle<T> LoadTextureImpl<T>(string path, TextureLoadOptions options)
         where T : Texture
@@ -147,6 +149,10 @@ public partial class TextureLoader
                 Texture asset;
                 if (options.Hint < TextureLoadHint.Synchronous)
                 {
+                    // This prevents us from unloading any asset bundles while any loads are in
+                    // flight.
+                    using var activeLoadGuard = new ActiveAssetBundleLoadGuard(this);
+
                     var assetreq = bundle.LoadAssetAsync<Texture>(assetPath);
                     if (!assetreq.isDone)
                         yield return assetreq;
@@ -366,5 +372,21 @@ public partial class TextureLoader
 
         options.UpdateMipmaps = true;
         return readable;
+    }
+
+    readonly struct ActiveAssetBundleLoadGuard : IDisposable
+    {
+        readonly TextureLoader loader;
+
+        public ActiveAssetBundleLoadGuard(TextureLoader loader)
+        {
+            this.loader = loader;
+            this.loader.activeAssetBundleLoads += 1;
+        }
+
+        public void Dispose()
+        {
+            this.loader.activeAssetBundleLoads -= 1;
+        }
     }
 }
