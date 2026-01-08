@@ -27,7 +27,7 @@ internal class DebugUI : MonoBehaviour
 
     void Start()
     {
-        if (!Config.Instance.DebugMode)
+        if (Config.Instance.DebugMode != DebugLevel.Info)
         {
             Destroy(this);
             return;

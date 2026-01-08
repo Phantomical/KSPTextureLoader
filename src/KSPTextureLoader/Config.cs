@@ -25,6 +25,13 @@ internal struct ImplicitBundle : IConfigNode
     }
 }
 
+internal enum DebugLevel : byte
+{
+    Info = 0,
+    Debug = 1,
+    Trace = 2,
+}
+
 /// <summary>
 /// The type used for the config file in GameData.
 /// </summary>
@@ -35,7 +42,7 @@ internal class Config : IConfigNode
     /// <summary>
     /// Enable the debug UI.
     /// </summary>
-    public bool DebugMode = false;
+    public DebugLevel DebugMode = DebugLevel.Info;
 
     /// <summary>
     /// How many frames should we hold on to asset bundles for before they are
@@ -104,7 +111,25 @@ internal class Config : IConfigNode
 
     public void Load(ConfigNode node)
     {
-        node.TryGetValue(nameof(DebugMode), ref DebugMode);
+        string mode = null;
+        if (node.TryGetValue(nameof(DebugMode), ref mode))
+        {
+            if (mode.Equals("true", StringComparison.OrdinalIgnoreCase))
+                DebugMode = DebugLevel.Debug;
+            else if (mode.Equals("false", StringComparison.OrdinalIgnoreCase))
+                DebugMode = DebugLevel.Info;
+            else if (mode.Equals("info", StringComparison.OrdinalIgnoreCase))
+                DebugMode = DebugLevel.Info;
+            else if (mode.Equals("debug", StringComparison.OrdinalIgnoreCase))
+                DebugMode = DebugLevel.Debug;
+            else if (mode.Equals("trace", StringComparison.OrdinalIgnoreCase))
+                DebugMode = DebugLevel.Trace;
+            else
+                Debug.LogError(
+                    $"[KSPTextureLoader] Unknown DebugMode configuration. Got `{DebugMode}`, expected one of: true, false, info, debug, or trace."
+                );
+        }
+
         node.TryGetValue(nameof(BundleUnloadDelay), ref BundleUnloadDelay);
         node.TryGetValue(nameof(AsyncUploadBufferSize), ref AsyncUploadBufferSize);
         node.TryGetValue(nameof(AsyncUploadPersistentBuffer), ref AsyncUploadPersistentBuffer);
