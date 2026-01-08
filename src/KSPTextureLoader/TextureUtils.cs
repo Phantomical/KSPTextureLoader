@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.Serialization;
+using KSPTextureLoader.Internals;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 
@@ -529,9 +530,21 @@ internal static class TextureUtils
         }
     }
 
-    static unsafe bool TryMarkExternalTextureAsUnreadableWin64(Texture2D tex)
+    static bool TryMarkExternalTextureAsUnreadableWin64(Texture2D tex)
     {
-        var wintex = (Internals.Win64Texture2D*)tex.m_CachedPtr;
+        if (Application.unityVersion != "2019.4.18f1")
+            return false;
+
+        if (Debug.isDebugBuild)
+            return TryMarkExternalTextureAsUnreadable<DebugWin64Texture2D>(tex);
+        else
+            return TryMarkExternalTextureAsUnreadable<ReleaseWin64Texture2D>(tex);
+    }
+
+    static unsafe bool TryMarkExternalTextureAsUnreadable<T>(Texture2D tex)
+        where T : unmanaged, ITexture2DInternals
+    {
+        var wintex = (T*)tex.m_CachedPtr;
         if (wintex is null)
             return false;
 

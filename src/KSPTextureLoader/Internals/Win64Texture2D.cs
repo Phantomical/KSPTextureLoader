@@ -2,9 +2,21 @@ using System.Runtime.InteropServices;
 
 namespace KSPTextureLoader.Internals;
 
-[StructLayout(LayoutKind.Explicit)]
-internal struct Win64Texture2D
+interface ITexture2DInternals
 {
-    [FieldOffset(0x125)]
-    public byte m_IsReadable;
+    byte m_IsReadable { get; set; }
+}
+
+[StructLayout(LayoutKind.Explicit)]
+internal struct DebugWin64Texture2D : ITexture2DInternals
+{
+    [field: FieldOffset(0x125)]
+    public byte m_IsReadable { get; set; }
+}
+
+[StructLayout(LayoutKind.Explicit)]
+internal struct ReleaseWin64Texture2D : ITexture2DInternals
+{
+    [field: FieldOffset(0x105)]
+    public byte m_IsReadable { get; set; }
 }
