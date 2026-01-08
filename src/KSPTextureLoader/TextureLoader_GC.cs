@@ -34,7 +34,8 @@ partial class TextureLoader
         using var guard = new ClearCoroutineGuard(this);
         yield return null;
 
-        DestroyTextures();
+        while (!DestroyTextures())
+            yield return null;
     }
 
     void DoImmediateDestroyUnusedTextures()
@@ -42,7 +43,7 @@ partial class TextureLoader
         using var scope = DestroyUnusedTexturesMarker.Auto();
 
         UnloadAllAssetBundles();
-        DestroyTextures(true);
+        DestroyTexturesImmediate();
     }
 
     void UnloadAllAssetBundles()
@@ -74,12 +75,12 @@ partial class TextureLoader
         }
     }
 
-    void DestroyTextures(bool immediate = false)
+    bool DestroyTextures()
     {
         const uint MAX_PER_FRAME = 128 * 1024 * 1024;
 
         if (destroyQueue.Count == 0)
-            return;
+            return true;
 
         using var scope = DestroyTexturesMarker.Auto();
 
@@ -91,12 +92,32 @@ partial class TextureLoader
             if (handle.RefCount > 0)
                 continue;
 
-            unloadedBytes += handle.Destroy(immediate);
+            unloadedBytes += handle.Destroy(false);
 
             // Freeing large allocations is actually quite slow, limit ourselves to a certain
             // amount of memory per frame in order to spread the slowness across multiple frames.
-            if (!immediate && unloadedBytes >= MAX_PER_FRAME)
-                break;
+            if (unloadedBytes >= MAX_PER_FRAME)
+                return false;
+        }
+
+        return true;
+    }
+
+    void DestroyTexturesImmediate()
+    {
+        if (destroyQueue.Count == 0)
+            return;
+
+        using var scope = DestroyTexturesMarker.Auto();
+
+        while (destroyQueue.TryPop(out var handle))
+        {
+            // A handle can be resurrected in the same frame as its reference
+            // count went to zero.
+            if (handle.RefCount > 0)
+                continue;
+
+            handle.Destroy(true);
         }
     }
 
