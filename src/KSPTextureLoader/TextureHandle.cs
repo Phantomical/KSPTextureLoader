@@ -175,6 +175,9 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         if (texture == null)
             return;
 
+        if (Config.Instance.DebugMode >= DebugLevel.Debug)
+            Debug.Log($"[KSPTextureLoader] Unloading texture {Path}");
+
         if (immediate)
             Texture.DestroyImmediate(texture);
         else

@@ -88,8 +88,14 @@ public class AssetBundleHandle
 
     internal void Destroy()
     {
-        bundle?.Unload(false);
-        bundle = null;
+        if (bundle is not null)
+        {
+            if (Config.Instance.DebugMode >= DebugLevel.Debug)
+                Debug.Log($"[KSPTextureLoader] Unloading asset bundle {Path}");
+
+            bundle.Unload(false);
+            bundle = null;
+        }
 
         TextureLoader.Instance.assetBundles.Remove(Path);
 
