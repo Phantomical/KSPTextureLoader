@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v0.0.21
 ### Added
 * Added an API to immediately unload textures that are not actively being used
   instead of waiting until the end of the frame.
