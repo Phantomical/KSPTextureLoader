@@ -88,6 +88,12 @@ public class AssetBundleHandle
 
     internal void Destroy()
     {
+        TextureLoader.Instance.assetBundles.Remove(Path);
+        DestroyNoRemove();
+    }
+
+    internal void DestroyNoRemove()
+    {
         if (bundle is not null)
         {
             if (Config.Instance.DebugMode >= DebugLevel.Debug)
@@ -96,8 +102,6 @@ public class AssetBundleHandle
             bundle.Unload(false);
             bundle = null;
         }
-
-        TextureLoader.Instance.assetBundles.Remove(Path);
 
         if (loadedTextures is not null)
         {

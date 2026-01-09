@@ -50,6 +50,7 @@ partial class TextureLoader
     {
         using var scope = UnloadUnusedAssetBundlesMarker.Auto();
         List<Exception> exceptions = null;
+        List<string> removed = [];
 
         foreach (var (key, bundle) in assetBundles)
         {
@@ -58,8 +59,8 @@ partial class TextureLoader
 
             try
             {
-                assetBundles.Remove(key);
-                bundle.Destroy();
+                removed.Add(key);
+                bundle.DestroyNoRemove();
             }
             catch (Exception ex)
             {
@@ -67,6 +68,9 @@ partial class TextureLoader
                 exceptions.Add(ex);
             }
         }
+
+        foreach (var key in removed)
+            assetBundles.Remove(key);
 
         if (exceptions is not null)
         {
