@@ -16,7 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Many small optimizations to reduce frame stutter in a variety of cases.
 * Default the allowed amount of memory used to load textures to
   max(10% of system memory, 1GB) instead of 1GB.
-* Enabled native texture uploads by default.
 
 ### Fixed
 * Fixed harmless error logspam when native texture loading is enabled, under some
