@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+* Fixed an issue where a texture handle that had its texture taken from it would
+  wrongly be returned when attempting to load that texture again in the same frame.
+
 ## v0.0.21
 ### Added
 * Added an API to immediately unload textures that are not actively being used
