@@ -6,16 +6,17 @@ using System.Runtime.ExceptionServices;
 using KSPTextureLoader.Utils;
 using Unity.Profiling;
 using UnityEngine;
-using DebuggerDisplayAttribute = System.Diagnostics.DebuggerDisplayAttribute;
 
 namespace KSPTextureLoader;
 
-[DebuggerDisplay("{Path} (RefCount: {RefCount})")]
 internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 {
+    internal struct ExternalMarker;
+
     private static readonly ProfilerMarker CompleteMarker = new("TextureHandle.Complete");
 
     private readonly bool isReadable;
+    private readonly bool isExternal;
     internal int RefCount { get; private set; } = 1;
     internal string Path { get; private set; }
     internal string AssetBundle { get; private set; }
@@ -42,6 +43,27 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         : this(path, false)
     {
         exception = ex;
+    }
+
+    internal TextureHandleImpl(Texture texture)
+    {
+        if (texture == null)
+            throw new ArgumentNullException(nameof(texture));
+
+        Path = texture.name;
+        isReadable = texture.isReadable;
+        this.texture = texture;
+    }
+
+    internal TextureHandleImpl(Texture texture, ExternalMarker _)
+    {
+        if (texture == null)
+            throw new ArgumentNullException(nameof(texture));
+
+        Path = texture.name;
+        isReadable = texture.isReadable;
+        isExternal = true;
+        this.texture = texture;
     }
 
     /// <summary>
@@ -77,7 +99,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         using var guard = this;
         var texture = GetTexture();
 
-        if (RefCount == 1 && AssetBundle is null)
+        if (RefCount == 1 && AssetBundle is null && !isExternal)
             this.texture = null;
         else
             texture = TextureUtils.CloneTexture(texture);
@@ -163,6 +185,12 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         if (RefCount != 0)
             return;
 
+        if (isExternal)
+        {
+            texture = null;
+            return;
+        }
+
         if (!IsError && texture == null)
         {
             // Destroy the handle immediately if its texture has been taken.
@@ -195,6 +223,14 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 
         texture = null;
         return size;
+    }
+
+    public override string ToString()
+    {
+        if (isExternal)
+            return Path;
+        else
+            return $"{Path} (RefCount: {RefCount})";
     }
 
     /// <summary>
@@ -343,7 +379,6 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 /// complete. If loading fails then calling it will throw an exception. Make
 /// sure to take this into account in your loading routine.
 /// </remarks>
-[DebuggerDisplay("{Path} (RefCount: {RefCount})")]
 public class TextureHandle : CustomYieldInstruction, IDisposable
 {
     internal readonly TextureHandleImpl handle;
@@ -404,6 +439,31 @@ public class TextureHandle : CustomYieldInstruction, IDisposable
     internal TextureHandle(TextureHandleImpl handle) => this.handle = handle;
 
     /// <summary>
+    /// Create a new <see cref="TextureHandle{T}"/> that takes ownership over an existing texture.
+    /// </summary>
+    public static TextureHandle<T> CreateOwningHandle<T>(T texture)
+        where T : Texture
+    {
+        var handle = new TextureHandleImpl(texture);
+        return new TextureHandle<T>(handle);
+    }
+
+    /// <summary>
+    /// Create a <see cref="TextureHandle{T}"/> that wraps a texture that is owned externally.
+    /// </summary>
+    ///
+    /// <remarks>
+    /// The handle returned by this function will not destroy the texture when its reference count
+    /// hits zero, so it is safe to use for GameDatabase textures or built-in unity textures.
+    /// </remarks>
+    public static TextureHandle<T> CreateExternalHandle<T>(T texture)
+        where T : Texture
+    {
+        var handle = new TextureHandleImpl(texture, new TextureHandleImpl.ExternalMarker());
+        return new TextureHandle<T>(handle);
+    }
+
+    /// <summary>
     /// Get the texture for this texture handle. Will block if the texture has
     /// not loaded yet and will throw an exception if the texture failed to load.
     /// </summary>
@@ -458,6 +518,8 @@ public class TextureHandle : CustomYieldInstruction, IDisposable
     /// don't necessarily want to block on the handle at this moment.
     /// </remarks>
     public bool Tick() => handle.Tick();
+
+    public override string ToString() => handle.ToString();
 }
 
 /// <summary>
@@ -474,7 +536,6 @@ public class TextureHandle : CustomYieldInstruction, IDisposable
 /// complete. If loading fails then calling it will throw an exception. Make
 /// sure to take this into account in your loading routine.
 /// </remarks>
-[DebuggerDisplay("{Path} (RefCount: {RefCount})")]
 public sealed class TextureHandle<T> : TextureHandle
     where T : Texture
 {
