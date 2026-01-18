@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 using System.Runtime.Serialization;
 using KSPTextureLoader.Internals;
 using UnityEngine;
@@ -530,15 +531,89 @@ internal static class TextureUtils
         }
     }
 
+    enum Build
+    {
+        Unknown,
+        Debug,
+        Release,
+    }
+
+    static Build? _buildInfo;
+    static Build BuildInfo => _buildInfo ??= DetectBuildInfo();
+
+    static Build DetectBuildInfo()
+    {
+        if (Application.unityVersion != "2019.4.18f1")
+            return Build.Unknown;
+
+        switch (Application.platform)
+        {
+            case RuntimePlatform.WindowsPlayer:
+                if (IntPtr.Size != sizeof(ulong))
+                    goto default;
+
+                return DetectBuildInfoForPlatform<DebugWin64Texture2D, ReleaseWin64Texture2D>();
+
+            default:
+                return Build.Unknown;
+        }
+    }
+
+    static Build DetectBuildInfoForPlatform<TDebug, TRelease>()
+        where TDebug : unmanaged, ITexture2DInternals
+        where TRelease : unmanaged, ITexture2DInternals
+    {
+        var texture = new Texture2D(1, 1);
+        using var guard = new TextureDestroyGuard(texture);
+
+        var ptr = texture.m_CachedPtr;
+        if (ptr == IntPtr.Zero)
+            return Build.Unknown;
+
+        if (DetectCanModifyIsReadable<TRelease>(texture))
+            return Build.Release;
+        if (DetectCanModifyIsReadable<TDebug>(texture))
+            return Build.Debug;
+
+        return Build.Unknown;
+    }
+
+    static unsafe bool DetectCanModifyIsReadable<T>(Texture2D tex)
+        where T : unmanaged, ITexture2DInternals
+    {
+        var unityptr = (T*)tex.m_CachedPtr;
+        if (unityptr is null)
+            return false;
+
+        if (unityptr->m_IsReadable != 1)
+            return false;
+
+        unityptr->m_IsReadable = 0;
+        try
+        {
+            return !tex.isReadable;
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            unityptr->m_IsReadable = 1;
+        }
+    }
+
     static bool TryMarkExternalTextureAsUnreadableWin64(Texture2D tex)
     {
         if (Application.unityVersion != "2019.4.18f1")
             return false;
 
-        if (Debug.isDebugBuild)
-            return TryMarkExternalTextureAsUnreadable<DebugWin64Texture2D>(tex);
-        else
-            return TryMarkExternalTextureAsUnreadable<ReleaseWin64Texture2D>(tex);
+        return BuildInfo switch
+        {
+            Build.Debug => TryMarkExternalTextureAsUnreadable<DebugWin64Texture2D>(tex),
+            Build.Release => TryMarkExternalTextureAsUnreadable<ReleaseWin64Texture2D>(tex),
+            _ => false,
+        };
     }
 
     static unsafe bool TryMarkExternalTextureAsUnreadable<T>(Texture2D tex)
@@ -577,5 +652,10 @@ internal static class TextureUtils
         float f = v & -v;
         uint r = *(uint*)&f;
         return (int)(r >> 23) - 0x7F;
+    }
+
+    struct TextureDestroyGuard(Texture tex) : IDisposable
+    {
+        public void Dispose() => Texture.Destroy(tex);
     }
 }
