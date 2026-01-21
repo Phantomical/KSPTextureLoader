@@ -17,14 +17,22 @@ internal class AssetBundleCompleteHandler(AssetBundleCreateRequest request) : IC
 {
     public bool IsComplete => request.isDone;
 
-    public void WaitUntilComplete() => _ = request.assetBundle;
+    public void WaitUntilComplete()
+    {
+        request.priority = 100;
+        _ = request.assetBundle;
+    }
 }
 
 internal class AssetBundleRequestCompleteHandler(AssetBundleRequest request) : ICompleteHandler
 {
     public bool IsComplete => request.isDone;
 
-    public void WaitUntilComplete() => _ = request.asset;
+    public void WaitUntilComplete()
+    {
+        request.priority = 100;
+        _ = request.asset;
+    }
 }
 
 internal class JobHandleCompleteHandler(JobHandle handle) : ICompleteHandler
