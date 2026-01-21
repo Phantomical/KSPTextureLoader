@@ -107,6 +107,7 @@ internal static unsafe class DX11
 
         using (handle.WithCompleteHandler(new JobHandleCompleteHandler(jobGuard.JobHandle)))
             yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
+        jobGuard.JobHandle.Complete();
 
         // If the job failed with an exception then we should rethrow that.
         shared.ex?.Throw();

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using DDSHeaders;
 using KSPTextureLoader.Format.DDS;
 using KSPTextureLoader.Jobs;
@@ -40,56 +41,38 @@ internal static unsafe class DDSLoader
         where T : Texture
     {
         var diskPath = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", handle.Path);
-        DDSHeader header;
-        DDSHeaderDX10 header10 = null;
-        NativeArray<byte> buffer;
 
-        JobHandle jobHandle;
-        IFileReadStatus readStatus;
-
-        long fileLength;
-        long fileOffset;
-
-        using (var file = File.OpenRead(diskPath))
+        FileInfo info;
+        if (options.Hint <= TextureLoadHint.BatchAsynchronous)
         {
-            var br = new BinaryReader(file);
-            var magic = br.ReadUInt32();
-            if (magic != DDSValues.uintMagic)
-                throw new Exception("Invalid DDS file: incorrect magic number");
+            var task = Task.Run(() => ReadFileHeader(diskPath));
+            using (handle.WithCompleteHandler(new TaskCompleteHandler(task)))
+                yield return new WaitUntil(() => task.IsCompleted);
 
-            header = new DDSHeader(br);
-
-            // file.Position doesn't reliably return the amount of bytes read
-            // under certain conditions on some systems. To avoid this being an
-            // issue we manually track the offset ourselves.
-            fileOffset = 128;
-            if (header.ddspf.dwFourCC == DDSValues.uintDX10)
-            {
-                header10 = new DDSHeaderDX10(br);
-                fileOffset += 20;
-            }
-
-            if (header.dwSize != 124)
-                throw new Exception("Invalid DDS file: incorrect header size");
-            if (header.ddspf.dwSize != 32)
-                throw new Exception("Invalid DDS file: invalid pixel format size");
-
-            fileLength = file.Length - fileOffset;
-            if (fileLength > int.MaxValue)
-                throw new Exception(
-                    "DDS file is too large to load. Only files < 2GB in size are supported"
-                );
-
-            if (options.Hint < TextureLoadHint.BatchSynchronous && AllocatorUtil.IsAboveWatermark)
-                yield return AllocatorUtil.WaitUntilMemoryBelowWatermark();
-
-            buffer = AllocatorUtil.CreateNativeArrayHGlobal<byte>(
-                (int)fileLength,
-                NativeArrayOptions.UninitializedMemory
-            );
-
-            readStatus = FileLoader.ReadFileContents(diskPath, fileOffset, buffer, out jobHandle);
+            info = task.Result;
         }
+        else
+        {
+            info = ReadFileHeader(diskPath);
+        }
+
+        DDSHeader header = info.header;
+        DDSHeaderDX10 header10 = info.header10;
+
+        if (options.Hint < TextureLoadHint.BatchSynchronous && AllocatorUtil.IsAboveWatermark)
+            yield return AllocatorUtil.WaitUntilMemoryBelowWatermark();
+
+        NativeArray<byte> buffer = AllocatorUtil.CreateNativeArrayHGlobal<byte>(
+            (int)info.fileLength,
+            NativeArrayOptions.UninitializedMemory
+        );
+
+        IFileReadStatus readStatus = FileLoader.ReadFileContents(
+            diskPath,
+            info.dataOffset,
+            buffer,
+            out JobHandle jobHandle
+        );
 
         using var bufGuard = new NativeArrayGuard<byte>(buffer);
         using var jobGuard = new JobCompleteGuard(jobHandle);
@@ -308,8 +291,8 @@ internal static unsafe class DDSLoader
                     + $"  - arraySize: {arraySize}\n"
                     + $"  - mipCount:  {mipCount}\n"
                     + $"  - format:    {format}\n"
-                    + $"  - data start  {fileOffset}\n"
-                    + $"  - data length {fileLength}"
+                    + $"  - data start  {info.dataOffset}\n"
+                    + $"  - data length {info.fileLength}"
             );
         }
 
@@ -353,6 +336,7 @@ internal static unsafe class DDSLoader
                         handle.WithCompleteHandler(new JobHandleCompleteHandler(jobGuard.JobHandle))
                     )
                         yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
+                    jobGuard.JobHandle.Complete();
 
                     int offset = 0;
                     for (int element = 0; element < arraySize; ++element)
@@ -388,6 +372,7 @@ internal static unsafe class DDSLoader
                         handle.WithCompleteHandler(new JobHandleCompleteHandler(jobGuard.JobHandle))
                     )
                         yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
+                    jobGuard.JobHandle.Complete();
 
                     int offset = 0;
                     for (int face = 0; face < 6; ++face)
@@ -425,6 +410,7 @@ internal static unsafe class DDSLoader
                         handle.WithCompleteHandler(new JobHandleCompleteHandler(jobGuard.JobHandle))
                     )
                         yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
+                    jobGuard.JobHandle.Complete();
 
                     int offset = 0;
                     for (int element = 0; element < arraySize; ++element)
@@ -464,6 +450,7 @@ internal static unsafe class DDSLoader
                         handle.WithCompleteHandler(new JobHandleCompleteHandler(jobGuard.JobHandle))
                     )
                         yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
+                    jobGuard.JobHandle.Complete();
 
                     int offset = 0;
                     for (int mip = 0; mip < mipCount; ++mip)
@@ -490,7 +477,60 @@ internal static unsafe class DDSLoader
         }
     }
 
-    public static IEnumerable<object> UploadTexture2D<T>(
+    struct FileInfo
+    {
+        public DDSHeader header;
+        public DDSHeaderDX10 header10;
+        public long fileLength;
+        public long dataOffset;
+    }
+
+    static readonly ProfilerMarker ReadFileHeaderMarker = new("ReadFileHeader");
+
+    static FileInfo ReadFileHeader(string diskPath)
+    {
+        using var scope = ReadFileHeaderMarker.Auto();
+        using var file = File.OpenRead(diskPath);
+
+        var br = new BinaryReader(file);
+        var magic = br.ReadUInt32();
+        if (magic != DDSValues.uintMagic)
+            throw new Exception("Invalid DDS file: incorrect magic number");
+
+        DDSHeader header = new(br);
+        DDSHeaderDX10 header10 = null;
+
+        // file.Position doesn't reliably return the amount of bytes read
+        // under certain conditions on some systems. To avoid this being an
+        // issue we manually track the offset ourselves.
+        long fileOffset = 128;
+        if (header.ddspf.dwFourCC == DDSValues.uintDX10)
+        {
+            header10 = new DDSHeaderDX10(br);
+            fileOffset += 20;
+        }
+
+        if (header.dwSize != 124)
+            throw new Exception("Invalid DDS file: incorrect header size");
+        if (header.ddspf.dwSize != 32)
+            throw new Exception("Invalid DDS file: invalid pixel format size");
+
+        long fileLength = file.Length - fileOffset;
+        if (fileLength > int.MaxValue)
+            throw new Exception(
+                "DDS file is too large to load. Only files < 2GB in size are supported"
+            );
+
+        return new()
+        {
+            header = header,
+            header10 = header10,
+            fileLength = fileLength,
+            dataOffset = fileOffset,
+        };
+    }
+
+    static IEnumerable<object> UploadTexture2D<T>(
         TextureHandleImpl handle,
         int width,
         int height,
@@ -602,18 +642,18 @@ internal static unsafe class DDSLoader
 
             if (!jobGuard.JobHandle.IsCompleted)
             {
-                handle.completeHandler = new JobHandleCompleteHandler(jobGuard.JobHandle);
-                yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
-                handle.completeHandler = null;
+                using (handle.WithCompleteHandler(new JobHandleCompleteHandler(jobGuard.JobHandle)))
+                    yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
+                jobGuard.JobHandle.Complete();
             }
         }
         else
         {
             if (!jobGuard.JobHandle.IsCompleted)
             {
-                handle.completeHandler = new JobHandleCompleteHandler(jobGuard.JobHandle);
-                yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
-                handle.completeHandler = null;
+                using (handle.WithCompleteHandler(new JobHandleCompleteHandler(jobGuard.JobHandle)))
+                    yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
+                jobGuard.JobHandle.Complete();
             }
 
             texture.LoadRawTextureData(bufGuard.array);

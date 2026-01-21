@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Unity.Jobs;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -29,5 +31,32 @@ internal class JobHandleCompleteHandler(JobHandle handle) : ICompleteHandler
 {
     public bool IsComplete => handle.IsCompleted;
 
-    public void WaitUntilComplete() => handle.Complete();
+    public void WaitUntilComplete()
+    {
+        try
+        {
+            handle.Complete();
+        }
+        catch
+        {
+            // This will be handled by the coroutine getting the task result.
+        }
+    }
+}
+
+internal class TaskCompleteHandler(Task task) : ICompleteHandler
+{
+    public bool IsComplete => task.IsCompleted;
+
+    public void WaitUntilComplete()
+    {
+        try
+        {
+            task.Wait();
+        }
+        catch
+        {
+            // This will be handled by the handler getting the task result.
+        }
+    }
 }

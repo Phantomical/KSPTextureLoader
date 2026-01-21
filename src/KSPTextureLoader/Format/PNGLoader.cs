@@ -83,6 +83,7 @@ internal static class PNGLoader
 
         using (handle.WithCompleteHandler(new JobHandleCompleteHandler(jobHandle)))
             yield return new WaitUntil(() => jobHandle.IsCompleted);
+        jobHandle.Complete();
 
         readStatus.ThrowIfError();
 
