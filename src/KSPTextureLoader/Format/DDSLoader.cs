@@ -43,11 +43,17 @@ internal static unsafe class DDSLoader
         FileInfo info;
         if (options.Hint <= TextureLoadHint.BatchAsynchronous)
         {
-            var task = Task.Run(() => ReadFileHeader(diskPath));
-            using (handle.WithCompleteHandler(new TaskCompleteHandler(task)))
-                yield return new WaitUntil(() => task.IsCompleted);
+            var tcs = new TaskCompletionSource<FileInfo>();
+            var job = new ReadFileHeaderJob { diskPath = new(diskPath), tcs = new(tcs) };
+            var rfhandle = job.Schedule();
+            JobHandle.ScheduleBatchedJobs();
 
-            info = task.Result;
+            using (handle.WithCompleteHandler(new JobHandleCompleteHandler(rfhandle)))
+                yield return new WaitUntil(() => rfhandle.IsCompleted);
+
+            rfhandle.Complete();
+
+            info = tcs.Task.Result;
         }
         else
         {
@@ -483,6 +489,29 @@ internal static unsafe class DDSLoader
         public long dataOffset;
     }
 
+    struct ReadFileHeaderJob : IJob
+    {
+        public ObjectHandle<string> diskPath;
+        public ObjectHandle<TaskCompletionSource<FileInfo>> tcs;
+
+        public void Execute()
+        {
+            using var dpguard = diskPath;
+            using var tcsguard = this.tcs;
+
+            var tcs = this.tcs.Target;
+
+            try
+            {
+                tcs.SetResult(ReadFileHeader(diskPath.Target));
+            }
+            catch (Exception e)
+            {
+                tcs.SetException(e);
+            }
+        }
+    }
+
     static readonly ProfilerMarker ReadFileHeaderMarker = new("ReadFileHeader");
 
     static FileInfo ReadFileHeader(string diskPath)
@@ -690,8 +719,4 @@ internal static unsafe class DDSLoader
         UnsafeUtility.Free(data, Allocator.Persistent);
         handle.Target.complete = true;
     }
-
-    #region DXGIFormat
-
-    #endregion
 }
