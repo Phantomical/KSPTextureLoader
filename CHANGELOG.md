@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Added
+* Added a helper method to create `TextureHandle`s from pre-existing textures.
+
+### Changed
+* Reduced stutter even more for async texture loads by reading file headers
+  using a background thread.
+* Attempt to avoid loading all queued asset bundle requests when one is loaded.
+
+### Fixed
+* KSPTL now accurately detects whether it is running on a debug build of Unity.
 
 ## v0.0.22
 ### Fixed
