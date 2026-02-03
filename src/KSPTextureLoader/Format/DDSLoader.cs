@@ -355,6 +355,7 @@ internal static unsafe class DDSLoader
                                 );
 
                             tex2dArray.SetPixelData(buffer, mip, element, offset);
+                            offset += mipSize;
                         }
                     }
 
