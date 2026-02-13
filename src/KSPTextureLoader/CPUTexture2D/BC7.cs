@@ -9,7 +9,6 @@ partial class CPUTexture2D
     public readonly struct BC7 : ICPUTexture2D
     {
         const int BytesPerBlock = 16;
-        const float ByteToFloat = 1f / 255f;
 
         public int Width { get; }
         public int Height { get; }
@@ -32,7 +31,9 @@ partial class CPUTexture2D
                 );
         }
 
-        public Color GetPixel(int x, int y, int mipLevel = 0)
+        public Color GetPixel(int x, int y, int mipLevel = 0) => GetPixel32(x, y, mipLevel);
+
+        public Color32 GetPixel32(int x, int y, int mipLevel = 0)
         {
             int mipWidth = Width;
             int mipHeight = Height;
@@ -63,15 +64,13 @@ partial class CPUTexture2D
                 blockOffset,
                 localX,
                 localY,
-                out float r,
-                out float g,
-                out float b,
-                out float a
+                out byte r,
+                out byte g,
+                out byte b,
+                out byte a
             );
-            return new Color(r, g, b, a);
+            return new Color32(r, g, b, a);
         }
-
-        public Color32 GetPixel32(int x, int y, int mipLevel = 0) => GetPixel(x, y, mipLevel);
 
         public Color GetPixelBilinear(float u, float v, int mipLevel = 0) =>
             CPUTexture2D.GetPixelBilinear(in this, u, v, mipLevel);
@@ -348,10 +347,10 @@ partial class CPUTexture2D
             int blockOffset,
             int localX,
             int localY,
-            out float r,
-            out float g,
-            out float b,
-            out float a
+            out byte r,
+            out byte g,
+            out byte b,
+            out byte a
         )
         {
             var reader = new BitReader(data, blockOffset);
@@ -363,7 +362,7 @@ partial class CPUTexture2D
 
             if (mode >= 8)
             {
-                r = g = b = a = 0f;
+                r = g = b = a = 0;
                 return;
             }
 
@@ -402,10 +401,10 @@ partial class CPUTexture2D
         static void DecodeMode0(
             ref BitReader reader,
             int pixelIndex,
-            out float r,
-            out float g,
-            out float b,
-            out float a
+            out byte r,
+            out byte g,
+            out byte b,
+            out byte a
         )
         {
             int partition = reader.ReadBits(4);
@@ -512,20 +511,20 @@ partial class CPUTexture2D
             }
 
             int w = Weights3[idx];
-            r = BC7Interpolate(BC7Unquantize(er0, 5), BC7Unquantize(er1, 5), w) * ByteToFloat;
-            g = BC7Interpolate(BC7Unquantize(eg0, 5), BC7Unquantize(eg1, 5), w) * ByteToFloat;
-            b = BC7Interpolate(BC7Unquantize(eb0, 5), BC7Unquantize(eb1, 5), w) * ByteToFloat;
-            a = 1f;
+            r = (byte)BC7Interpolate(BC7Unquantize(er0, 5), BC7Unquantize(er1, 5), w);
+            g = (byte)BC7Interpolate(BC7Unquantize(eg0, 5), BC7Unquantize(eg1, 5), w);
+            b = (byte)BC7Interpolate(BC7Unquantize(eb0, 5), BC7Unquantize(eb1, 5), w);
+            a = 255;
         }
 
         // Mode 1: 2 subsets, 6-bit endpoints (RGB), 1 shared pbit per subset, 3-bit indices
         static void DecodeMode1(
             ref BitReader reader,
             int pixelIndex,
-            out float r,
-            out float g,
-            out float b,
-            out float a
+            out byte r,
+            out byte g,
+            out byte b,
+            out byte a
         )
         {
             int partition = reader.ReadBits(6);
@@ -599,20 +598,20 @@ partial class CPUTexture2D
             }
 
             int w = Weights3[idx];
-            r = BC7Interpolate(BC7Unquantize(er0, 7), BC7Unquantize(er1, 7), w) * ByteToFloat;
-            g = BC7Interpolate(BC7Unquantize(eg0, 7), BC7Unquantize(eg1, 7), w) * ByteToFloat;
-            b = BC7Interpolate(BC7Unquantize(eb0, 7), BC7Unquantize(eb1, 7), w) * ByteToFloat;
-            a = 1f;
+            r = (byte)BC7Interpolate(BC7Unquantize(er0, 7), BC7Unquantize(er1, 7), w);
+            g = (byte)BC7Interpolate(BC7Unquantize(eg0, 7), BC7Unquantize(eg1, 7), w);
+            b = (byte)BC7Interpolate(BC7Unquantize(eb0, 7), BC7Unquantize(eb1, 7), w);
+            a = 255;
         }
 
         // Mode 2: 3 subsets, 5-bit endpoints (RGB), no pbit, 2-bit indices
         static void DecodeMode2(
             ref BitReader reader,
             int pixelIndex,
-            out float r,
-            out float g,
-            out float b,
-            out float a
+            out byte r,
+            out byte g,
+            out byte b,
+            out byte a
         )
         {
             int partition = reader.ReadBits(6);
@@ -685,20 +684,20 @@ partial class CPUTexture2D
             }
 
             int w = Weights2[idx];
-            r = BC7Interpolate(BC7Unquantize(er0, 5), BC7Unquantize(er1, 5), w) * ByteToFloat;
-            g = BC7Interpolate(BC7Unquantize(eg0, 5), BC7Unquantize(eg1, 5), w) * ByteToFloat;
-            b = BC7Interpolate(BC7Unquantize(eb0, 5), BC7Unquantize(eb1, 5), w) * ByteToFloat;
-            a = 1f;
+            r = (byte)BC7Interpolate(BC7Unquantize(er0, 5), BC7Unquantize(er1, 5), w);
+            g = (byte)BC7Interpolate(BC7Unquantize(eg0, 5), BC7Unquantize(eg1, 5), w);
+            b = (byte)BC7Interpolate(BC7Unquantize(eb0, 5), BC7Unquantize(eb1, 5), w);
+            a = 255;
         }
 
         // Mode 3: 2 subsets, 7-bit endpoints (RGB), 1 unique pbit per endpoint, 2-bit indices
         static void DecodeMode3(
             ref BitReader reader,
             int pixelIndex,
-            out float r,
-            out float g,
-            out float b,
-            out float a
+            out byte r,
+            out byte g,
+            out byte b,
+            out byte a
         )
         {
             int partition = reader.ReadBits(6);
@@ -773,20 +772,20 @@ partial class CPUTexture2D
             }
 
             int w = Weights2[idx];
-            r = BC7Interpolate(BC7Unquantize(er0, 8), BC7Unquantize(er1, 8), w) * ByteToFloat;
-            g = BC7Interpolate(BC7Unquantize(eg0, 8), BC7Unquantize(eg1, 8), w) * ByteToFloat;
-            b = BC7Interpolate(BC7Unquantize(eb0, 8), BC7Unquantize(eb1, 8), w) * ByteToFloat;
-            a = 1f;
+            r = (byte)BC7Interpolate(BC7Unquantize(er0, 8), BC7Unquantize(er1, 8), w);
+            g = (byte)BC7Interpolate(BC7Unquantize(eg0, 8), BC7Unquantize(eg1, 8), w);
+            b = (byte)BC7Interpolate(BC7Unquantize(eb0, 8), BC7Unquantize(eb1, 8), w);
+            a = 255;
         }
 
         // Mode 4: 1 subset, 5-bit RGB + 6-bit A, rotation, 2+3 bit indices (or swapped by idxMode)
         static void DecodeMode4(
             ref BitReader reader,
             int pixelIndex,
-            out float r,
-            out float g,
-            out float b,
-            out float a
+            out byte r,
+            out byte g,
+            out byte b,
+            out byte a
         )
         {
             int rotation = reader.ReadBits(2);
@@ -843,20 +842,20 @@ partial class CPUTexture2D
             int ai = BC7Interpolate(BC7Unquantize(a0, 6), BC7Unquantize(a1, 6), alphaWeight);
 
             ApplyRotation(rotation, ref ri, ref gi, ref bi, ref ai);
-            r = ri * ByteToFloat;
-            g = gi * ByteToFloat;
-            b = bi * ByteToFloat;
-            a = ai * ByteToFloat;
+            r = (byte)ri;
+            g = (byte)gi;
+            b = (byte)bi;
+            a = (byte)ai;
         }
 
         // Mode 5: 1 subset, 7-bit RGB + 8-bit A, rotation, separate 2-bit color and alpha indices
         static void DecodeMode5(
             ref BitReader reader,
             int pixelIndex,
-            out float r,
-            out float g,
-            out float b,
-            out float a
+            out byte r,
+            out byte g,
+            out byte b,
+            out byte a
         )
         {
             int rotation = reader.ReadBits(2);
@@ -894,20 +893,20 @@ partial class CPUTexture2D
             int ai = BC7Interpolate(BC7Unquantize(a0, 8), BC7Unquantize(a1, 8), Weights2[alphaIdx]);
 
             ApplyRotation(rotation, ref ri, ref gi, ref bi, ref ai);
-            r = ri * ByteToFloat;
-            g = gi * ByteToFloat;
-            b = bi * ByteToFloat;
-            a = ai * ByteToFloat;
+            r = (byte)ri;
+            g = (byte)gi;
+            b = (byte)bi;
+            a = (byte)ai;
         }
 
         // Mode 6: 1 subset, 7-bit RGBA + 1 unique pbit per endpoint, 4-bit indices
         static void DecodeMode6(
             ref BitReader reader,
             int pixelIndex,
-            out float r,
-            out float g,
-            out float b,
-            out float a
+            out byte r,
+            out byte g,
+            out byte b,
+            out byte a
         )
         {
             int r0 = reader.ReadBits(7),
@@ -941,20 +940,20 @@ partial class CPUTexture2D
             }
 
             int w = Weights4[idx];
-            r = BC7Interpolate(BC7Unquantize(r0, 8), BC7Unquantize(r1, 8), w) * ByteToFloat;
-            g = BC7Interpolate(BC7Unquantize(g0, 8), BC7Unquantize(g1, 8), w) * ByteToFloat;
-            b = BC7Interpolate(BC7Unquantize(b0, 8), BC7Unquantize(b1, 8), w) * ByteToFloat;
-            a = BC7Interpolate(BC7Unquantize(a0, 8), BC7Unquantize(a1, 8), w) * ByteToFloat;
+            r = (byte)BC7Interpolate(BC7Unquantize(r0, 8), BC7Unquantize(r1, 8), w);
+            g = (byte)BC7Interpolate(BC7Unquantize(g0, 8), BC7Unquantize(g1, 8), w);
+            b = (byte)BC7Interpolate(BC7Unquantize(b0, 8), BC7Unquantize(b1, 8), w);
+            a = (byte)BC7Interpolate(BC7Unquantize(a0, 8), BC7Unquantize(a1, 8), w);
         }
 
         // Mode 7: 2 subsets, 5-bit RGBA + 1 unique pbit per endpoint, 2-bit indices
         static void DecodeMode7(
             ref BitReader reader,
             int pixelIndex,
-            out float r,
-            out float g,
-            out float b,
-            out float a
+            out byte r,
+            out byte g,
+            out byte b,
+            out byte a
         )
         {
             int partition = reader.ReadBits(6);
@@ -1042,10 +1041,10 @@ partial class CPUTexture2D
             }
 
             int w = Weights2[idx];
-            r = BC7Interpolate(BC7Unquantize(er0, 6), BC7Unquantize(er1, 6), w) * ByteToFloat;
-            g = BC7Interpolate(BC7Unquantize(eg0, 6), BC7Unquantize(eg1, 6), w) * ByteToFloat;
-            b = BC7Interpolate(BC7Unquantize(eb0, 6), BC7Unquantize(eb1, 6), w) * ByteToFloat;
-            a = BC7Interpolate(BC7Unquantize(ea0, 6), BC7Unquantize(ea1, 6), w) * ByteToFloat;
+            r = (byte)BC7Interpolate(BC7Unquantize(er0, 6), BC7Unquantize(er1, 6), w);
+            g = (byte)BC7Interpolate(BC7Unquantize(eg0, 6), BC7Unquantize(eg1, 6), w);
+            b = (byte)BC7Interpolate(BC7Unquantize(eb0, 6), BC7Unquantize(eb1, 6), w);
+            a = (byte)BC7Interpolate(BC7Unquantize(ea0, 6), BC7Unquantize(ea1, 6), w);
         }
     }
 }

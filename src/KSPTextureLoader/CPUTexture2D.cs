@@ -32,8 +32,8 @@ public interface ICPUTexture2D
 /// </remarks>
 public abstract partial class CPUTexture2D : ICPUTexture2D, IDisposable
 {
-    const float Byte2Float = 1f / 255f;
-    const float UShort2Float = 1f / 65535f;
+    protected const float Byte2Float = 1f / 255f;
+    protected const float UShort2Float = 1f / 65535f;
 
     public abstract int Width { get; }
     public abstract int Height { get; }
