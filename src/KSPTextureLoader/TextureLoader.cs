@@ -178,6 +178,52 @@ public partial class TextureLoader : MonoBehaviour
     }
 
     /// <summary>
+    /// Load a CPU-only texture from disk or from an asset bundle.
+    /// </summary>
+    /// <param name="path">The path to load the texture from on disk or in asset bundles.</param>
+    /// <param name="options">Additional options configuring how the texture gets loaded.</param>
+    ///
+    /// <remarks>
+    /// <para>
+    /// For DDS files loaded from disk (without asset bundle overrides), the file
+    /// is memory-mapped read-only and wrapped with a format-specific decoder.
+    /// This avoids copying the entire file into managed memory and does not
+    /// upload the texture to the GPU.
+    /// </para>
+    ///
+    /// <para>
+    /// For all other cases (PNG/JPG, asset bundle textures, or unsupported DDS
+    /// formats) the texture is loaded via <see cref="LoadTexture{T}(string, TextureLoadOptions)"/> as a
+    /// readable <see cref="Texture2D"/> and then wrapped with
+    /// <see cref="CPUTexture2D.Create(TextureHandle{Texture2D})"/>.
+    /// </para>
+    /// </remarks>
+    public static CPUTextureHandle LoadCPUTexture(string path, TextureLoadOptions options) =>
+        Instance.LoadCPUTextureImpl(path, options);
+
+    /// <summary>
+    /// Load a CPU-only texture from disk or from an asset bundle.
+    /// </summary>
+    /// <param name="path">The path to load the texture from on disk or in asset bundles.</param>
+    ///
+    /// <remarks>
+    /// <para>
+    /// For DDS files loaded from disk (without asset bundle overrides), the file
+    /// is memory-mapped read-only and wrapped with a format-specific decoder.
+    /// This avoids copying the entire file into managed memory and does not
+    /// upload the texture to the GPU.
+    /// </para>
+    ///
+    /// <para>
+    /// For all other cases (PNG/JPG, asset bundle textures, or unsupported DDS
+    /// formats) the texture is loaded via <see cref="LoadTexture{T}(string, TextureLoadOptions)"/> as a
+    /// readable <see cref="Texture2D"/> and then wrapped with
+    /// <see cref="CPUTexture2D.Create(TextureHandle{Texture2D})"/>.
+    /// </para>
+    /// </remarks>
+    public static CPUTextureHandle LoadCPUTexture(string path) => LoadCPUTexture(path, new());
+
+    /// <summary>
     /// Immediately unload all asset bundles and dispose of any textures whose
     /// reference count has hit zero but have not yet been destroyed.
     /// </summary>

@@ -1,4 +1,5 @@
 using System;
+using System.IO.MemoryMappedFiles;
 using System.Runtime.CompilerServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -62,6 +63,9 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, IDisposable
     /// <returns></returns>
     public static CPUTexture2D Create(TextureHandle<Texture2D> handle)
     {
+        if (handle is null)
+            throw new ArgumentNullException(nameof(handle));
+
         var texture = handle.GetTexture();
         if (!texture.isReadable)
             throw new Exception($"texture {texture.name} is not readable");
@@ -277,6 +281,168 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, IDisposable
             ),
             _ => new CPUTexture2D_Texture(handle),
         };
+    }
+
+    /// <summary>
+    /// Create a new CPUTexture2D backed by a memory-mapped file.
+    /// </summary>
+    /// <param name="mmf">The memory-mapped file. Ownership is transferred to the returned texture.</param>
+    /// <param name="accessor">The view accessor. Ownership is transferred to the returned texture.</param>
+    /// <param name="data">A NativeArray view over the texture data region of the memory-mapped file.</param>
+    /// <param name="width">The texture width in pixels.</param>
+    /// <param name="height">The texture height in pixels.</param>
+    /// <param name="mipCount">The number of mip levels.</param>
+    /// <param name="format">The texture format.</param>
+    /// <returns>A CPUTexture2D wrapping the data.</returns>
+    /// <exception cref="NotSupportedException">Thrown if the format is unsupported. All parameters are disposed before throwing.</exception>
+    internal static CPUTexture2D Create(
+        MemoryMappedFile mmf,
+        MemoryMappedViewAccessor accessor,
+        NativeArray<byte> data,
+        int width,
+        int height,
+        int mipCount,
+        TextureFormat format
+    )
+    {
+        if (mmf is null)
+            throw new ArgumentNullException(nameof(mmf));
+        if (accessor is null)
+            throw new ArgumentNullException(nameof(accessor));
+
+        return format switch
+        {
+            TextureFormat.Alpha8 => new CPUTexture2D_MemoryMapped<Alpha8>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.R8 => new CPUTexture2D_MemoryMapped<R8>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.RG16 => new CPUTexture2D_MemoryMapped<RG16>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.RGB24 => new CPUTexture2D_MemoryMapped<RGB24>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.RGBA32 => new CPUTexture2D_MemoryMapped<RGBA32>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.ARGB32 => new CPUTexture2D_MemoryMapped<ARGB32>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.BGRA32 => new CPUTexture2D_MemoryMapped<BGRA32>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.R16 => new CPUTexture2D_MemoryMapped<R16>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.RGB565 => new CPUTexture2D_MemoryMapped<RGB565>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.RGBA4444 => new CPUTexture2D_MemoryMapped<RGBA4444>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.ARGB4444 => new CPUTexture2D_MemoryMapped<ARGB4444>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.RFloat => new CPUTexture2D_MemoryMapped<RFloat>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.RGFloat => new CPUTexture2D_MemoryMapped<RGFloat>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.RGBAFloat => new CPUTexture2D_MemoryMapped<RGBAFloat>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.RHalf => new CPUTexture2D_MemoryMapped<RHalf>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.RGHalf => new CPUTexture2D_MemoryMapped<RGHalf>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.RGBAHalf => new CPUTexture2D_MemoryMapped<RGBAHalf>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.DXT1 => new CPUTexture2D_MemoryMapped<DXT1>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.DXT5 => new CPUTexture2D_MemoryMapped<DXT5>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.BC4 => new CPUTexture2D_MemoryMapped<BC4>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.BC5 => new CPUTexture2D_MemoryMapped<BC5>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.BC7 => new CPUTexture2D_MemoryMapped<BC7>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            TextureFormat.BC6H => new CPUTexture2D_MemoryMapped<BC6H>(
+                mmf,
+                accessor,
+                new(data, width, height, mipCount)
+            ),
+            _ => ThrowNotSupported<CPUTexture2D>(mmf, accessor, format),
+        };
+    }
+
+    static T ThrowNotSupported<T>(
+        MemoryMappedFile mmf,
+        MemoryMappedViewAccessor accessor,
+        TextureFormat format
+    )
+    {
+        accessor?.SafeMemoryMappedViewHandle.ReleasePointer();
+        accessor?.Dispose();
+        mmf?.Dispose();
+        throw new NotSupportedException(
+            $"Unsupported texture format for memory-mapped CPU texture: {format}"
+        );
     }
 
     #region Internal Helpers

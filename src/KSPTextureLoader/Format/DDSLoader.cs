@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.MemoryMappedFiles;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -482,7 +483,87 @@ internal static unsafe class DDSLoader
         }
     }
 
-    struct FileInfo
+    internal static bool TryLoadDDSCPUTexture(
+        string diskPath,
+        bool? linear,
+        out CPUTexture2D texture
+    )
+    {
+        texture = null;
+
+        var info = ReadFileHeader(diskPath);
+        var header = info.header;
+        var header10 = info.header10;
+        var flags = (DDS_HEADER_FLAGS)header.dwFlags;
+
+        var height = (int)header.dwHeight;
+        var width = (int)header.dwWidth;
+        var mipCount = (int)header.dwMipMapCount;
+        if (mipCount == 0)
+            mipCount = 1;
+
+        GraphicsFormat format;
+
+        if (header10 is not null)
+        {
+            // Reject non-2D textures
+            if (header10.miscFlag.HasFlag((DDSHeaderDX10MiscFlags)0x4)) // cubemap
+                return false;
+            if (
+                header10.resourceDimension
+                == D3D10_RESOURCE_DIMENSION.D3D11_RESOURCE_DIMENSION_TEXTURE3D
+            )
+                return false;
+            if (header10.arraySize > 1)
+                return false;
+
+            format = GetDxgiGraphicsFormat(header10.dxgiFormat);
+        }
+        else
+        {
+            // Reject non-2D textures
+            if (flags.HasFlag(DDS_HEADER_FLAGS.DEPTH))
+                return false;
+            if (header.dwCaps2.HasFlag(DDSPixelFormatCaps2.CUBEMAP))
+                return false;
+
+            format = GetDDSPixelGraphicsFormat(header.ddspf);
+            if (format == GraphicsFormat.None)
+                return false; // palette-based or unsupported pixel format
+        }
+
+        if (linear is bool lin)
+        {
+            var tformat = GraphicsFormatUtility.GetTextureFormat(format);
+            format = GraphicsFormatUtility.GetGraphicsFormat(tformat, isSRGB: !lin);
+        }
+
+        var textureFormat = GraphicsFormatUtility.GetTextureFormat(format);
+
+        var mmf = MemoryMappedFile.CreateFromFile(
+            diskPath,
+            FileMode.Open,
+            null,
+            0,
+            MemoryMappedFileAccess.Read
+        );
+
+        var accessor = mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+
+        byte* pointer = null;
+        accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref pointer);
+
+        var data = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<byte>(
+            pointer + info.dataOffset,
+            (int)info.fileLength,
+            Allocator.Invalid
+        );
+
+        texture = CPUTexture2D.Create(mmf, accessor, data, width, height, mipCount, textureFormat);
+        return true;
+    }
+
+    internal struct FileInfo
     {
         public DDSHeader header;
         public DDSHeaderDX10 header10;
@@ -515,7 +596,7 @@ internal static unsafe class DDSLoader
 
     static readonly ProfilerMarker ReadFileHeaderMarker = new("ReadFileHeader");
 
-    static FileInfo ReadFileHeader(string diskPath)
+    internal static FileInfo ReadFileHeader(string diskPath)
     {
         using var scope = ReadFileHeaderMarker.Auto();
         using var file = File.OpenRead(diskPath);

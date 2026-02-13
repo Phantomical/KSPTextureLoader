@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.ExceptionServices;
+using KSPTextureLoader.Utils;
 using Unity.Profiling;
 using UnityEngine;
 
@@ -121,6 +122,12 @@ public class CPUTextureHandle : CustomYieldInstruction, IDisposable, ISetExcepti
         if (coroutine is null)
             return true;
         return !coroutine.MoveNext();
+    }
+
+    internal CPUCompleteHandlerGuard WithCompleteHandler(ICompleteHandler handler)
+    {
+        completeHandler = handler;
+        return new CPUCompleteHandlerGuard(this);
     }
 
     /// <summary>
