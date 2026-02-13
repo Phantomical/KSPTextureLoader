@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace KSPTextureLoaderTests;
 
-partial class CPUTexture2DTests
+public class RHalfTests : CPUTexture2DTests
 {
     [TestInfo("CPUTexture2D_RHalf")]
     public void TestRHalf()

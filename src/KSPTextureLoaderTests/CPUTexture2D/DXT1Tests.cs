@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace KSPTextureLoaderTests;
 
-partial class CPUTexture2DTests
+public class DXT1Tests : CPUTexture2DTests
 {
     static ushort EncodeRGB565(int r5, int g6, int b5) => (ushort)((r5 << 11) | (g6 << 5) | b5);
 

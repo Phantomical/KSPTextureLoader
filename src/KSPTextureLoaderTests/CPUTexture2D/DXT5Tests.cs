@@ -19,7 +19,7 @@ namespace KSPTextureLoaderTests;
 /// Color block: two RGB565 endpoints + 16×2-bit indices.
 ///   Our implementation always uses 4-color mode regardless of c0 vs c1 ordering.
 /// </summary>
-partial class CPUTexture2DTests
+public class DXT5Tests : CPUTexture2DTests
 {
     const float DXT5Tol = 0.005f; // slightly more than 1/255
     const float DXT5LossyTol = 0.05f; // for lossy compression comparisons

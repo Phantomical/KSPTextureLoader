@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace KSPTextureLoaderTests;
 
-partial class CPUTexture2DTests
+public class R8Tests : CPUTexture2DTests
 {
     [TestInfo("CPUTexture2D_R8")]
     public void TestR8()

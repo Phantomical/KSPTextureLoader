@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace KSPTextureLoaderTests;
 
-partial class CPUTexture2DTests
+public class RGFloatTests : CPUTexture2DTests
 {
     [TestInfo("CPUTexture2D_RGFloat")]
     public void TestRGFloat()

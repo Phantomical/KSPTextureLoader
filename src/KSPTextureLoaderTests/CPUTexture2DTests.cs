@@ -10,7 +10,7 @@ namespace KSPTextureLoaderTests;
 /// Tests each <see cref="CPUTexture2D"/> format struct against
 /// <see cref="Texture2D.GetPixel(int,int)"/> to verify that pixel decoding matches Unity.
 /// </summary>
-public partial class CPUTexture2DTests : KSPTextureLoaderTestBase
+public class CPUTexture2DTests : KSPTextureLoaderTestBase
 {
     const int W = 4;
     const int H = 4;
@@ -21,7 +21,7 @@ public partial class CPUTexture2DTests : KSPTextureLoaderTestBase
     /// using RGBA32 as the source and converting via SetPixel/GetPixel.
     /// Returns the texture and a grid of ground-truth pixel colors.
     /// </summary>
-    static (Texture2D tex, Color[,] pixels) MakeTestTexture(TextureFormat fmt)
+    protected static (Texture2D tex, Color[,] pixels) MakeTestTexture(TextureFormat fmt)
     {
         var src = new Texture2D(W, H, TextureFormat.RGBA32, false);
         var colors = new Color32[W * H];
@@ -68,7 +68,7 @@ public partial class CPUTexture2DTests : KSPTextureLoaderTestBase
     /// Only the channels specified by check flags are compared, since formats
     /// with fewer channels may fill unused channels differently than Unity.
     /// </summary>
-    void TestFormatGetPixel<T>(
+    protected void TestFormatGetPixel<T>(
         TextureFormat fmt,
         Func<NativeArray<byte>, int, int, int, T> factory,
         string name,

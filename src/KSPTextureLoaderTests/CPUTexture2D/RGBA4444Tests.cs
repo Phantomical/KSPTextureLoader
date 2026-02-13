@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace KSPTextureLoaderTests;
 
-partial class CPUTexture2DTests
+public class RGBA4444Tests : CPUTexture2DTests
 {
     [TestInfo("CPUTexture2D_RGBA4444")]
     public void TestRGBA4444()
