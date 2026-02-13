@@ -115,14 +115,26 @@ partial class CPUTexture2D
 
             public int ReadBits(int count)
             {
-                int result = 0;
-                for (int i = 0; i < count; i++)
+                int result;
+                int bitIdx = bitPos & 63;
+                ulong mask = (1ul << count) - 1;
+
+                if (bitPos < 64)
                 {
-                    ulong word = bitPos < 64 ? block.lo : block.hi;
-                    int bitIdx = bitPos & 63;
-                    result |= (int)((word >> bitIdx) & 1) << i;
-                    bitPos++;
+                    result = (int)((block.lo >> bitIdx) & mask);
+                    // If the read spans the lo/hi boundary, grab remaining bits from hi
+                    if (bitIdx + count > 64)
+                    {
+                        int loBits = 64 - bitIdx;
+                        result |= (int)(block.hi & ((1ul << (count - loBits)) - 1)) << loBits;
+                    }
                 }
+                else
+                {
+                    result = (int)((block.hi >> bitIdx) & mask);
+                }
+
+                bitPos += count;
                 return result;
             }
         }
@@ -131,7 +143,7 @@ partial class CPUTexture2D
 
         // 2-subset partition table: 64 partitions x 16 pixels
         static readonly byte[] PartitionTable2 =
-        {
+        [
             0,0,1,1,0,0,1,1,0,0,1,1,0,0,1,1,
             0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,
             0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,1,
@@ -196,11 +208,11 @@ partial class CPUTexture2D
             0,0,1,1,0,0,1,1,1,1,1,1,0,0,0,0,
             0,0,1,0,0,0,1,0,1,1,1,0,1,1,1,0,
             0,1,0,0,0,1,0,0,0,1,1,1,0,1,1,1,
-        };
+        ];
 
         // 3-subset partition table: 64 partitions x 16 pixels
         static readonly byte[] PartitionTable3 =
-        {
+        [
             0,0,1,1,0,0,1,1,0,2,2,1,2,2,2,2,
             0,0,0,1,0,0,1,1,2,2,1,1,2,2,2,1,
             0,0,0,0,2,0,0,1,2,2,1,1,2,2,1,1,
@@ -265,11 +277,11 @@ partial class CPUTexture2D
             0,2,2,2,1,2,2,2,0,2,2,2,1,2,2,2,
             0,1,0,1,2,2,2,2,2,2,2,2,2,2,2,2,
             0,1,1,1,2,0,1,1,2,2,0,1,2,2,2,0,
-        };
+        ];
 
         // Anchor indices for 2-subset partitions (second subset anchor)
         static readonly byte[] AnchorIndex2_1 =
-        {
+        [
             15,15,15,15,15,15,15,15,
             15,15,15,15,15,15,15,15,
             15, 2, 8, 2, 2, 8, 8,15,
@@ -278,11 +290,11 @@ partial class CPUTexture2D
              2, 8, 2, 2, 2,15,15, 6,
              6, 2, 6, 8,15,15, 2, 2,
             15,15,15,15,15, 2, 2,15,
-        };
+        ];
 
         // Anchor indices for 3-subset partitions (second subset)
         static readonly byte[] AnchorIndex3_1 =
-        {
+        [
              3, 3,15,15, 8, 3,15,15,
              8, 8, 6, 6, 6, 5, 3, 3,
              3, 3, 8,15, 3, 3, 6,10,
@@ -291,11 +303,11 @@ partial class CPUTexture2D
             15, 3,15, 5,15,15,15,15,
              3,15, 5, 5, 5, 8, 5,10,
              5,10, 8,13,15,12, 3, 3,
-        };
+        ];
 
         // Anchor indices for 3-subset partitions (third subset)
         static readonly byte[] AnchorIndex3_2 =
-        {
+        [
             15, 8, 8, 3,15,15, 3, 8,
             15,15,15,15,15,15,15, 8,
             15, 8,15, 3,15, 8,15, 8,
@@ -304,14 +316,11 @@ partial class CPUTexture2D
              6,15, 8,15, 3, 6, 6, 8,
             15, 3,15,15,15,15,15,15,
             15,15,15,15, 3,15,15, 8,
-        };
+        ];
 
-        static readonly byte[] Weights2 = { 0, 21, 43, 64 };
-        static readonly byte[] Weights3 = { 0, 9, 18, 27, 37, 46, 55, 64 };
-        static readonly byte[] Weights4 =
-        {
-            0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64,
-        };
+        static readonly byte[] Weights2 = [0, 21, 43, 64];
+        static readonly byte[] Weights3 = [0, 9, 18, 27, 37, 46, 55, 64];
+        static readonly byte[] Weights4 = [0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64];
         // csharpier-ignore-end
 
         static int BC7Interpolate(int e0, int e1, int weight)
