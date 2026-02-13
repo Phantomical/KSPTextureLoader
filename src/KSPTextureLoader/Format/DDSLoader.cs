@@ -16,6 +16,7 @@ using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
+using static KSPTextureLoader.CPUTexture2D;
 using static KSPTextureLoader.Format.DDS.DDSUtil;
 
 namespace KSPTextureLoader.Format;
@@ -529,7 +530,39 @@ internal static unsafe class DDSLoader
 
             format = GetDDSPixelGraphicsFormat(header.ddspf);
             if (format == GraphicsFormat.None)
-                return false; // palette-based or unsupported pixel format
+            {
+                // Try Kopernicus palette formats
+                if (header.ddspf.dwRGBBitCount == 4)
+                {
+                    var expected = width * height / 2 + 16 * 4;
+                    if (info.fileLength != expected)
+                        return false;
+
+                    var (mmf, accessor, data) = OpenMemoryMappedData(diskPath, info);
+                    texture = new CPUTexture2D_MemoryMapped<KopernicusPalette4>(
+                        mmf,
+                        accessor,
+                        new(data, width, height)
+                    );
+                    return true;
+                }
+                else if (header.ddspf.dwRGBBitCount == 8)
+                {
+                    var expected = width * height + 256 * 4;
+                    if (info.fileLength != expected)
+                        return false;
+
+                    var (mmf, accessor, data) = OpenMemoryMappedData(diskPath, info);
+                    texture = new CPUTexture2D_MemoryMapped<KopernicusPalette8>(
+                        mmf,
+                        accessor,
+                        new(data, width, height)
+                    );
+                    return true;
+                }
+
+                return false; // unsupported pixel format
+            }
         }
 
         if (linear is bool lin)
@@ -538,8 +571,29 @@ internal static unsafe class DDSLoader
             format = GraphicsFormatUtility.GetGraphicsFormat(tformat, isSRGB: !lin);
         }
 
-        var textureFormat = GraphicsFormatUtility.GetTextureFormat(format);
+        {
+            var textureFormat = GraphicsFormatUtility.GetTextureFormat(format);
+            var (mmf, accessor, data) = OpenMemoryMappedData(diskPath, info);
 
+            texture = CPUTexture2D.Create(
+                mmf,
+                accessor,
+                data,
+                width,
+                height,
+                mipCount,
+                textureFormat
+            );
+            return true;
+        }
+    }
+
+    static (
+        MemoryMappedFile mmf,
+        MemoryMappedViewAccessor accessor,
+        NativeArray<byte> data
+    ) OpenMemoryMappedData(string diskPath, FileInfo info)
+    {
         var mmf = MemoryMappedFile.CreateFromFile(
             diskPath,
             FileMode.Open,
@@ -559,8 +613,7 @@ internal static unsafe class DDSLoader
             Allocator.Invalid
         );
 
-        texture = CPUTexture2D.Create(mmf, accessor, data, width, height, mipCount, textureFormat);
-        return true;
+        return (mmf, accessor, data);
     }
 
     internal struct FileInfo
