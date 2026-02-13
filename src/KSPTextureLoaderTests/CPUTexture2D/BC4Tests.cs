@@ -967,5 +967,4 @@ public class BC4Tests : CPUTexture2DTests
             data.Dispose();
         }
     }
-
 }
