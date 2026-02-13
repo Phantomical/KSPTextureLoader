@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices.WindowsRuntime;
 using KSPTextureLoader.CPU;
 using Unity.Collections;
 using UnityEngine;
@@ -30,18 +31,27 @@ partial class CPUTexture2D
                 );
         }
 
-        public Color GetPixel(int x, int y, int mipLevel = 0)
+        ushort GetPixelValue(int x, int y, int mipLevel = 0)
         {
             var p = GetMipProperties(in this, mipLevel);
 
             x = Mathf.Clamp(x, 0, p.width - 1);
             y = Mathf.Clamp(y, 0, p.height - 1);
 
-            float v = data[p.offset + y * p.width + x] * CPUTextureHelper.UShort2Float;
+            return data[p.offset + y * p.width + x];
+        }
+
+        public Color GetPixel(int x, int y, int mipLevel = 0)
+        {
+            float v = GetPixelValue(x, y, mipLevel) * CPUTextureHelper.UShort2Float;
             return new Color(v, 1f, 1f, 1f);
         }
 
-        public Color32 GetPixel32(int x, int y, int mipLevel = 0) => GetPixel(x, y, mipLevel);
+        public Color32 GetPixel32(int x, int y, int mipLevel = 0)
+        {
+            byte v = (byte)(GetPixelValue(x, y, mipLevel) >> 8);
+            return new Color32(v, 255, 255, 255);
+        }
 
         public Color GetPixelBilinear(float u, float v, int mipLevel = 0) =>
             CPUTexture2D.GetPixelBilinear(in this, u, v, mipLevel);
