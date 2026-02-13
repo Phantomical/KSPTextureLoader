@@ -5,5 +5,5 @@ namespace KSPTextureLoader;
 
 partial class TextureLoader
 {
-    internal readonly Dictionary<string, WeakReference<CPUTexture2D>> cpuTextures;
+    internal readonly Dictionary<string, WeakReference<CPUTexture2D>> cpuTextures = [];
 }
