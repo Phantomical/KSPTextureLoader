@@ -1,4 +1,5 @@
 using System;
+using KSPTextureLoader.Utils;
 using Unity.Collections;
 using UnityEngine;
 
@@ -93,6 +94,8 @@ partial class CPUTexture2D
                 bitPos += count;
                 return result;
             }
+
+            public void SkipBits(int count) => bitPos += count;
         }
 
         // csharpier-ignore-start
@@ -317,18 +320,17 @@ partial class CPUTexture2D
             out byte a
         )
         {
-            var reader = new BitReader(block);
-
-            // Determine mode (0-7) from leading bits
-            int mode = 0;
-            while (mode < 8 && reader.ReadBits(1) == 0)
-                mode++;
+            // Determine mode (0-7) from trailing zeros in the low byte
+            int mode = MathUtil.CountTrailingZeros((byte)(block.lo & 0xFF));
 
             if (mode >= 8)
             {
                 r = g = b = a = 0;
                 return;
             }
+
+            var reader = new BitReader(block);
+            reader.SkipBits(mode + 1); // skip mode bits
 
             switch (mode)
             {
