@@ -2,6 +2,9 @@
     <PropertyGroup>
         <Description>Tests for KSPTextureLoader</Description>
 
+        <!-- This project uses KSP's in-game test framework, not a standard .NET test runner -->
+        <IsTestProject>false</IsTestProject>
+
         <Version>1.0.0</Version>
 
         <TargetFramework>net4.8</TargetFramework>
@@ -35,6 +38,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <Publicize Include="Assembly-CSharp" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Cubemap.Internal_Create" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.CubemapArray.Internal_Create" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Texture2D.Internal_Create" />

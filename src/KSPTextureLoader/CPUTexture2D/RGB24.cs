@@ -40,7 +40,7 @@ partial class CPUTexture2D
             this.MipCount = mipCount;
 
             int expected = GetTotalSize(in this);
-            if (expected != data.Length)
+            if (expected != this.data.Length)
                 throw new Exception(
                     $"data size did not match expected texture size (expected {expected}, but got {data.Length} instead)"
                 );
