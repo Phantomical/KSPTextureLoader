@@ -158,11 +158,7 @@ partial class CPUTexture2D
                 {
                     0 => new Color(r0, g0, b0),
                     1 => new Color(r1, g1, b1),
-                    2 => new Color(
-                        (r0 + r1) * 0.5f,
-                        (g0 + g1) * 0.5f,
-                        (b0 + b1) * 0.5f
-                    ),
+                    2 => new Color((r0 + r1) * 0.5f, (g0 + g1) * 0.5f, (b0 + b1) * 0.5f),
                     _ => new Color(0f, 0f, 0f),
                 };
             }

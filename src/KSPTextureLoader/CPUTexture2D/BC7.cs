@@ -39,34 +39,10 @@ partial class CPUTexture2D
 
         public Color32 GetPixel32(int x, int y, int mipLevel = 0)
         {
-            int mipWidth = Width;
-            int mipHeight = Height;
-            int blockOffset = 0;
-
-            for (int m = 0; m < mipLevel; m++)
-            {
-                int bw = (mipWidth + 3) / 4;
-                int bh = (mipHeight + 3) / 4;
-                blockOffset += bw * bh;
-                mipWidth = Math.Max(mipWidth >> 1, 1);
-                mipHeight = Math.Max(mipHeight >> 1, 1);
-            }
-
-            x = Mathf.Clamp(x, 0, mipWidth - 1);
-            y = Mathf.Clamp(y, 0, mipHeight - 1);
-
-            int blocksPerRow = (mipWidth + 3) / 4;
-            int blockX = x / 4;
-            int blockY = y / 4;
-            int localX = x % 4;
-            int localY = y % 4;
-
-            int blockIndex = blockOffset + blockY * blocksPerRow + blockX;
-
+            GetBlockIndex(Width, Height, x, y, mipLevel, out int blockIndex, out int pixelIndex);
             DecodeBC7Pixel(
                 data[blockIndex],
-                localX,
-                localY,
+                pixelIndex,
                 out byte r,
                 out byte g,
                 out byte b,
@@ -82,20 +58,6 @@ partial class CPUTexture2D
             where T : unmanaged
         {
             return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(Block));
-        }
-
-        static int GetTotalBlockCount(int width, int height, int mipCount)
-        {
-            int count = 0;
-            for (int m = 0; m < mipCount; m++)
-            {
-                int bw = (width + 3) / 4;
-                int bh = (height + 3) / 4;
-                count += bw * bh;
-                width = Math.Max(width >> 1, 1);
-                height = Math.Max(height >> 1, 1);
-            }
-            return count;
         }
 
         // ================================================================
@@ -348,8 +310,7 @@ partial class CPUTexture2D
 
         static void DecodeBC7Pixel(
             Block block,
-            int localX,
-            int localY,
+            int pixelIndex,
             out byte r,
             out byte g,
             out byte b,
@@ -368,8 +329,6 @@ partial class CPUTexture2D
                 r = g = b = a = 0;
                 return;
             }
-
-            int pixelIndex = localY * 4 + localX;
 
             switch (mode)
             {
