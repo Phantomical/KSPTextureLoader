@@ -370,6 +370,14 @@ internal sealed class CPUTexture2D_Texture : CPUTexture2D
         texture.GetPixelBilinear(u, v, mipLevel);
 
     public override NativeArray<byte> GetRawTextureData() => texture.GetRawTextureData<byte>();
+
+    public override void Dispose()
+    {
+        handle?.Dispose();
+
+        handle = null;
+        texture = null;
+    }
 }
 
 internal sealed class CPUTexture2D_TextureHandle<TTexture>(
@@ -399,9 +407,9 @@ internal sealed class CPUTexture2D_TextureHandle<TTexture>(
 
     public override void Dispose()
     {
-        handle.Dispose();
+        handle?.Dispose();
 
-        handle = default;
+        handle = null;
         texture = default;
     }
 }
