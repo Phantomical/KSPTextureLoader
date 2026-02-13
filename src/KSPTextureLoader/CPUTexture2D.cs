@@ -257,6 +257,15 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, IDisposable
                     texture.mipmapCount
                 )
             ),
+            TextureFormat.BC7 => new CPUTexture2D_TextureHandle<BC7>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
             _ => new CPUTexture2D_Texture(handle),
         };
     }
