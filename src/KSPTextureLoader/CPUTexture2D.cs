@@ -57,6 +57,177 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, IDisposable
 
     public virtual void Dispose() { }
 
+    /// <summary>
+    /// Create a new CPUTexture2D that wraps an existing texture handle.
+    /// </summary>
+    /// <param name="handle"></param>
+    /// <returns></returns>
+    public static CPUTexture2D Create(TextureHandle<Texture2D> handle)
+    {
+        var texture = handle.GetTexture();
+        if (!texture.isReadable)
+            throw new Exception($"texture {texture.name} is not readable");
+
+        return texture.format switch
+        {
+            TextureFormat.Alpha8 => new CPUTexture2D_TextureHandle<Alpha8>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            TextureFormat.R8 => new CPUTexture2D_TextureHandle<R8>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            TextureFormat.RG16 => new CPUTexture2D_TextureHandle<RG16>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            TextureFormat.RGB24 => new CPUTexture2D_TextureHandle<RGB24>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            TextureFormat.RGBA32 => new CPUTexture2D_TextureHandle<RGBA32>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            TextureFormat.ARGB32 => new CPUTexture2D_TextureHandle<ARGB32>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            TextureFormat.BGRA32 => new CPUTexture2D_TextureHandle<BGRA32>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            TextureFormat.R16 => new CPUTexture2D_TextureHandle<R16>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            TextureFormat.RGB565 => new CPUTexture2D_TextureHandle<RGB565>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            TextureFormat.RGBA4444 => new CPUTexture2D_TextureHandle<RGBA4444>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            TextureFormat.ARGB4444 => new CPUTexture2D_TextureHandle<ARGB4444>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            TextureFormat.RFloat => new CPUTexture2D_TextureHandle<RFloat>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            TextureFormat.RGFloat => new CPUTexture2D_TextureHandle<RGFloat>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            TextureFormat.RGBAFloat => new CPUTexture2D_TextureHandle<RGBAFloat>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            TextureFormat.RHalf => new CPUTexture2D_TextureHandle<RHalf>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            TextureFormat.RGHalf => new CPUTexture2D_TextureHandle<RGHalf>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            TextureFormat.RGBAHalf => new CPUTexture2D_TextureHandle<RGBAHalf>(
+                handle,
+                new(
+                    texture.GetRawTextureData<byte>(),
+                    texture.width,
+                    texture.height,
+                    texture.mipmapCount
+                )
+            ),
+            _ => new CPUTexture2D_Texture(handle),
+        };
+    }
+
+    #region Internal Helpers
     struct MipProperties
     {
         public int width;
@@ -164,6 +335,41 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, IDisposable
             Allocator.Invalid
         );
     }
+    #endregion
+}
+
+internal sealed class CPUTexture2D_Texture : CPUTexture2D
+{
+    TextureHandle<Texture2D> handle;
+    Texture2D texture;
+
+    public override int Width => texture.width;
+
+    public override int Height => texture.height;
+
+    public override int MipCount => texture.mipmapCount;
+
+    public override TextureFormat Format => texture.format;
+
+    public CPUTexture2D_Texture(TextureHandle<Texture2D> handle)
+    {
+        using (handle)
+        {
+            this.texture = handle.GetTexture();
+            this.handle = handle.Acquire();
+        }
+    }
+
+    public override Color GetPixel(int x, int y, int mipLevel = 0) =>
+        texture.GetPixel(x, y, mipLevel);
+
+    public override Color32 GetPixel32(int x, int y, int mipLevel = 0) =>
+        texture.GetPixel(x, y, mipLevel);
+
+    public override Color GetPixelBilinear(float u, float v, int mipLevel = 0) =>
+        texture.GetPixelBilinear(u, v, mipLevel);
+
+    public override NativeArray<byte> GetRawTextureData() => texture.GetRawTextureData<byte>();
 }
 
 internal sealed class CPUTexture2D_TextureHandle<TTexture>(
