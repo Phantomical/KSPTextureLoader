@@ -102,16 +102,10 @@ partial class CPUTexture2D
         // BC7 Decoder
         // ================================================================
 
-        struct BitReader
+        struct BitReader(Block block)
         {
-            Block block;
-            int bitPos;
-
-            public BitReader(Block block)
-            {
-                this.block = block;
-                bitPos = 0;
-            }
+            Block block = block;
+            int bitPos = 0;
 
             public int ReadBits(int count)
             {
