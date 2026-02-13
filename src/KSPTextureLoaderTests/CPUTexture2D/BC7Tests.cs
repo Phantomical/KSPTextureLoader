@@ -1465,10 +1465,14 @@ public class BC7Tests : CPUTexture2DTests
         for (int bx = 0; bx < 4; bx++)
         {
             var block = BuildGradientMode6(
-                bx * 30, bx * 30 + 20,         // R: increases with column
-                by * 25, by * 25 + 20,          // G: increases with row
-                127 - bx * 30, 117 - bx * 30,  // B: decreases with column
-                60 + by * 10, 80 + by * 10      // A: increases with row
+                bx * 30,
+                bx * 30 + 20, // R: increases with column
+                by * 25,
+                by * 25 + 20, // G: increases with row
+                127 - bx * 30,
+                117 - bx * 30, // B: decreases with column
+                60 + by * 10,
+                80 + by * 10 // A: increases with row
             );
             Array.Copy(block, 0, blockData, (by * 4 + bx) * 16, 16);
         }
@@ -1506,9 +1510,9 @@ public class BC7Tests : CPUTexture2DTests
     {
         // 8x8 texture = 2x2 grid of blocks with distinct color ranges
         var blockData = new byte[4 * 16];
-        var b0 = BuildGradientMode6(10, 60, 5, 15, 0, 10, 100, 127);   // dark reds
-        var b1 = BuildGradientMode6(5, 20, 30, 100, 10, 30, 90, 120);  // greens
-        var b2 = BuildGradientMode6(0, 15, 10, 25, 50, 120, 80, 110);  // blues
+        var b0 = BuildGradientMode6(10, 60, 5, 15, 0, 10, 100, 127); // dark reds
+        var b1 = BuildGradientMode6(5, 20, 30, 100, 10, 30, 90, 120); // greens
+        var b2 = BuildGradientMode6(0, 15, 10, 25, 50, 120, 80, 110); // blues
         var b3 = BuildGradientMode6(80, 127, 60, 100, 40, 90, 110, 127); // bright mix
         Array.Copy(b0, 0, blockData, 0, 16);
         Array.Copy(b1, 0, blockData, 16, 16);
@@ -1532,12 +1536,7 @@ public class BC7Tests : CPUTexture2DTests
                 assertColorEquals($"VsTex2D({x},{y})", actual, expected, BC7Tol);
 
                 Color32 actual32 = bc7.GetPixel32(x, y);
-                assertColor32Equals(
-                    $"VsTex2D.C32({x},{y})",
-                    actual32,
-                    (Color32)expected,
-                    1
-                );
+                assertColor32Equals($"VsTex2D.C32({x},{y})", actual32, (Color32)expected, 1);
             }
         }
         finally
