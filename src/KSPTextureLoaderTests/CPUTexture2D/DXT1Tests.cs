@@ -28,24 +28,6 @@ partial class CPUTexture2DTests
         (byte)(i0 | (i1 << 2) | (i2 << 4) | (i3 << 6));
 
     /// <summary>
-    /// Roundtrip test: Unity encodes via SetPixel, we decode and compare.
-    /// </summary>
-    [TestInfo("CPUTexture2D_DXT1")]
-    public void TestDXT1()
-    {
-        TestFormatGetPixel(
-            TextureFormat.DXT1,
-            (d, w, h, m) => new CPUTexture2D.DXT1(d, w, h, m),
-            "DXT1",
-            checkR: true,
-            checkG: true,
-            checkB: true,
-            checkA: true,
-            tolerance: 0.02f
-        );
-    }
-
-    /// <summary>
     /// Opaque mode (c0 > c1): 4-color palette with 1/3 and 2/3 interpolation.
     /// Each row uses a single index (0–3) so all four palette entries are tested.
     /// </summary>

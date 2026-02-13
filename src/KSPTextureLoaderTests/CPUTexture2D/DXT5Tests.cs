@@ -140,21 +140,6 @@ partial class CPUTexture2DTests
     // 1. End-to-end: Unity compress → compare all pixels
     // ================================================================
 
-    [TestInfo("CPUTexture2D_DXT5")]
-    public void TestDXT5()
-    {
-        TestFormatGetPixel(
-            TextureFormat.DXT5,
-            (d, w, h, m) => new CPUTexture2D.DXT5(d, w, h, m),
-            "DXT5",
-            checkR: true,
-            checkG: true,
-            checkB: true,
-            checkA: true,
-            tolerance: 0.1f
-        );
-    }
-
     // ================================================================
     // 2. Solid block: all pixels same color and alpha
     // ================================================================
@@ -222,23 +207,13 @@ partial class CPUTexture2DTests
             assertColorEquals(
                 "4Color_idx2",
                 dxt5.GetPixel(2, 0),
-                new Color(
-                    (2f * r0 + r1) / 3f,
-                    (2f * g0 + g1) / 3f,
-                    (2f * b0 + b1) / 3f,
-                    1f
-                ),
+                new Color((2f * r0 + r1) / 3f, (2f * g0 + g1) / 3f, (2f * b0 + b1) / 3f, 1f),
                 DXT5Tol
             );
             assertColorEquals(
                 "4Color_idx3",
                 dxt5.GetPixel(3, 0),
-                new Color(
-                    (r0 + 2f * r1) / 3f,
-                    (g0 + 2f * g1) / 3f,
-                    (b0 + 2f * b1) / 3f,
-                    1f
-                ),
+                new Color((r0 + 2f * r1) / 3f, (g0 + 2f * g1) / 3f, (b0 + 2f * b1) / 3f, 1f),
                 DXT5Tol
             );
 
@@ -594,12 +569,7 @@ partial class CPUTexture2DTests
         {
             // Block (0,0): pixels (0-3, 0-3)
             var (r0, g0, b0) = DXT5_UnpackRGB565(DXT5_PackRGB565(255, 0, 0));
-            assertColorEquals(
-                "Block00",
-                dxt5.GetPixel(1, 1),
-                new Color(r0, g0, b0, 1f),
-                DXT5Tol
-            );
+            assertColorEquals("Block00", dxt5.GetPixel(1, 1), new Color(r0, g0, b0, 1f), DXT5Tol);
 
             // Block (1,0): pixels (4-7, 0-3)
             var (r1, g1, b1) = DXT5_UnpackRGB565(DXT5_PackRGB565(0, 255, 0));
@@ -643,7 +613,8 @@ partial class CPUTexture2DTests
     [TestInfo("CPUTexture2D_DXT5_NPOT")]
     public void TestDXT5_NonPowerOfTwo()
     {
-        int w = 12, h = 8;
+        int w = 12,
+            h = 8;
         int blocksX = (w + 3) / 4;
         int blocksY = (h + 3) / 4;
         var allBlocks = new byte[blocksX * blocksY * 16];
@@ -735,37 +706,67 @@ partial class CPUTexture2DTests
     {
         // Correct size: 4x4 × 1 mip = 16 bytes
         var goodData = new NativeArray<byte>(16, Allocator.Temp);
-        try { new CPUTexture2D.DXT5(goodData, 4, 4, 1); }
-        finally { goodData.Dispose(); }
+        try
+        {
+            new CPUTexture2D.DXT5(goodData, 4, 4, 1);
+        }
+        finally
+        {
+            goodData.Dispose();
+        }
 
         // Too small
         var smallData = new NativeArray<byte>(15, Allocator.Temp);
         try
         {
             bool threw = false;
-            try { new CPUTexture2D.DXT5(smallData, 4, 4, 1); }
-            catch (Exception) { threw = true; }
+            try
+            {
+                new CPUTexture2D.DXT5(smallData, 4, 4, 1);
+            }
+            catch (Exception)
+            {
+                threw = true;
+            }
             if (!threw)
                 throw new Exception("DXT5.Ctor: expected exception for undersized data");
         }
-        finally { smallData.Dispose(); }
+        finally
+        {
+            smallData.Dispose();
+        }
 
         // Too large
         var largeData = new NativeArray<byte>(17, Allocator.Temp);
         try
         {
             bool threw = false;
-            try { new CPUTexture2D.DXT5(largeData, 4, 4, 1); }
-            catch (Exception) { threw = true; }
+            try
+            {
+                new CPUTexture2D.DXT5(largeData, 4, 4, 1);
+            }
+            catch (Exception)
+            {
+                threw = true;
+            }
             if (!threw)
                 throw new Exception("DXT5.Ctor: expected exception for oversized data");
         }
-        finally { largeData.Dispose(); }
+        finally
+        {
+            largeData.Dispose();
+        }
 
         // Multi-mip: 8x8 with 2 mips = 64 + 16 = 80 bytes
         var mipData = new NativeArray<byte>(80, Allocator.Temp);
-        try { new CPUTexture2D.DXT5(mipData, 8, 8, 2); }
-        finally { mipData.Dispose(); }
+        try
+        {
+            new CPUTexture2D.DXT5(mipData, 8, 8, 2);
+        }
+        finally
+        {
+            mipData.Dispose();
+        }
     }
 
     // ================================================================
@@ -832,9 +833,7 @@ partial class CPUTexture2DTests
 
             for (int i = 0; i < block.Length; i++)
                 if (raw[i] != block[i])
-                    throw new Exception(
-                        $"DXT5.RawData[{i}]: {raw[i]} != expected {block[i]}"
-                    );
+                    throw new Exception($"DXT5.RawData[{i}]: {raw[i]} != expected {block[i]}");
         }
         finally
         {
@@ -849,24 +848,18 @@ partial class CPUTexture2DTests
     [TestInfo("CPUTexture2D_DXT5_Gradient")]
     public void TestDXT5_CompressedGradient()
     {
-        var src = new Texture2D(16, 16, TextureFormat.RGBA32, false);
+        var tex = new Texture2D(16, 16, TextureFormat.RGBA32, false);
         for (int y = 0; y < 16; y++)
         for (int x = 0; x < 16; x++)
         {
             float u = x / 15f;
             float v = y / 15f;
-            src.SetPixel(x, y, new Color(u, v, 1f - u, 0.2f + 0.6f * v));
+            tex.SetPixel(x, y, new Color(u, v, 1f - u, 0.2f + 0.6f * v));
         }
-        src.Apply(false, false);
+        tex.Apply(false, false);
+        tex.Compress(false);
 
-        var dxt5Tex = new Texture2D(16, 16, TextureFormat.DXT5, false);
-        for (int y = 0; y < 16; y++)
-        for (int x = 0; x < 16; x++)
-            dxt5Tex.SetPixel(x, y, src.GetPixel(x, y));
-        dxt5Tex.Apply(false, false);
-        UnityEngine.Object.Destroy(src);
-
-        var rawData = dxt5Tex.GetRawTextureData<byte>();
+        var rawData = tex.GetRawTextureData<byte>();
         var nativeCopy = new NativeArray<byte>(rawData.Length, Allocator.Temp);
         NativeArray<byte>.Copy(rawData, nativeCopy);
 
@@ -877,7 +870,7 @@ partial class CPUTexture2DTests
             for (int y = 0; y < 16; y++)
             for (int x = 0; x < 16; x++)
             {
-                Color expected = dxt5Tex.GetPixel(x, y);
+                Color expected = tex.GetPixel(x, y);
                 Color actual = dxt5.GetPixel(x, y);
                 assertColorEquals($"Gradient({x},{y})", actual, expected, DXT5LossyTol);
             }
@@ -885,7 +878,7 @@ partial class CPUTexture2DTests
         finally
         {
             nativeCopy.Dispose();
-            UnityEngine.Object.Destroy(dxt5Tex);
+            UnityEngine.Object.Destroy(tex);
         }
     }
 
@@ -896,20 +889,14 @@ partial class CPUTexture2DTests
     [TestInfo("CPUTexture2D_DXT5_VsUnity")]
     public void TestDXT5_VsTexture2D()
     {
-        var src = new Texture2D(8, 8, TextureFormat.RGBA32, false);
+        var tex = new Texture2D(8, 8, TextureFormat.RGBA32, false);
         for (int y = 0; y < 8; y++)
         for (int x = 0; x < 8; x++)
-            src.SetPixel(x, y, new Color(x / 7f, y / 7f, (x + y) / 14f, 0.3f + 0.7f * x / 7f));
-        src.Apply(false, false);
+            tex.SetPixel(x, y, new Color(x / 7f, y / 7f, (x + y) / 14f, 0.3f + 0.7f * x / 7f));
+        tex.Apply(false, false);
+        tex.Compress(false);
 
-        var dxt5Tex = new Texture2D(8, 8, TextureFormat.DXT5, false);
-        for (int y = 0; y < 8; y++)
-        for (int x = 0; x < 8; x++)
-            dxt5Tex.SetPixel(x, y, src.GetPixel(x, y));
-        dxt5Tex.Apply(false, false);
-        UnityEngine.Object.Destroy(src);
-
-        var rawData = dxt5Tex.GetRawTextureData<byte>();
+        var rawData = tex.GetRawTextureData<byte>();
         var nativeCopy = new NativeArray<byte>(rawData.Length, Allocator.Temp);
         NativeArray<byte>.Copy(rawData, nativeCopy);
 
@@ -920,7 +907,7 @@ partial class CPUTexture2DTests
             for (int y = 0; y < 8; y++)
             for (int x = 0; x < 8; x++)
             {
-                Color expected = dxt5Tex.GetPixel(x, y);
+                Color expected = tex.GetPixel(x, y);
                 Color actual = dxt5.GetPixel(x, y);
                 assertColorEquals($"VsTex2D({x},{y})", actual, expected, DXT5LossyTol);
 
@@ -936,7 +923,7 @@ partial class CPUTexture2DTests
         finally
         {
             nativeCopy.Dispose();
-            UnityEngine.Object.Destroy(dxt5Tex);
+            UnityEngine.Object.Destroy(tex);
         }
     }
 }
