@@ -1,10 +1,8 @@
 using System;
 using System.Runtime.CompilerServices;
-using KSPTextureLoader.CPU;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
-using UnityEngine.Experimental.Rendering;
 
 namespace KSPTextureLoader;
 
@@ -35,7 +33,7 @@ public interface ICPUTexture2D
 public abstract partial class CPUTexture2D : ICPUTexture2D, IDisposable
 {
     const float Byte2Float = 1f / 255f;
-    const float Float2Byte = 255f;
+    const float UShort2Float = 1f / 65535f;
 
     public abstract int Width { get; }
     public abstract int Height { get; }

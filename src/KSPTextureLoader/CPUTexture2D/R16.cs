@@ -1,6 +1,4 @@
 using System;
-using System.Runtime.InteropServices.WindowsRuntime;
-using KSPTextureLoader.CPU;
 using Unity.Collections;
 using UnityEngine;
 
@@ -43,7 +41,7 @@ partial class CPUTexture2D
 
         public Color GetPixel(int x, int y, int mipLevel = 0)
         {
-            float v = GetPixelValue(x, y, mipLevel) * CPUTextureHelper.UShort2Float;
+            float v = GetPixelValue(x, y, mipLevel) * UShort2Float;
             return new Color(v, 1f, 1f, 1f);
         }
 
