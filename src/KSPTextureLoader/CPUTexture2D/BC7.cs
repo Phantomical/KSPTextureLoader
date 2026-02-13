@@ -8,23 +8,27 @@ partial class CPUTexture2D
 {
     public readonly struct BC7 : ICPUTexture2D
     {
-        const int BytesPerBlock = 16;
+        struct Block(ulong lo, ulong hi)
+        {
+            public ulong lo = lo;
+            public ulong hi = hi;
+        }
 
         public int Width { get; }
         public int Height { get; }
         public int MipCount { get; }
         public TextureFormat Format => TextureFormat.BC7;
 
-        readonly NativeArray<byte> data;
+        readonly NativeArray<Block> data;
 
-        public BC7(NativeArray<byte> data, int width, int height, int mipCount)
+        public unsafe BC7(NativeArray<byte> data, int width, int height, int mipCount)
         {
-            this.data = data;
+            this.data = data.Reinterpret<Block>(sizeof(byte));
             this.Width = width;
             this.Height = height;
             this.MipCount = mipCount;
 
-            int expected = GetTotalByteSize(width, height, mipCount);
+            int expected = GetTotalBlockCount(width, height, mipCount) * sizeof(Block);
             if (expected != data.Length)
                 throw new Exception(
                     $"data size did not match expected texture size (expected {expected}, but got {data.Length} instead)"
@@ -37,13 +41,13 @@ partial class CPUTexture2D
         {
             int mipWidth = Width;
             int mipHeight = Height;
-            int byteOffset = 0;
+            int blockOffset = 0;
 
             for (int m = 0; m < mipLevel; m++)
             {
                 int bw = (mipWidth + 3) / 4;
                 int bh = (mipHeight + 3) / 4;
-                byteOffset += bw * bh * BytesPerBlock;
+                blockOffset += bw * bh;
                 mipWidth = Math.Max(mipWidth >> 1, 1);
                 mipHeight = Math.Max(mipHeight >> 1, 1);
             }
@@ -57,11 +61,10 @@ partial class CPUTexture2D
             int localX = x % 4;
             int localY = y % 4;
 
-            int blockOffset = byteOffset + (blockY * blocksPerRow + blockX) * BytesPerBlock;
+            int blockIndex = blockOffset + blockY * blocksPerRow + blockX;
 
             DecodeBC7Pixel(
-                data,
-                blockOffset,
+                data[blockIndex],
                 localX,
                 localY,
                 out byte r,
@@ -75,24 +78,24 @@ partial class CPUTexture2D
         public Color GetPixelBilinear(float u, float v, int mipLevel = 0) =>
             CPUTexture2D.GetPixelBilinear(in this, u, v, mipLevel);
 
-        public NativeArray<T> GetRawTextureData<T>()
+        public unsafe NativeArray<T> GetRawTextureData<T>()
             where T : unmanaged
         {
-            return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(byte));
+            return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(Block));
         }
 
-        static int GetTotalByteSize(int width, int height, int mipCount)
+        static int GetTotalBlockCount(int width, int height, int mipCount)
         {
-            int size = 0;
+            int count = 0;
             for (int m = 0; m < mipCount; m++)
             {
                 int bw = (width + 3) / 4;
                 int bh = (height + 3) / 4;
-                size += bw * bh * BytesPerBlock;
+                count += bw * bh;
                 width = Math.Max(width >> 1, 1);
                 height = Math.Max(height >> 1, 1);
             }
-            return size;
+            return count;
         }
 
         // ================================================================
@@ -101,14 +104,12 @@ partial class CPUTexture2D
 
         struct BitReader
         {
-            NativeArray<byte> data;
-            int offset;
+            Block block;
             int bitPos;
 
-            public BitReader(NativeArray<byte> data, int offset)
+            public BitReader(Block block)
             {
-                this.data = data;
-                this.offset = offset;
+                this.block = block;
                 bitPos = 0;
             }
 
@@ -117,9 +118,9 @@ partial class CPUTexture2D
                 int result = 0;
                 for (int i = 0; i < count; i++)
                 {
-                    int byteIdx = offset + (bitPos >> 3);
-                    int bitIdx = bitPos & 7;
-                    result |= ((data[byteIdx] >> bitIdx) & 1) << i;
+                    ulong word = bitPos < 64 ? block.lo : block.hi;
+                    int bitIdx = bitPos & 63;
+                    result |= (int)((word >> bitIdx) & 1) << i;
                     bitPos++;
                 }
                 return result;
@@ -343,8 +344,7 @@ partial class CPUTexture2D
         }
 
         static void DecodeBC7Pixel(
-            NativeArray<byte> data,
-            int blockOffset,
+            Block block,
             int localX,
             int localY,
             out byte r,
@@ -353,7 +353,7 @@ partial class CPUTexture2D
             out byte a
         )
         {
-            var reader = new BitReader(data, blockOffset);
+            var reader = new BitReader(block);
 
             // Determine mode (0-7) from leading bits
             int mode = 0;
