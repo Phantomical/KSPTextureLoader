@@ -39,7 +39,7 @@ partial class CPUTexture2D
             y = Mathf.Clamp(y, 0, p.height - 1);
 
             int byteIdx = (p.offset + y * p.width + x) * bpp;
-            return new Color32(data[byteIdx], data[byteIdx + 1], 0, 255);
+            return new Color32(data[byteIdx], data[byteIdx + 1], 255, 255);
         }
 
         public Color GetPixel(int x, int y, int mipLevel = 0) => GetPixel32(x, y, mipLevel);

@@ -46,13 +46,13 @@ partial class CPUTexture2D
         public Color32 GetPixel32(int x, int y, int mipLevel = 0)
         {
             var a = GetPixelValue(x, y, mipLevel);
-            return new Color32(0, 0, 0, a);
+            return new Color32(255, 255, 255, a);
         }
 
         public Color GetPixel(int x, int y, int mipLevel = 0)
         {
             var a = GetPixelValue(x, y, mipLevel);
-            return new Color(0f, 0f, 0f, a * Byte2Float);
+            return new Color(1f, 1f, 1f, a * Byte2Float);
         }
 
         public Color GetPixelBilinear(float u, float v, int mipLevel = 0) =>

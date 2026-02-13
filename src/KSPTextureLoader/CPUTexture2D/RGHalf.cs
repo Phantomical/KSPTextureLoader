@@ -43,7 +43,7 @@ partial class CPUTexture2D
             float r = data[idx];
             float g = data[idx + 1];
 
-            return new Color(r, g, 0f, 1f);
+            return new Color(r, g, 1f, 1f);
         }
 
         public Color32 GetPixel32(int x, int y, int mipLevel = 0) => GetPixel(x, y, mipLevel);
