@@ -31,4 +31,19 @@ public class CPUTextureHandle : IDisposable, ISetException, ICompleteHandler
     {
         exception = ex;
     }
+
+    public void Dispose()
+    {
+        throw new NotImplementedException();
+    }
+
+    public void SetException(ExceptionDispatchInfo ex)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void WaitUntilComplete()
+    {
+        throw new NotImplementedException();
+    }
 }
