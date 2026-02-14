@@ -13,9 +13,9 @@ public class CPUTextureHandle : CustomYieldInstruction, IDisposable, ISetExcepti
 {
     private static readonly ProfilerMarker CompleteMarker = new("CPUTextureHandle.Complete");
 
-    internal int RefCount { get; private set; } = 1;
-    internal string Path { get; private set; }
-    internal string AssetBundle { get; private set; }
+    public int RefCount { get; private set; } = 1;
+    public string Path { get; private set; }
+    public string AssetBundle { get; private set; }
 
     private CPUTexture2D texture;
     private ExceptionDispatchInfo exception;
@@ -25,8 +25,8 @@ public class CPUTextureHandle : CustomYieldInstruction, IDisposable, ISetExcepti
     public bool IsComplete => coroutine is null;
     public bool IsError => exception is not null;
 
-    internal event Action<CPUTextureHandle> OnCompleted;
-    internal event Action<CPUTextureHandle, Exception> OnError;
+    public event Action<CPUTextureHandle> OnCompleted;
+    public event Action<CPUTextureHandle, Exception> OnError;
 
     public override bool keepWaiting => !IsComplete;
 
