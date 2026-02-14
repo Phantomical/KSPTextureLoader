@@ -5,8 +5,6 @@ using System.IO;
 using System.Threading.Tasks;
 using KSPTextureLoader.Format;
 using KSPTextureLoader.Utils;
-using Smooth.Algebraics;
-using Steamworks;
 using Unity.Jobs;
 using Unity.Profiling;
 using UnityEngine;
@@ -158,6 +156,7 @@ public partial class TextureLoader
             {
                 jhandle.Complete();
                 handle.SetTexture(tcs.Task.Result);
+                yield break;
             }
             catch (NotSupportedException)
             {
@@ -168,7 +167,10 @@ public partial class TextureLoader
 
         using var texHandle = LoadTexture<Texture2D>(handle.Path, options);
         if (!texHandle.IsComplete)
-            yield return texHandle;
+        {
+            using (handle.WithCompleteHandler(texHandle.handle))
+                yield return texHandle;
+        }
 
         handle.SetTexture(CPUTexture2D.Create(texHandle.Acquire()), texHandle.AssetBundle);
     }
