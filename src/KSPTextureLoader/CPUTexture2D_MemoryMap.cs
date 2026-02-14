@@ -8,7 +8,6 @@ internal sealed class CPUTexture2D_MemoryMapped<TTexture> : CPUTexture2D<TTextur
 {
     MemoryMappedFile mmf;
     MemoryMappedViewAccessor accessor;
-    bool disposed;
 
     internal CPUTexture2D_MemoryMapped(
         MemoryMappedFile mmf,
