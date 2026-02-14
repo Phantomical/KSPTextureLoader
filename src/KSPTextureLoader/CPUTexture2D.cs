@@ -42,7 +42,7 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, IDisposable
     public abstract int MipCount { get; }
     public abstract TextureFormat Format { get; }
 
-    private protected CPUTexture2D() { }
+    protected CPUTexture2D() { }
 
     public abstract Color GetPixel(int x, int y, int mipLevel = 0);
 
