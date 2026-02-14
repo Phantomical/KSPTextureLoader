@@ -36,6 +36,9 @@ internal sealed class CPUTexture2D_Texture : CPUTexture2D
 
     public override NativeArray<byte> GetRawTextureData() => texture.GetRawTextureData<byte>();
 
+    public override Texture2D CompileToTexture(bool readable = false) =>
+        CloneReadableTexture(texture, readable);
+
     public override void Dispose()
     {
         handle?.Dispose();

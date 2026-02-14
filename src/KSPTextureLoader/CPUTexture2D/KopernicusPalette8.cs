@@ -1,6 +1,8 @@
 using System;
+using KSPTextureLoader.Jobs;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Jobs;
 using UnityEngine;
 
 namespace KSPTextureLoader;
@@ -11,7 +13,7 @@ partial class CPUTexture2D
     /// Kopernicus custom 8-bit palette format: 256-entry RGBA32 palette (1024 bytes)
     /// followed by 8bpp color indices (one pixel per byte).
     /// </summary>
-    public readonly struct KopernicusPalette8 : ICPUTexture2D
+    public readonly struct KopernicusPalette8 : ICPUTexture2D, ICompileToTexture
     {
         const int PaletteEntries = 256;
         const int PaletteBytes = PaletteEntries * 4;
@@ -19,7 +21,7 @@ partial class CPUTexture2D
         public int Width { get; }
         public int Height { get; }
         public int MipCount => 1;
-        public TextureFormat Format => TextureFormat.RGBA32;
+        public TextureFormat Format => default;
 
         readonly NativeArray<byte> data;
 
@@ -55,6 +57,34 @@ partial class CPUTexture2D
             where T : unmanaged
         {
             return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(byte));
+        }
+
+        public Texture2D CompileToTexture(bool readable)
+        {
+            var texture = TextureUtils.CreateUninitializedTexture2D(
+                Width,
+                Height,
+                TextureFormat.RGBA32
+            );
+            var data = new NativeArray<Color32>(
+                Width * Height,
+                Allocator.Temp,
+                NativeArrayOptions.UninitializedMemory
+            );
+            var job = new DecodeKopernicusPalette8bitJob
+            {
+                data = GetRawTextureData<byte>().GetSubArray(0, PaletteBytes + Width * Height),
+                colors = data,
+            };
+            var handle = job.Schedule();
+            JobHandle.ScheduleBatchedJobs();
+
+            var texdata = texture.GetRawTextureData<Color32>();
+            handle.Complete();
+            data.CopyTo(texdata);
+
+            texture.Apply(true, !readable);
+            return texture;
         }
     }
 }

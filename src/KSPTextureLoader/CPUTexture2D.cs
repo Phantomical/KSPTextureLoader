@@ -5,6 +5,8 @@ using System.Runtime.CompilerServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
+using UnityEngine.Rendering;
 
 namespace KSPTextureLoader;
 
@@ -24,6 +26,15 @@ public interface ICPUTexture2D
 }
 
 /// <summary>
+/// Interfaces for a type implementing <see cref="ICPUTexture2D"/> that wants
+/// to override how it is compiled to a texture.
+/// </summary>
+public interface ICompileToTexture
+{
+    public Texture2D CompileToTexture(bool readable);
+}
+
+/// <summary>
 /// A texture that is only loaded into memory, but not into VRAM if possible.
 /// </summary>
 ///
@@ -32,7 +43,7 @@ public interface ICPUTexture2D
 /// of the actual file on disk, or the texture data for a <see cref="Texture2D" />
 /// loaded from an asset bundle.
 /// </remarks>
-public abstract partial class CPUTexture2D : ICPUTexture2D, IDisposable
+public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, IDisposable
 {
     protected const float Byte2Float = 1f / 255f;
     protected const float UShort2Float = 1f / 65535f;
@@ -54,6 +65,19 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, IDisposable
 
     public NativeArray<T> GetRawTextureData<T>()
         where T : unmanaged => GetRawTextureData().Reinterpret<T>(sizeof(byte));
+
+    public virtual Texture2D CompileToTexture(bool readable = false)
+    {
+        var texture = TextureUtils.CreateUninitializedTexture2D(
+            Width,
+            Height,
+            MipCount,
+            GraphicsFormatUtility.GetGraphicsFormat(Format, false)
+        );
+        texture.LoadRawTextureData(GetRawTextureData<byte>());
+        texture.Apply(false, !readable);
+        return texture;
+    }
 
     public virtual void Dispose() { }
 
@@ -705,6 +729,36 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, IDisposable
             };
         }
     }
+
+    private protected static Texture2D CloneReadableTexture(Texture2D src, bool readable = false)
+    {
+        if (SystemInfo.copyTextureSupport.HasFlag(CopyTextureSupport.Basic))
+        {
+            var flags = readable
+                ? default
+                : TextureUtils.InternalTextureCreationFlags.DontCreateSharedTextureData;
+            var copy = TextureUtils.CreateUninitializedTexture2D(
+                src.width,
+                src.height,
+                src.mipmapCount,
+                src.graphicsFormat,
+                flags
+            );
+
+            if (!readable)
+                TextureUtils.MarkExternalTextureAsUnreadable(copy);
+
+            Graphics.CopyTexture(src, copy);
+            return copy;
+        }
+        else
+        {
+            var copy = Texture2D.Instantiate(src);
+            if (!readable)
+                copy.Apply(false, true);
+            return copy;
+        }
+    }
     #endregion
 }
 
@@ -742,11 +796,49 @@ public class CPUTexture2D<TTexture>(TTexture texture) : CPUTexture2D
     public sealed override NativeArray<byte> GetRawTextureData() =>
         texture.GetRawTextureData<byte>();
 
+    public override Texture2D CompileToTexture(bool readable = false)
+    {
+        if (CompileToTextureFunc is not null)
+            return CompileToTextureFunc(ref texture, readable);
+
+        if (Format == default)
+            throw new NotSupportedException(
+                $"Cannot compile a texture format accessor of type {typeof(TTexture).Name} to a Texture2D"
+            );
+
+        return base.CompileToTexture();
+    }
+
     public override void Dispose()
     {
         DisposeFunc?.Invoke(ref texture);
         texture = default;
     }
+
+    #region CompileToTexture Helpers
+    delegate Texture2D CompileToTextureDelegate(ref TTexture texture, bool readable);
+
+    static readonly CompileToTextureDelegate CompileToTextureFunc = MakeCompileToTextureDelegate();
+
+    static CompileToTextureDelegate MakeCompileToTextureDelegate()
+    {
+        if (!typeof(ICompileToTexture).IsAssignableFrom(typeof(TTexture)))
+            return null;
+
+        var method = typeof(CPUTexture2D<TTexture>)
+            .GetMethod(nameof(DoCompileToTexture), BindingFlags.Static | BindingFlags.NonPublic)
+            .MakeGenericMethod(typeof(TTexture));
+
+        return (CompileToTextureDelegate)
+            Delegate.CreateDelegate(typeof(CompileToTextureDelegate), method);
+    }
+
+    static Texture2D DoCompileToTexture<T>(ref T texture, bool readable)
+        where T : ICompileToTexture
+    {
+        return texture.CompileToTexture(readable);
+    }
+    #endregion
 
     #region Dispose Helpers
     delegate void DisposeDelegate(ref TTexture texture);
