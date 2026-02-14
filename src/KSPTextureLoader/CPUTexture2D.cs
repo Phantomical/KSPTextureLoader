@@ -1,5 +1,6 @@
 using System;
 using System.IO.MemoryMappedFiles;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -55,6 +56,19 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, IDisposable
         where T : unmanaged => GetRawTextureData().Reinterpret<T>(sizeof(byte));
 
     public virtual void Dispose() { }
+
+    /// <summary>
+    /// Create a <see cref="CPUTexture2D"/> that wraps a type that implements
+    /// <see cref="ICPUTexture2D"/>.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="texture"></param>
+    /// <returns></returns>
+    public static CPUTexture2D Create<T>(T texture)
+        where T : ICPUTexture2D
+    {
+        return new CPUTexture2D<T>(texture);
+    }
 
     /// <summary>
     /// Create a new CPUTexture2D that wraps an existing texture handle.
@@ -690,6 +704,71 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, IDisposable
                 _ => 1f,
             };
         }
+    }
+    #endregion
+}
+
+/// <summary>
+/// A <see cref="CPUTexture2D"/> that wraps an existing implementation of
+/// <see cref="ICPUTexture2D"/>.
+/// </summary>
+///
+/// <remarks>
+/// This is meant to allow you to easily implement <see cref="CPUTexture2D"/>
+/// variants that acquire the texture data from some other object. It takes
+/// care of implementing all the necessary methods, while allowing you to
+/// override <see cref="Dispose"/> for your own data.
+/// </remarks>
+public class CPUTexture2D<TTexture>(TTexture texture) : CPUTexture2D
+    where TTexture : ICPUTexture2D
+{
+    TTexture texture = texture;
+
+    public sealed override int Width => texture.Width;
+    public sealed override int Height => texture.Height;
+    public sealed override int MipCount => texture.MipCount;
+    public sealed override TextureFormat Format => texture.Format;
+    public TTexture Texture => texture;
+
+    public sealed override Color GetPixel(int x, int y, int mipLevel = 0) =>
+        texture.GetPixel(x, y, mipLevel);
+
+    public sealed override Color32 GetPixel32(int x, int y, int mipLevel = 0) =>
+        texture.GetPixel32(x, y, mipLevel);
+
+    public sealed override Color GetPixelBilinear(float u, float v, int mipLevel = 0) =>
+        texture.GetPixelBilinear(u, v, mipLevel);
+
+    public sealed override NativeArray<byte> GetRawTextureData() =>
+        texture.GetRawTextureData<byte>();
+
+    public override void Dispose()
+    {
+        DisposeFunc?.Invoke(ref texture);
+        texture = default;
+    }
+
+    #region Dispose Helpers
+    delegate void DisposeDelegate(ref TTexture texture);
+
+    static readonly DisposeDelegate DisposeFunc = MakeDisposeDelegate();
+
+    static DisposeDelegate MakeDisposeDelegate()
+    {
+        if (!typeof(IDisposable).IsAssignableFrom(typeof(TTexture)))
+            return null;
+
+        var method = typeof(CPUTexture2D<TTexture>)
+            .GetMethod(nameof(DoDispose), BindingFlags.Static | BindingFlags.NonPublic)
+            .MakeGenericMethod(typeof(TTexture));
+
+        return (DisposeDelegate)Delegate.CreateDelegate(typeof(DisposeDelegate), method);
+    }
+
+    static void DoDispose<T>(ref T value)
+        where T : IDisposable
+    {
+        value.Dispose();
     }
     #endregion
 }
