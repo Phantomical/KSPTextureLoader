@@ -37,6 +37,9 @@ public partial class TextureLoader : MonoBehaviour
 
     void OnDestroy()
     {
+        Debug.LogError(
+            $"[KSPTextureLoader] TextureLoader was destroyed! This should never happen."
+        );
         Instance = null;
     }
 
