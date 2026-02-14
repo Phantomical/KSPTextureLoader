@@ -42,6 +42,22 @@ public class CPUTextureHandle : CustomYieldInstruction, IDisposable, ISetExcepti
     }
 
     /// <summary>
+    /// Create a <see cref="CPUTextureHandle"/> from an existing texture.
+    /// </summary>
+    /// <param name="path">A label to give this handle, this is only for debugging purposes.</param>
+    /// <param name="texture">The <see cref="CPUTexture2D"/> to use.</param>
+    ///
+    /// <remarks>
+    /// Be aware that this method takes ownership of <paramref name="texture"/>. Do not use it with
+    /// a <see cref="CPUTexture2D"/> that is already owned by another <see cref="CPUTextureHandle"/>.
+    /// </remarks>
+    public CPUTextureHandle(string path, CPUTexture2D texture)
+        : this(path)
+    {
+        this.texture = texture;
+    }
+
+    /// <summary>
     /// Get the CPU texture for this texture handle. Will block if the texture has
     /// not loaded yet and will throw an exception if the texture failed to load.
     /// </summary>
@@ -56,26 +72,6 @@ public class CPUTextureHandle : CustomYieldInstruction, IDisposable, ISetExcepti
             WaitUntilComplete();
 
         exception?.Throw();
-        return texture;
-    }
-
-    /// <summary>
-    /// Take ownership of the CPU texture referred to by this texture handle.
-    /// Consumes the current texture handle.
-    /// </summary>
-    ///
-    /// <remarks>
-    /// If the handle has only one reference then this will remove the texture
-    /// from the handle and return it.
-    /// </remarks>
-    public CPUTexture2D TakeTexture()
-    {
-        using var guard = this;
-        var texture = GetTexture();
-
-        if (RefCount == 1 && AssetBundle is null)
-            this.texture = null;
-
         return texture;
     }
 
