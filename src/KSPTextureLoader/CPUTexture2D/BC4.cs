@@ -219,7 +219,12 @@ partial class CPUTexture2D
                             if (px >= width)
                                 break;
 
-                            pixels[py * width + px] = new Color(decoded[row * 4 + col], 0f, 0f, 0f);
+                            pixels[py * width + px] = new Color32(
+                                (byte)(decoded[row * 4 + col] * Byte2Float),
+                                0,
+                                0,
+                                0
+                            );
                         }
                     }
                 }
