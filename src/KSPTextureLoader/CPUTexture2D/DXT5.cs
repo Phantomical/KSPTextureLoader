@@ -1,4 +1,7 @@
 using System;
+using KSPTextureLoader.Burst;
+using KSPTextureLoader.Utils;
+using Unity.Burst;
 using Unity.Collections;
 using UnityEngine;
 
@@ -6,6 +9,7 @@ namespace KSPTextureLoader;
 
 partial class CPUTexture2D
 {
+    [BurstCompile]
     public readonly struct DXT5 : ICPUTexture2D
     {
         struct Block(ulong alpha, ulong color)
@@ -53,6 +57,48 @@ partial class CPUTexture2D
             where T : unmanaged
         {
             return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(Block));
+        }
+
+        public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp)
+        {
+            return GetBlockPixels(
+                in this,
+                mipLevel,
+                allocator,
+                (NativeArray<Block> data) => new GetPixelsJob { blocks = data }
+            );
+        }
+
+        public NativeArray<Color32> GetPixels32(
+            int mipLevel = 0,
+            Allocator allocator = Allocator.Temp
+        )
+        {
+            return GetBlockPixels32(
+                in this,
+                mipLevel,
+                allocator,
+                (NativeArray<Block> data) => new GetPixelsJob { blocks = data }
+            );
+        }
+
+        [BurstCompile]
+        struct GetPixelsJob : IGetPixelsBlockJob
+        {
+            [ReadOnly]
+            public NativeArray<Block> blocks;
+
+            public FixedArray16<Color> DecodeBlock(int blockIdx)
+            {
+                var block = blocks[blockIdx];
+                var colors = DecodeDXT1Block(block.color);
+                var alphas = DecodeBC4Block(block.alpha);
+
+                for (int i = 0; i < 16; ++i)
+                    colors[i].a = alphas[i];
+
+                return colors;
+            }
         }
     }
 }

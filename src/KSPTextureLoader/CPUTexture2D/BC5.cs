@@ -1,8 +1,8 @@
 using System;
 using KSPTextureLoader.Burst;
+using KSPTextureLoader.Utils;
 using Unity.Burst;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 
 namespace KSPTextureLoader;
@@ -60,19 +60,11 @@ partial class CPUTexture2D
 
         public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp)
         {
-            return GetBlockPixels<BC5, Block, GetPixelsJob>(
+            return GetBlockPixels(
                 in this,
                 mipLevel,
                 allocator,
-                (blocks, pixels, blocksPerRow, width, height) =>
-                    new GetPixelsJob
-                    {
-                        blocks = blocks,
-                        pixels = pixels,
-                        blocksPerRow = blocksPerRow,
-                        width = width,
-                        height = height,
-                    }
+                (NativeArray<Block> data) => new GetPixelsJob { blocks = data }
             );
         }
 
@@ -81,121 +73,31 @@ partial class CPUTexture2D
             Allocator allocator = Allocator.Temp
         )
         {
-            return GetBlockPixels32<BC5, Block, GetPixels32Job>(
+            return GetBlockPixels32(
                 in this,
                 mipLevel,
                 allocator,
-                (blocks, pixels, blocksPerRow, width, height) =>
-                    new GetPixels32Job
-                    {
-                        blocks = blocks,
-                        pixels = pixels,
-                        blocksPerRow = blocksPerRow,
-                        width = width,
-                        height = height,
-                    }
+                (NativeArray<Block> data) => new GetPixelsJob { blocks = data }
             );
         }
 
         [BurstCompile]
-        struct GetPixelsJob : IJobParallelForBatch
+        struct GetPixelsJob : IGetPixelsBlockJob
         {
             [ReadOnly]
             public NativeArray<Block> blocks;
 
-            [WriteOnly]
-            [NativeDisableParallelForRestriction]
-            public NativeArray<Color> pixels;
-
-            public int blocksPerRow;
-            public int width;
-            public int height;
-
-            public unsafe void Execute(int start, int count)
+            public FixedArray16<Color> DecodeBlock(int blockIdx)
             {
-                float* decodedR = stackalloc float[16];
-                float* decodedG = stackalloc float[16];
-                int end = start + count;
+                var block = blocks[blockIdx];
+                var r = DecodeBC4Block(block.red);
+                var g = DecodeBC4Block(block.green);
 
-                for (int blockIdx = start; blockIdx < end; blockIdx++)
-                {
-                    var block = blocks[blockIdx];
-                    DecodeBC4Block(block.red, decodedR);
-                    DecodeBC4Block(block.green, decodedG);
+                FixedArray16<Color> colors = default;
+                for (int i = 0; i < 16; ++i)
+                    colors[i] = new(r[i], g[i], 0f, 0f);
 
-                    int blockX = blockIdx % blocksPerRow;
-                    int blockY = blockIdx / blocksPerRow;
-                    int baseX = blockX * 4;
-                    int baseY = blockY * 4;
-
-                    for (int row = 0; row < 4; row++)
-                    {
-                        int py = baseY + row;
-                        if (py >= height)
-                            break;
-
-                        for (int col = 0; col < 4; col++)
-                        {
-                            int px = baseX + col;
-                            if (px >= width)
-                                break;
-
-                            int i = row * 4 + col;
-                            pixels[py * width + px] = new Color(decodedR[i], decodedG[i], 0f, 0f);
-                        }
-                    }
-                }
-            }
-        }
-
-        [BurstCompile]
-        struct GetPixels32Job : IJobParallelForBatch
-        {
-            [ReadOnly]
-            public NativeArray<Block> blocks;
-
-            [WriteOnly]
-            [NativeDisableParallelForRestriction]
-            public NativeArray<Color32> pixels;
-
-            public int blocksPerRow;
-            public int width;
-            public int height;
-
-            public unsafe void Execute(int start, int count)
-            {
-                float* decodedR = stackalloc float[16];
-                float* decodedG = stackalloc float[16];
-                int end = start + count;
-
-                for (int blockIdx = start; blockIdx < end; blockIdx++)
-                {
-                    var block = blocks[blockIdx];
-                    DecodeBC4Block(block.red, decodedR);
-                    DecodeBC4Block(block.green, decodedG);
-
-                    int blockX = blockIdx % blocksPerRow;
-                    int blockY = blockIdx / blocksPerRow;
-                    int baseX = blockX * 4;
-                    int baseY = blockY * 4;
-
-                    for (int row = 0; row < 4; row++)
-                    {
-                        int py = baseY + row;
-                        if (py >= height)
-                            break;
-
-                        for (int col = 0; col < 4; col++)
-                        {
-                            int px = baseX + col;
-                            if (px >= width)
-                                break;
-
-                            int i = row * 4 + col;
-                            pixels[py * width + px] = new Color(decodedR[i], decodedG[i], 0f, 0f);
-                        }
-                    }
-                }
+                return colors;
             }
         }
     }

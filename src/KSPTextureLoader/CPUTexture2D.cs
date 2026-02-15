@@ -3,6 +3,7 @@ using System.IO.MemoryMappedFiles;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using KSPTextureLoader.Burst;
+using KSPTextureLoader.Utils;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -780,8 +781,10 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
     /// Decodes an entire BC4 block (8 bytes packed as a ulong) into 16 float values
     /// in row-major order (4 rows of 4 pixels).
     /// </summary>
-    internal static unsafe void DecodeBC4Block(ulong bits, float* output)
+    internal static unsafe FixedArray16<float> DecodeBC4Block(ulong bits)
     {
+        FixedArray16<float> output = default;
+
         byte r0 = (byte)(bits & 0xFF);
         byte r1 = (byte)((bits >> 8) & 0xFF);
 
@@ -817,14 +820,17 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             output[i] = palette[indices & 0x7];
             indices >>= 3;
         }
+        return output;
     }
 
     /// <summary>
     /// Decodes an entire DXT1 block (8 bytes packed as a ulong) into 16 Color values
     /// in row-major order (4 rows of 4 pixels).
     /// </summary>
-    internal static unsafe void DecodeDXT1Block(ulong bits, Color* output)
+    internal static unsafe FixedArray16<Color> DecodeDXT1Block(ulong bits)
     {
+        FixedArray16<Color> output = default;
+
         ushort c0Raw = (ushort)(bits & 0xFFFF);
         ushort c1Raw = (ushort)((bits >> 16) & 0xFFFF);
 
@@ -867,6 +873,8 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             output[i] = palette[indices & 0x3];
             indices >>= 2;
         }
+
+        return output;
     }
 
     private protected static Texture2D CloneReadableTexture(Texture2D src, bool readable = false)
@@ -971,15 +979,15 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
         }
     }
 
-    static unsafe NativeArray<Color> GetBlockPixels<TTex, TBlock, TJob>(
+    static NativeArray<Color> GetBlockPixels<TTex, TBlock, TJob>(
         in TTex texture,
         int mipLevel,
         Allocator allocator,
-        Func<NativeArray<TBlock>, NativeArray<Color>, int, int, int, TJob> jobFunc
+        Func<NativeArray<TBlock>, TJob> func
     )
         where TTex : ICPUTexture2D
         where TBlock : unmanaged
-        where TJob : struct, IJobParallelForBatch
+        where TJob : struct, IGetPixelsBlockJob
     {
         GetBlockMipProperties(
             texture.Width,
@@ -999,25 +1007,21 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
         );
 
         var blocks = texture.GetRawTextureData<TBlock>().GetSubArray(blockOffset, blockCount);
-        var job = jobFunc(blocks, pixels, blocksPerRow, mipWidth, mipHeight);
+        var job = func(blocks);
 
-        if (blockCount < 1024)
-            job.RunBatch(blockCount, 256);
-        else
-            job.ScheduleBatch(blockCount, 256).Complete();
-
+        job.Schedule(blocksPerRow, mipWidth, mipHeight, pixels).Complete();
         return pixels;
     }
 
-    static unsafe NativeArray<Color32> GetBlockPixels32<TTex, TBlock, TJob>(
+    static NativeArray<Color32> GetBlockPixels32<TTex, TBlock, TJob>(
         in TTex texture,
         int mipLevel,
         Allocator allocator,
-        Func<NativeArray<TBlock>, NativeArray<Color32>, int, int, int, TJob> jobFunc
+        Func<NativeArray<TBlock>, TJob> func
     )
         where TTex : ICPUTexture2D
         where TBlock : unmanaged
-        where TJob : struct, IJobParallelForBatch
+        where TJob : struct, IGetPixelsBlockJob
     {
         GetBlockMipProperties(
             texture.Width,
@@ -1037,13 +1041,9 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
         );
 
         var blocks = texture.GetRawTextureData<TBlock>().GetSubArray(blockOffset, blockCount);
-        var job = jobFunc(blocks, pixels, blocksPerRow, mipWidth, mipHeight);
+        var job = func(blocks);
 
-        if (blockCount < 1024)
-            job.RunBatch(blockCount, 256);
-        else
-            job.ScheduleBatch(blockCount, 256).Complete();
-
+        job.Schedule(blocksPerRow, mipWidth, mipHeight, pixels).Complete();
         return pixels;
     }
     #endregion
