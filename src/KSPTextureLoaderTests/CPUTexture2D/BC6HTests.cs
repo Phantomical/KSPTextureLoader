@@ -394,6 +394,215 @@ public class BC6HTests : CPUTexture2DTests
         return blk;
     }
 
+    /// <summary>
+    /// Build a solid Mode 2 block (2 subsets, 11-bit base (10+1), 5/4/4 delta, transformed).
+    /// Mode bits = 00010. All deltas = 0, partition = 0.
+    /// </summary>
+    byte[] BuildSolidMode2(int rv, int gv, int bv)
+    {
+        var blk = new byte[16];
+        var w = new BitWriter(blk);
+        w.Write(0x02, 5); // mode 2 = 00010
+        w.Write(rv & 0x3FF, 10); // rw[9:0]
+        w.Write(gv & 0x3FF, 10); // gw[9:0]
+        w.Write(bv & 0x3FF, 10); // bw[9:0]
+        w.Write(0, 5); // rx[4:0] = 0
+        w.Write((rv >> 10) & 1, 1); // rw bit 10
+        w.Write(0, 4); // gy[3:0] = 0
+        w.Write(0, 4); // gx[3:0] = 0
+        w.Write((gv >> 10) & 1, 1); // gw bit 10
+        w.Write(0, 1); // bz bit 0 = 0
+        w.Write(0, 4); // gz[3:0] = 0
+        w.Write(0, 4); // bx[3:0] = 0
+        w.Write((bv >> 10) & 1, 1); // bw bit 10
+        // remaining: bz[1]=0, by[3:0]=0, ry[4:0]=0, bz[2]=0, rz[4:0]=0, bz[3]=0, partition=0
+        return blk;
+    }
+
+    /// <summary>
+    /// Build a solid Mode 3 block (2 subsets, 11-bit base (10+1), 4/5/4 delta, transformed).
+    /// Mode bits = 00110. All deltas = 0, partition = 0.
+    /// </summary>
+    byte[] BuildSolidMode3(int rv, int gv, int bv)
+    {
+        var blk = new byte[16];
+        var w = new BitWriter(blk);
+        w.Write(0x06, 5); // mode 3 = 00110
+        w.Write(rv & 0x3FF, 10); // rw[9:0]
+        w.Write(gv & 0x3FF, 10); // gw[9:0]
+        w.Write(bv & 0x3FF, 10); // bw[9:0]
+        w.Write(0, 4); // rx[3:0] = 0
+        w.Write((rv >> 10) & 1, 1); // rw bit 10
+        w.Write(0, 1); // gz bit 4 = 0
+        w.Write(0, 4); // gy[3:0] = 0
+        w.Write(0, 5); // gx[4:0] = 0
+        w.Write((gv >> 10) & 1, 1); // gw bit 10
+        w.Write(0, 4); // gz[3:0] = 0
+        w.Write(0, 4); // bx[3:0] = 0
+        w.Write((bv >> 10) & 1, 1); // bw bit 10
+        // remaining: bz[1]=0, by[3:0]=0, ry[3:0]=0, bz[0]=0, bz[2]=0, rz[3:0]=0, gy[4]=0, bz[3]=0, partition=0
+        return blk;
+    }
+
+    /// <summary>
+    /// Build a solid Mode 4 block (2 subsets, 11-bit base (10+1), 4/4/5 delta, transformed).
+    /// Mode bits = 01010. All deltas = 0, partition = 0.
+    /// </summary>
+    byte[] BuildSolidMode4(int rv, int gv, int bv)
+    {
+        var blk = new byte[16];
+        var w = new BitWriter(blk);
+        w.Write(0x0A, 5); // mode 4 = 01010
+        w.Write(rv & 0x3FF, 10); // rw[9:0]
+        w.Write(gv & 0x3FF, 10); // gw[9:0]
+        w.Write(bv & 0x3FF, 10); // bw[9:0]
+        w.Write(0, 4); // rx[3:0] = 0
+        w.Write((rv >> 10) & 1, 1); // rw bit 10
+        w.Write(0, 1); // by bit 4 = 0
+        w.Write(0, 4); // gy[3:0] = 0
+        w.Write(0, 4); // gx[3:0] = 0
+        w.Write((gv >> 10) & 1, 1); // gw bit 10
+        w.Write(0, 1); // bz bit 0 = 0
+        w.Write(0, 4); // gz[3:0] = 0
+        w.Write(0, 5); // bx[4:0] = 0
+        w.Write((bv >> 10) & 1, 1); // bw bit 10
+        // remaining: by[3:0]=0, ry[3:0]=0, bz[1]=0, bz[2]=0, rz[3:0]=0, bz[4]=0, bz[3]=0, partition=0
+        return blk;
+    }
+
+    /// <summary>
+    /// Build a solid Mode 5 block (2 subsets, 9-bit base, 5/5/5 delta, transformed).
+    /// Mode bits = 01110. All deltas = 0, partition = 0.
+    /// </summary>
+    byte[] BuildSolidMode5(int rv, int gv, int bv)
+    {
+        var blk = new byte[16];
+        var w = new BitWriter(blk);
+        w.Write(0x0E, 5); // mode 5 = 01110
+        w.Write(rv, 9); // rw[8:0]
+        w.Write(0, 1); // by bit 4 = 0
+        w.Write(gv, 9); // gw[8:0]
+        w.Write(0, 1); // gy bit 4 = 0
+        w.Write(bv, 9); // bw[8:0]
+        w.Write(0, 1); // bz bit 4 = 0
+        // rest: rx=0, gz[4]=0, gy[3:0]=0, gx=0, bz[0]=0, gz[3:0]=0, bx=0, bz[1]=0, by[3:0]=0,
+        //       ry=0, bz[2]=0, rz=0, bz[3]=0, partition=0
+        return blk;
+    }
+
+    /// <summary>
+    /// Build a solid Mode 6 block (2 subsets, 8-bit base, 6/5/5 delta, transformed).
+    /// Mode bits = 10010. All deltas = 0, partition = 0.
+    /// </summary>
+    byte[] BuildSolidMode6(int rv, int gv, int bv)
+    {
+        var blk = new byte[16];
+        var w = new BitWriter(blk);
+        w.Write(0x12, 5); // mode 6 = 10010
+        w.Write(rv, 8); // rw[7:0]
+        w.Write(0, 1); // gz bit 4 = 0
+        w.Write(0, 1); // by bit 4 = 0
+        w.Write(gv, 8); // gw[7:0]
+        w.Write(0, 1); // bz bit 2 = 0
+        w.Write(0, 1); // gy bit 4 = 0
+        w.Write(bv, 8); // bw[7:0]
+        w.Write(0, 1); // bz bit 3 = 0
+        w.Write(0, 1); // bz bit 4 = 0
+        // rest: rx=0, gy[3:0]=0, gx=0, bz[0]=0, gz[3:0]=0, bx=0, bz[1]=0, by[3:0]=0,
+        //       ry=0, rz=0, partition=0
+        return blk;
+    }
+
+    /// <summary>
+    /// Build a solid Mode 7 block (2 subsets, 8-bit base, 5/6/5 delta, transformed).
+    /// Mode bits = 10110. All deltas = 0, partition = 0.
+    /// </summary>
+    byte[] BuildSolidMode7(int rv, int gv, int bv)
+    {
+        var blk = new byte[16];
+        var w = new BitWriter(blk);
+        w.Write(0x16, 5); // mode 7 = 10110
+        w.Write(rv, 8); // rw[7:0]
+        w.Write(0, 1); // bz bit 0 = 0
+        w.Write(0, 1); // by bit 4 = 0
+        w.Write(gv, 8); // gw[7:0]
+        w.Write(0, 1); // gy bit 5 = 0
+        w.Write(0, 1); // gy bit 4 = 0
+        w.Write(bv, 8); // bw[7:0]
+        w.Write(0, 1); // gz bit 5 = 0
+        w.Write(0, 1); // bz bit 4 = 0
+        // rest: rx=0, gz[4]=0, gy[3:0]=0, gx=0, gz[3:0]=0, bx=0, bz[1]=0, by[3:0]=0,
+        //       ry=0, bz[2]=0, rz=0, bz[3]=0, partition=0
+        return blk;
+    }
+
+    /// <summary>
+    /// Build a solid Mode 8 block (2 subsets, 8-bit base, 5/5/6 delta, transformed).
+    /// Mode bits = 11010. All deltas = 0, partition = 0.
+    /// </summary>
+    byte[] BuildSolidMode8(int rv, int gv, int bv)
+    {
+        var blk = new byte[16];
+        var w = new BitWriter(blk);
+        w.Write(0x1A, 5); // mode 8 = 11010
+        w.Write(rv, 8); // rw[7:0]
+        w.Write(0, 1); // bz bit 1 = 0
+        w.Write(0, 1); // by bit 4 = 0
+        w.Write(gv, 8); // gw[7:0]
+        w.Write(0, 1); // by bit 5 = 0
+        w.Write(0, 1); // gy bit 4 = 0
+        w.Write(bv, 8); // bw[7:0]
+        w.Write(0, 1); // bz bit 5 = 0
+        w.Write(0, 1); // bz bit 4 = 0
+        // rest: rx=0, gz[4]=0, gy[3:0]=0, gx=0, bz[0]=0, gz[3:0]=0, bx=0, by[3:0]=0,
+        //       ry=0, bz[2]=0, rz=0, bz[3]=0, partition=0
+        return blk;
+    }
+
+    /// <summary>
+    /// Build a solid Mode 9 block (2 subsets, 6-bit base, 6/6/6, NOT transformed).
+    /// Mode bits = 11110. Since mode 9 is NOT transformed, all 4 endpoints are
+    /// independent 6-bit values. For a solid block, all endpoints = (rv, gv, bv).
+    /// Partition = 0.
+    /// </summary>
+    byte[] BuildSolidMode9(int rv, int gv, int bv)
+    {
+        var blk = new byte[16];
+        var w = new BitWriter(blk);
+        w.Write(0x1E, 5); // mode 9 = 11110
+        // Bit layout per spec (after 5 mode bits):
+        // rw[5:0], gz[4], bz[0], bz[1], by[4],
+        // gw[5:0], gy[5], by[5], bz[2], gy[4],
+        // bw[5:0], gz[5], bz[3], bz[5], bz[4],
+        // rx[5:0], gy[3:0], gx[5:0], gz[3:0],
+        // bx[5:0], by[3:0], ry[5:0], rz[5:0], partition[4:0]
+        w.Write(rv, 6); // rw
+        w.Write((gv >> 4) & 1, 1); // gz[4] = gv bit 4
+        w.Write(bv & 1, 1); // bz[0] = bv bit 0
+        w.Write((bv >> 1) & 1, 1); // bz[1] = bv bit 1
+        w.Write((bv >> 4) & 1, 1); // by[4] = bv bit 4
+        w.Write(gv, 6); // gw
+        w.Write((gv >> 5) & 1, 1); // gy[5] = gv bit 5
+        w.Write((bv >> 5) & 1, 1); // by[5] = bv bit 5
+        w.Write((bv >> 2) & 1, 1); // bz[2] = bv bit 2
+        w.Write((gv >> 4) & 1, 1); // gy[4] = gv bit 4
+        w.Write(bv, 6); // bw
+        w.Write((gv >> 5) & 1, 1); // gz[5] = gv bit 5
+        w.Write((bv >> 3) & 1, 1); // bz[3] = bv bit 3
+        w.Write((bv >> 5) & 1, 1); // bz[5] = bv bit 5
+        w.Write((bv >> 4) & 1, 1); // bz[4] = bv bit 4
+        w.Write(rv, 6); // rx = rv
+        w.Write(gv & 0xF, 4); // gy[3:0]
+        w.Write(gv, 6); // gx = gv
+        w.Write(gv & 0xF, 4); // gz[3:0]
+        w.Write(bv, 6); // bx = bv
+        w.Write(bv & 0xF, 4); // by[3:0]
+        w.Write(rv, 6); // ry = rv
+        w.Write(rv, 6); // rz = rv
+        w.Write(0, 5); // partition = 0
+        return blk;
+    }
+
     static int ReverseBits(int val, int numBits)
     {
         int result = 0;
@@ -1890,6 +2099,122 @@ public class BC6HTests : CPUTexture2DTests
                 throw new Exception($"BC6H.Height: expected 4, got {bc6h.Height}");
             if (bc6h.MipCount != 1)
                 throw new Exception($"BC6H.MipCount: expected 1, got {bc6h.MipCount}");
+        }
+        finally
+        {
+            data.Dispose();
+        }
+    }
+
+    // ---- Helper: build blocks spanning all 14 modes ----
+
+    /// <summary>
+    /// Builds a 16x16 texture (4x4 = 16 blocks) with one solid block per BC6H mode
+    /// (0-13) plus 2 gradient blocks, covering all 14 modes.
+    /// Returns the raw block data (256 bytes = 16 blocks * 16 bytes).
+    /// Texture dimensions: 16x16 (4 blocks wide, 4 blocks tall).
+    /// </summary>
+    byte[] BuildAllModeBlocks()
+    {
+        var blocks = new byte[16 * 16];
+        // Row 0 (y=0..3): modes 0, 1, 2, 3
+        // Mode 0: 10-bit base, 5/5/5 delta. Values fit in 10 bits.
+        Array.Copy(BuildSolidMode0(300, 600, 900), 0, blocks, 0 * 16, 16);
+        // Mode 1: 7-bit base, 6/6/6 delta. Values fit in 7 bits (max 127).
+        Array.Copy(BuildSolidMode1(100, 50, 120), 0, blocks, 1 * 16, 16);
+        // Mode 2: 11-bit base (10+1), 5/4/4 delta. Values fit in 11 bits (max 2047).
+        Array.Copy(BuildSolidMode2(1500, 800, 400), 0, blocks, 2 * 16, 16);
+        // Mode 3: 11-bit base, 4/5/4 delta. Values fit in 11 bits.
+        Array.Copy(BuildSolidMode3(1200, 600, 300), 0, blocks, 3 * 16, 16);
+
+        // Row 1 (y=4..7): modes 4, 5, 6, 7
+        // Mode 4: 11-bit base, 4/4/5 delta. Values fit in 11 bits.
+        Array.Copy(BuildSolidMode4(900, 450, 1800), 0, blocks, 4 * 16, 16);
+        // Mode 5: 9-bit base, 5/5/5 delta. Values fit in 9 bits (max 511).
+        Array.Copy(BuildSolidMode5(400, 200, 300), 0, blocks, 5 * 16, 16);
+        // Mode 6: 8-bit base, 6/5/5 delta. Values fit in 8 bits (max 255).
+        Array.Copy(BuildSolidMode6(200, 100, 150), 0, blocks, 6 * 16, 16);
+        // Mode 7: 8-bit base, 5/6/5 delta. Values fit in 8 bits.
+        Array.Copy(BuildSolidMode7(180, 90, 130), 0, blocks, 7 * 16, 16);
+
+        // Row 2 (y=8..11): modes 8, 9, 10, 11
+        // Mode 8: 8-bit base, 5/5/6 delta. Values fit in 8 bits.
+        Array.Copy(BuildSolidMode8(220, 110, 170), 0, blocks, 8 * 16, 16);
+        // Mode 9: 6-bit base, 6/6/6, NOT transformed. Values fit in 6 bits (max 63).
+        Array.Copy(BuildSolidMode9(50, 30, 40), 0, blocks, 9 * 16, 16);
+        // Mode 10: 10-bit direct, no delta. Values fit in 10 bits.
+        Array.Copy(BuildSolidMode10(800, 100, 500), 0, blocks, 10 * 16, 16);
+        // Mode 11: 11-bit base (10+1), 9/9/9 delta, transformed. Values fit in 11 bits.
+        Array.Copy(BuildSolidMode11(1800, 400, 50), 0, blocks, 11 * 16, 16);
+
+        // Row 3 (y=12..15): modes 12, 13, + 2 gradient blocks
+        // Mode 12: 12-bit base (10+2 reversed), 8/8/8 delta. Values fit in 12 bits.
+        Array.Copy(BuildSolidMode12(2000, 1000, 500), 0, blocks, 12 * 16, 16);
+        // Mode 13: 16-bit base (10+6 reversed), 4/4/4 delta. Values fit in 16 bits.
+        Array.Copy(BuildSolidMode13(40000, 20000, 10000), 0, blocks, 13 * 16, 16);
+        // Gradient blocks using mode 10 for additional coverage
+        Array.Copy(BuildGradientMode10(100, 900, 50, 700, 200, 800), 0, blocks, 14 * 16, 16);
+        Array.Copy(BuildGradientMode10(50, 500, 300, 800, 100, 600), 0, blocks, 15 * 16, 16);
+        return blocks;
+    }
+
+    // ================================================================
+    // 41. GetPixels returns the same colors as GetPixel for all 14 modes
+    // ================================================================
+
+    [TestInfo("CPUTexture2D_BC6H_GetPixels")]
+    public void TestBC6HGetPixels()
+    {
+        // 16x16 = 4x4 blocks, one per BC6H mode (0-13) + 2 gradient blocks
+        var allBlocks = BuildAllModeBlocks();
+
+        var (bc6h, data) = Make(allBlocks, 16, 16);
+        try
+        {
+            var pixels = bc6h.GetPixels();
+
+            if (pixels.Length != 256)
+                throw new Exception($"BC6H.GetPixels: expected 256 pixels, got {pixels.Length}");
+
+            for (int y = 0; y < 16; y++)
+            for (int x = 0; x < 16; x++)
+            {
+                Color expected = bc6h.GetPixel(x, y);
+                Color actual = pixels[y * 16 + x];
+                assertColorEquals($"BC6H.GetPixels({x},{y})", actual, expected, 1e-6f);
+            }
+        }
+        finally
+        {
+            data.Dispose();
+        }
+    }
+
+    // ================================================================
+    // 42. GetPixels32 returns the same colors as GetPixel32 for all 14 modes
+    // ================================================================
+
+    [TestInfo("CPUTexture2D_BC6H_GetPixels32")]
+    public void TestBC6HGetPixels32()
+    {
+        // 16x16 = 4x4 blocks, one per BC6H mode (0-13) + 2 gradient blocks
+        var allBlocks = BuildAllModeBlocks();
+
+        var (bc6h, data) = Make(allBlocks, 16, 16);
+        try
+        {
+            var pixels = bc6h.GetPixels32();
+
+            if (pixels.Length != 256)
+                throw new Exception($"BC6H.GetPixels32: expected 256 pixels, got {pixels.Length}");
+
+            for (int y = 0; y < 16; y++)
+            for (int x = 0; x < 16; x++)
+            {
+                Color32 expected = bc6h.GetPixel32(x, y);
+                Color32 actual = pixels[y * 16 + x];
+                assertColor32Equals($"BC6H.GetPixels32({x},{y})", actual, expected, 0);
+            }
         }
         finally
         {
