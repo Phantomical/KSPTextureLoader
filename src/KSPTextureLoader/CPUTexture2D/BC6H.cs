@@ -1,4 +1,7 @@
 using System;
+using KSPTextureLoader.Burst;
+using KSPTextureLoader.Utils;
+using Unity.Burst;
 using Unity.Collections;
 using UnityEngine;
 
@@ -66,6 +69,187 @@ partial class CPUTexture2D
             where T : unmanaged
         {
             return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(Block));
+        }
+
+        public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp)
+        {
+            bool s = signed;
+            return GetBlockPixels(
+                in this,
+                mipLevel,
+                allocator,
+                (NativeArray<Block> data) => new GetPixelsJob { blocks = data, signed = s }
+            );
+        }
+
+        public NativeArray<Color32> GetPixels32(
+            int mipLevel = 0,
+            Allocator allocator = Allocator.Temp
+        )
+        {
+            bool s = signed;
+            return GetBlockPixels32(
+                in this,
+                mipLevel,
+                allocator,
+                (NativeArray<Block> data) => new GetPixelsJob { blocks = data, signed = s }
+            );
+        }
+
+        [BurstCompile]
+        struct GetPixelsJob : IGetPixelsBlockJob
+        {
+            [ReadOnly]
+            public NativeArray<Block> blocks;
+
+            public bool signed;
+
+            public FixedArray16<Color> DecodeBlock(int blockIdx)
+            {
+                return DecodeBC6HBlock(blocks[blockIdx], signed);
+            }
+        }
+
+        static FixedArray16<Color> DecodeBC6HBlock(Block block, bool signed)
+        {
+            FixedArray16<Color> output = default;
+
+            int mode = GetMode(block);
+            if (mode < 0)
+            {
+                for (int i = 0; i < 16; i++)
+                    output[i] = new Color(0f, 0f, 0f, 1f);
+                return output;
+            }
+
+            var info = Modes[mode];
+
+            var reader = new BitReader(block);
+            reader.SkipBits(mode <= 1 ? 2 : 5);
+
+            DecodeEndpoints(ref reader, mode, out var ep, out int partition);
+
+            // Apply transforms (delta decoding)
+            if (info.transformed)
+            {
+                ep.e1r = SignExtend(ep.e1r, info.deltaBitsR) + ep.e0r;
+                ep.e1g = SignExtend(ep.e1g, info.deltaBitsG) + ep.e0g;
+                ep.e1b = SignExtend(ep.e1b, info.deltaBitsB) + ep.e0b;
+
+                if (info.numSubsets == 2)
+                {
+                    ep.e2r = SignExtend(ep.e2r, info.deltaBitsR) + ep.e0r;
+                    ep.e2g = SignExtend(ep.e2g, info.deltaBitsG) + ep.e0g;
+                    ep.e2b = SignExtend(ep.e2b, info.deltaBitsB) + ep.e0b;
+                    ep.e3r = SignExtend(ep.e3r, info.deltaBitsR) + ep.e0r;
+                    ep.e3g = SignExtend(ep.e3g, info.deltaBitsG) + ep.e0g;
+                    ep.e3b = SignExtend(ep.e3b, info.deltaBitsB) + ep.e0b;
+                }
+
+                int mask = (1 << info.endpointBits) - 1;
+                if (signed)
+                {
+                    ep.e0r = SignExtend(ep.e0r & mask, info.endpointBits);
+                    ep.e0g = SignExtend(ep.e0g & mask, info.endpointBits);
+                    ep.e0b = SignExtend(ep.e0b & mask, info.endpointBits);
+                    ep.e1r = SignExtend(ep.e1r & mask, info.endpointBits);
+                    ep.e1g = SignExtend(ep.e1g & mask, info.endpointBits);
+                    ep.e1b = SignExtend(ep.e1b & mask, info.endpointBits);
+                    ep.e2r = SignExtend(ep.e2r & mask, info.endpointBits);
+                    ep.e2g = SignExtend(ep.e2g & mask, info.endpointBits);
+                    ep.e2b = SignExtend(ep.e2b & mask, info.endpointBits);
+                    ep.e3r = SignExtend(ep.e3r & mask, info.endpointBits);
+                    ep.e3g = SignExtend(ep.e3g & mask, info.endpointBits);
+                    ep.e3b = SignExtend(ep.e3b & mask, info.endpointBits);
+                }
+                else
+                {
+                    ep.e0r &= mask;
+                    ep.e0g &= mask;
+                    ep.e0b &= mask;
+                    ep.e1r &= mask;
+                    ep.e1g &= mask;
+                    ep.e1b &= mask;
+                    ep.e2r &= mask;
+                    ep.e2g &= mask;
+                    ep.e2b &= mask;
+                    ep.e3r &= mask;
+                    ep.e3g &= mask;
+                    ep.e3b &= mask;
+                }
+            }
+
+            // Unquantize all endpoints
+            ep.e0r = Unquantize(ep.e0r, info.endpointBits, signed);
+            ep.e0g = Unquantize(ep.e0g, info.endpointBits, signed);
+            ep.e0b = Unquantize(ep.e0b, info.endpointBits, signed);
+            ep.e1r = Unquantize(ep.e1r, info.endpointBits, signed);
+            ep.e1g = Unquantize(ep.e1g, info.endpointBits, signed);
+            ep.e1b = Unquantize(ep.e1b, info.endpointBits, signed);
+            ep.e2r = Unquantize(ep.e2r, info.endpointBits, signed);
+            ep.e2g = Unquantize(ep.e2g, info.endpointBits, signed);
+            ep.e2b = Unquantize(ep.e2b, info.endpointBits, signed);
+            ep.e3r = Unquantize(ep.e3r, info.endpointBits, signed);
+            ep.e3g = Unquantize(ep.e3g, info.endpointBits, signed);
+            ep.e3b = Unquantize(ep.e3b, info.endpointBits, signed);
+
+            // Read all 16 indices in one pass
+            int anchor0 = 0;
+            int anchor1 = info.numSubsets == 2 ? AnchorIndex[partition] : -1;
+            int indexStart = 128 - (info.numSubsets == 2 ? 46 : 63);
+            var idxReader = new BitReader(block);
+            idxReader.SkipBits(indexStart);
+
+            var weights = info.indexBits == 3 ? Weights3 : Weights4;
+            int partBase = partition * 16;
+
+            for (int i = 0; i < 16; i++)
+            {
+                int bits = info.indexBits;
+                if (i == anchor0 || i == anchor1)
+                    bits--;
+                int idx = idxReader.ReadBits(bits);
+
+                int subset = info.numSubsets == 2 ? PartitionTable[partBase + i] : 0;
+                int lor,
+                    log,
+                    lob,
+                    hir,
+                    hig,
+                    hib;
+                if (subset == 0)
+                {
+                    lor = ep.e0r;
+                    log = ep.e0g;
+                    lob = ep.e0b;
+                    hir = ep.e1r;
+                    hig = ep.e1g;
+                    hib = ep.e1b;
+                }
+                else
+                {
+                    lor = ep.e2r;
+                    log = ep.e2g;
+                    lob = ep.e2b;
+                    hir = ep.e3r;
+                    hig = ep.e3g;
+                    hib = ep.e3b;
+                }
+
+                int w = weights[idx];
+                int finalR = ((64 - w) * lor + w * hir + 32) >> 6;
+                int finalG = ((64 - w) * log + w * hig + 32) >> 6;
+                int finalB = ((64 - w) * lob + w * hib + 32) >> 6;
+
+                output[i] = new Color(
+                    FinishUnquantize(finalR, signed),
+                    FinishUnquantize(finalG, signed),
+                    FinishUnquantize(finalB, signed),
+                    1f
+                );
+            }
+
+            return output;
         }
 
         // ================================================================
