@@ -1,3 +1,4 @@
+using System;
 using Unity.Collections;
 using UnityEngine;
 
@@ -33,6 +34,42 @@ internal sealed class CPUTexture2D_Texture : CPUTexture2D
 
     public override Color GetPixelBilinear(float u, float v, int mipLevel = 0) =>
         texture.GetPixelBilinear(u, v, mipLevel);
+
+    public override unsafe NativeArray<Color> GetPixels(
+        int mipLevel = 0,
+        Allocator allocator = Allocator.Temp
+    )
+    {
+        if (texture.width * texture.height > int.MaxValue / sizeof(Color))
+            throw new OutOfMemoryException("color array would be is too large to allocate");
+
+        var pixels = texture.GetPixels(mipLevel);
+        var native = new NativeArray<Color>(
+            pixels.Length,
+            allocator,
+            NativeArrayOptions.UninitializedMemory
+        );
+        native.CopyFrom(pixels);
+        return native;
+    }
+
+    public override unsafe NativeArray<Color32> GetPixels32(
+        int mipLevel = 0,
+        Allocator allocator = Allocator.Temp
+    )
+    {
+        if (texture.width * texture.height > int.MaxValue / sizeof(Color32))
+            throw new OutOfMemoryException("color array would be is too large to allocate");
+
+        var pixels = texture.GetPixels32(mipLevel);
+        var native = new NativeArray<Color32>(
+            pixels.Length,
+            allocator,
+            NativeArrayOptions.UninitializedMemory
+        );
+        native.CopyFrom(pixels);
+        return native;
+    }
 
     public override NativeArray<byte> GetRawTextureData() => texture.GetRawTextureData<byte>();
 
