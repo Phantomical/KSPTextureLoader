@@ -64,6 +64,84 @@ public class CPUTexture2DTests : KSPTextureLoaderTestBase
     }
 
     /// <summary>
+    /// Tests a CPUTexture2D format struct's GetPixels against its own GetPixel,
+    /// verifying that the bulk method produces the same results as per-pixel access.
+    /// </summary>
+    protected void TestFormatGetPixels<T>(
+        TextureFormat fmt,
+        Func<NativeArray<byte>, int, int, int, T> factory,
+        string name
+    )
+        where T : ICPUTexture2D
+    {
+        var (tex, _) = MakeTestTexture(fmt);
+        try
+        {
+            var rawData = tex.GetRawTextureData<byte>();
+            var cpuTex = factory(rawData, tex.width, tex.height, tex.mipmapCount);
+            var pixels = cpuTex.GetPixels();
+
+            if (pixels.Length != W * H)
+                throw new Exception(
+                    $"{name}.GetPixels: expected {W * H} pixels, got {pixels.Length}"
+                );
+
+            for (int y = 0; y < H; y++)
+            {
+                for (int x = 0; x < W; x++)
+                {
+                    Color expected = cpuTex.GetPixel(x, y);
+                    Color actual = pixels[y * W + x];
+                    assertColorEquals($"{name}.GetPixels({x},{y})", actual, expected, 1e-6f);
+                }
+            }
+        }
+        finally
+        {
+            UnityEngine.Object.Destroy(tex);
+        }
+    }
+
+    /// <summary>
+    /// Tests a CPUTexture2D format struct's GetPixels32 against its own GetPixel32,
+    /// verifying that the bulk method produces the same results as per-pixel access.
+    /// </summary>
+    protected void TestFormatGetPixels32<T>(
+        TextureFormat fmt,
+        Func<NativeArray<byte>, int, int, int, T> factory,
+        string name
+    )
+        where T : ICPUTexture2D
+    {
+        var (tex, _) = MakeTestTexture(fmt);
+        try
+        {
+            var rawData = tex.GetRawTextureData<byte>();
+            var cpuTex = factory(rawData, tex.width, tex.height, tex.mipmapCount);
+            var pixels = cpuTex.GetPixels32();
+
+            if (pixels.Length != W * H)
+                throw new Exception(
+                    $"{name}.GetPixels32: expected {W * H} pixels, got {pixels.Length}"
+                );
+
+            for (int y = 0; y < H; y++)
+            {
+                for (int x = 0; x < W; x++)
+                {
+                    Color32 expected = cpuTex.GetPixel32(x, y);
+                    Color32 actual = pixels[y * W + x];
+                    assertColor32Equals($"{name}.GetPixels32({x},{y})", actual, expected, 0);
+                }
+            }
+        }
+        finally
+        {
+            UnityEngine.Object.Destroy(tex);
+        }
+    }
+
+    /// <summary>
     /// Tests a CPUTexture2D format struct's GetPixel against Texture2D.GetPixel.
     /// Only the channels specified by check flags are compared, since formats
     /// with fewer channels may fill unused channels differently than Unity.

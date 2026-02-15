@@ -21,4 +21,24 @@ public class RGB565Tests : CPUTexture2DTests
             tolerance: 0.04f
         );
     }
+
+    [TestInfo("CPUTexture2D_RGB565_GetPixels")]
+    public void TestRGB565GetPixels()
+    {
+        TestFormatGetPixels(
+            TextureFormat.RGB565,
+            (d, w, h, m) => new CPUTexture2D.RGB565(d, w, h, m),
+            "RGB565"
+        );
+    }
+
+    [TestInfo("CPUTexture2D_RGB565_GetPixels32")]
+    public void TestRGB565GetPixels32()
+    {
+        TestFormatGetPixels32(
+            TextureFormat.RGB565,
+            (d, w, h, m) => new CPUTexture2D.RGB565(d, w, h, m),
+            "RGB565"
+        );
+    }
 }

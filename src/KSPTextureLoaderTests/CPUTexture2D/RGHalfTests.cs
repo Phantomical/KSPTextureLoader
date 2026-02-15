@@ -20,4 +20,24 @@ public class RGHalfTests : CPUTexture2DTests
             tolerance: 0.002f
         );
     }
+
+    [TestInfo("CPUTexture2D_RGHalf_GetPixels")]
+    public void TestRGHalfGetPixels()
+    {
+        TestFormatGetPixels(
+            TextureFormat.RGHalf,
+            (d, w, h, m) => new CPUTexture2D.RGHalf(d, w, h, m),
+            "RGHalf"
+        );
+    }
+
+    [TestInfo("CPUTexture2D_RGHalf_GetPixels32")]
+    public void TestRGHalfGetPixels32()
+    {
+        TestFormatGetPixels32(
+            TextureFormat.RGHalf,
+            (d, w, h, m) => new CPUTexture2D.RGHalf(d, w, h, m),
+            "RGHalf"
+        );
+    }
 }

@@ -20,4 +20,24 @@ public class RGBAHalfTests : CPUTexture2DTests
             tolerance: 0.002f
         );
     }
+
+    [TestInfo("CPUTexture2D_RGBAHalf_GetPixels")]
+    public void TestRGBAHalfGetPixels()
+    {
+        TestFormatGetPixels(
+            TextureFormat.RGBAHalf,
+            (d, w, h, m) => new CPUTexture2D.RGBAHalf(d, w, h, m),
+            "RGBAHalf"
+        );
+    }
+
+    [TestInfo("CPUTexture2D_RGBAHalf_GetPixels32")]
+    public void TestRGBAHalfGetPixels32()
+    {
+        TestFormatGetPixels32(
+            TextureFormat.RGBAHalf,
+            (d, w, h, m) => new CPUTexture2D.RGBAHalf(d, w, h, m),
+            "RGBAHalf"
+        );
+    }
 }

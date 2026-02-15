@@ -19,4 +19,24 @@ public class RG16Tests : CPUTexture2DTests
             checkA: true
         );
     }
+
+    [TestInfo("CPUTexture2D_RG16_GetPixels")]
+    public void TestRG16GetPixels()
+    {
+        TestFormatGetPixels(
+            TextureFormat.RG16,
+            (d, w, h, m) => new CPUTexture2D.RG16(d, w, h, m),
+            "RG16"
+        );
+    }
+
+    [TestInfo("CPUTexture2D_RG16_GetPixels32")]
+    public void TestRG16GetPixels32()
+    {
+        TestFormatGetPixels32(
+            TextureFormat.RG16,
+            (d, w, h, m) => new CPUTexture2D.RG16(d, w, h, m),
+            "RG16"
+        );
+    }
 }

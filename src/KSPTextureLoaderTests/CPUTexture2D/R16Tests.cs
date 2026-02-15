@@ -19,4 +19,24 @@ public class R16Tests : CPUTexture2DTests
             checkA: true
         );
     }
+
+    [TestInfo("CPUTexture2D_R16_GetPixels")]
+    public void TestR16GetPixels()
+    {
+        TestFormatGetPixels(
+            TextureFormat.R16,
+            (d, w, h, m) => new CPUTexture2D.R16(d, w, h, m),
+            "R16"
+        );
+    }
+
+    [TestInfo("CPUTexture2D_R16_GetPixels32")]
+    public void TestR16GetPixels32()
+    {
+        TestFormatGetPixels32(
+            TextureFormat.R16,
+            (d, w, h, m) => new CPUTexture2D.R16(d, w, h, m),
+            "R16"
+        );
+    }
 }

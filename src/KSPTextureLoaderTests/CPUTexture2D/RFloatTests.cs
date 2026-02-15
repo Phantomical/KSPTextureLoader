@@ -20,4 +20,24 @@ public class RFloatTests : CPUTexture2DTests
             tolerance: 0.001f
         );
     }
+
+    [TestInfo("CPUTexture2D_RFloat_GetPixels")]
+    public void TestRFloatGetPixels()
+    {
+        TestFormatGetPixels(
+            TextureFormat.RFloat,
+            (d, w, h, m) => new CPUTexture2D.RFloat(d, w, h, m),
+            "RFloat"
+        );
+    }
+
+    [TestInfo("CPUTexture2D_RFloat_GetPixels32")]
+    public void TestRFloatGetPixels32()
+    {
+        TestFormatGetPixels32(
+            TextureFormat.RFloat,
+            (d, w, h, m) => new CPUTexture2D.RFloat(d, w, h, m),
+            "RFloat"
+        );
+    }
 }
