@@ -2,6 +2,7 @@ using System;
 using KSPTextureLoader.Burst;
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Jobs;
 using UnityEngine;
 
 namespace KSPTextureLoader;
@@ -13,7 +14,7 @@ partial class CPUTexture2D
     /// a real unity texture format, but is used by some mods.
     /// </summary>
     [BurstCompile]
-    public readonly struct RA16 : ICPUTexture2D
+    public readonly struct RA16 : ICPUTexture2D, ICompileToTexture
     {
         const int bpp = 2;
 
@@ -81,6 +82,30 @@ partial class CPUTexture2D
                 allocator,
                 (data, pixels) => new GetPixels32Job { data = data, pixels = pixels }
             );
+        }
+
+        public Texture2D CompileToTexture(bool readable)
+        {
+            var texture = TextureUtils.CreateUninitializedTexture2D(
+                Width,
+                Height,
+                TextureFormat.RGBA32
+            );
+            var pixels = new NativeArray<Color32>(
+                Width * Height,
+                Allocator.Temp,
+                NativeArrayOptions.UninitializedMemory
+            );
+            var job = new GetPixels32Job { data = GetRawTextureData<ushort>(), pixels = pixels };
+            var handle = job.ScheduleBatch(data.Length / 2, 4096);
+            JobHandle.ScheduleBatchedJobs();
+
+            var texdata = texture.GetRawTextureData<Color32>();
+            handle.Complete();
+            pixels.CopyTo(texdata);
+
+            texture.Apply(false, !readable);
+            return texture;
         }
 
         [BurstCompile]
