@@ -653,6 +653,34 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
         return count;
     }
 
+    static void GetBlockMipProperties(
+        int width,
+        int height,
+        int mipLevel,
+        out int mipWidth,
+        out int mipHeight,
+        out int blockOffset,
+        out int blocksPerRow,
+        out int blockCount
+    )
+    {
+        mipWidth = width;
+        mipHeight = height;
+        blockOffset = 0;
+
+        for (int m = 0; m < mipLevel; m++)
+        {
+            int bw = (mipWidth + 3) / 4;
+            int bh = (mipHeight + 3) / 4;
+            blockOffset += bw * bh;
+            mipWidth = Math.Max(mipWidth >> 1, 1);
+            mipHeight = Math.Max(mipHeight >> 1, 1);
+        }
+
+        blocksPerRow = (mipWidth + 3) / 4;
+        blockCount = blocksPerRow * ((mipHeight + 3) / 4);
+    }
+
     static Color DecodeDXT1Color(ulong bits, int pixelIndex)
     {
         ushort c0Raw = (ushort)(bits & 0xFFFF);
@@ -743,6 +771,49 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
                 6 => 0f,
                 _ => 1f,
             };
+        }
+    }
+
+    /// <summary>
+    /// Decodes an entire BC4 block (8 bytes packed as a ulong) into 16 float values
+    /// in row-major order (4 rows of 4 pixels).
+    /// </summary>
+    internal static unsafe void DecodeBC4Block(ulong bits, float* output)
+    {
+        byte r0 = (byte)(bits & 0xFF);
+        byte r1 = (byte)((bits >> 8) & 0xFF);
+
+        float fr0 = r0 * (1f / 255f);
+        float fr1 = r1 * (1f / 255f);
+
+        float* palette = stackalloc float[8];
+        palette[0] = fr0;
+        palette[1] = fr1;
+
+        if (r0 > r1)
+        {
+            palette[2] = (6f * fr0 + 1f * fr1) * (1f / 7f);
+            palette[3] = (5f * fr0 + 2f * fr1) * (1f / 7f);
+            palette[4] = (4f * fr0 + 3f * fr1) * (1f / 7f);
+            palette[5] = (3f * fr0 + 4f * fr1) * (1f / 7f);
+            palette[6] = (2f * fr0 + 5f * fr1) * (1f / 7f);
+            palette[7] = (1f * fr0 + 6f * fr1) * (1f / 7f);
+        }
+        else
+        {
+            palette[2] = (4f * fr0 + 1f * fr1) * (1f / 5f);
+            palette[3] = (3f * fr0 + 2f * fr1) * (1f / 5f);
+            palette[4] = (2f * fr0 + 3f * fr1) * (1f / 5f);
+            palette[5] = (1f * fr0 + 4f * fr1) * (1f / 5f);
+            palette[6] = 0f;
+            palette[7] = 1f;
+        }
+
+        ulong indices = bits >> 16;
+        for (int i = 0; i < 16; i++)
+        {
+            output[i] = palette[indices & 0x7];
+            indices >>= 3;
         }
     }
 
