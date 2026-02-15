@@ -45,9 +45,17 @@ public interface ICompileToTexture
 /// </summary>
 ///
 /// <remarks>
+/// <para>
 /// Depending on the texture source the texture data will either be a memory map
 /// of the actual file on disk, or the texture data for a <see cref="Texture2D" />
 /// loaded from an asset bundle.
+/// </para>
+///
+/// <para>
+/// This class also contains a wide variety of structs that implement
+/// <see cref="ICPUTexture2D"/> for various different texture formats. These are
+/// safe to use on other threads and in burst-compiled code.
+/// </para>
 /// </remarks>
 [BurstCompile]
 public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, IDisposable
