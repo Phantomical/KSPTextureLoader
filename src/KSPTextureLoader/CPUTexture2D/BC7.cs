@@ -1,5 +1,7 @@
 using System;
+using KSPTextureLoader.Burst;
 using KSPTextureLoader.Utils;
+using Unity.Burst;
 using Unity.Collections;
 using UnityEngine;
 
@@ -59,6 +61,41 @@ partial class CPUTexture2D
             where T : unmanaged
         {
             return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(Block));
+        }
+
+        public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp)
+        {
+            return GetBlockPixels(
+                in this,
+                mipLevel,
+                allocator,
+                (NativeArray<Block> data) => new GetPixelsJob { blocks = data }
+            );
+        }
+
+        public NativeArray<Color32> GetPixels32(
+            int mipLevel = 0,
+            Allocator allocator = Allocator.Temp
+        )
+        {
+            return GetBlockPixels32(
+                in this,
+                mipLevel,
+                allocator,
+                (NativeArray<Block> data) => new GetPixelsJob { blocks = data }
+            );
+        }
+
+        [BurstCompile]
+        struct GetPixelsJob : IGetPixelsBlockJob
+        {
+            [ReadOnly]
+            public NativeArray<Block> blocks;
+
+            public FixedArray16<Color> DecodeBlock(int blockIdx)
+            {
+                return DecodeBC7Block(blocks[blockIdx]);
+            }
         }
 
         // ================================================================
@@ -359,6 +396,642 @@ partial class CPUTexture2D
                     DecodeMode7(ref reader, pixelIndex, out r, out g, out b, out a);
                     break;
             }
+        }
+
+        static FixedArray16<Color> DecodeBC7Block(Block block)
+        {
+            int mode = MathUtil.CountTrailingZeros((byte)(block.lo & 0xFF));
+
+            if (mode >= 8)
+                return default;
+
+            var reader = new BitReader(block);
+            reader.SkipBits(mode + 1);
+
+            return mode switch
+            {
+                0 => DecodeMode0Block(ref reader),
+                1 => DecodeMode1Block(ref reader),
+                2 => DecodeMode2Block(ref reader),
+                3 => DecodeMode3Block(ref reader),
+                4 => DecodeMode4Block(ref reader),
+                5 => DecodeMode5Block(ref reader),
+                6 => DecodeMode6Block(ref reader),
+                _ => DecodeMode7Block(ref reader),
+            };
+        }
+
+        // Helper: converts an r,g,b,a in 0-255 to a Color
+        static Color ToColor(int r, int g, int b, int a)
+        {
+            const float inv = 1f / 255f;
+            return new Color(r * inv, g * inv, b * inv, a * inv);
+        }
+
+        // ================================================================
+        // Block-level decoders (decode all 16 pixels at once)
+        // ================================================================
+
+        static FixedArray16<Color> DecodeMode0Block(ref BitReader reader)
+        {
+            int partition = reader.ReadBits(4);
+
+            int rS0E0 = reader.ReadBits(4),
+                rS0E1 = reader.ReadBits(4);
+            int rS1E0 = reader.ReadBits(4),
+                rS1E1 = reader.ReadBits(4);
+            int rS2E0 = reader.ReadBits(4),
+                rS2E1 = reader.ReadBits(4);
+            int gS0E0 = reader.ReadBits(4),
+                gS0E1 = reader.ReadBits(4);
+            int gS1E0 = reader.ReadBits(4),
+                gS1E1 = reader.ReadBits(4);
+            int gS2E0 = reader.ReadBits(4),
+                gS2E1 = reader.ReadBits(4);
+            int bS0E0 = reader.ReadBits(4),
+                bS0E1 = reader.ReadBits(4);
+            int bS1E0 = reader.ReadBits(4),
+                bS1E1 = reader.ReadBits(4);
+            int bS2E0 = reader.ReadBits(4),
+                bS2E1 = reader.ReadBits(4);
+
+            int pb0 = reader.ReadBits(1),
+                pb1 = reader.ReadBits(1);
+            int pb2 = reader.ReadBits(1),
+                pb3 = reader.ReadBits(1);
+            int pb4 = reader.ReadBits(1),
+                pb5 = reader.ReadBits(1);
+
+            rS0E0 = (rS0E0 << 1) | pb0;
+            rS0E1 = (rS0E1 << 1) | pb1;
+            rS1E0 = (rS1E0 << 1) | pb2;
+            rS1E1 = (rS1E1 << 1) | pb3;
+            rS2E0 = (rS2E0 << 1) | pb4;
+            rS2E1 = (rS2E1 << 1) | pb5;
+            gS0E0 = (gS0E0 << 1) | pb0;
+            gS0E1 = (gS0E1 << 1) | pb1;
+            gS1E0 = (gS1E0 << 1) | pb2;
+            gS1E1 = (gS1E1 << 1) | pb3;
+            gS2E0 = (gS2E0 << 1) | pb4;
+            gS2E1 = (gS2E1 << 1) | pb5;
+            bS0E0 = (bS0E0 << 1) | pb0;
+            bS0E1 = (bS0E1 << 1) | pb1;
+            bS1E0 = (bS1E0 << 1) | pb2;
+            bS1E1 = (bS1E1 << 1) | pb3;
+            bS2E0 = (bS2E0 << 1) | pb4;
+            bS2E1 = (bS2E1 << 1) | pb5;
+
+            // Unquantize all endpoints once
+            int ur0s0 = BC7Unquantize(rS0E0, 5),
+                ur1s0 = BC7Unquantize(rS0E1, 5);
+            int ur0s1 = BC7Unquantize(rS1E0, 5),
+                ur1s1 = BC7Unquantize(rS1E1, 5);
+            int ur0s2 = BC7Unquantize(rS2E0, 5),
+                ur1s2 = BC7Unquantize(rS2E1, 5);
+            int ug0s0 = BC7Unquantize(gS0E0, 5),
+                ug1s0 = BC7Unquantize(gS0E1, 5);
+            int ug0s1 = BC7Unquantize(gS1E0, 5),
+                ug1s1 = BC7Unquantize(gS1E1, 5);
+            int ug0s2 = BC7Unquantize(gS2E0, 5),
+                ug1s2 = BC7Unquantize(gS2E1, 5);
+            int ub0s0 = BC7Unquantize(bS0E0, 5),
+                ub1s0 = BC7Unquantize(bS0E1, 5);
+            int ub0s1 = BC7Unquantize(bS1E0, 5),
+                ub1s1 = BC7Unquantize(bS1E1, 5);
+            int ub0s2 = BC7Unquantize(bS2E0, 5),
+                ub1s2 = BC7Unquantize(bS2E1, 5);
+
+            int anchor0 = 0;
+            int anchor1 = AnchorIndex3_1[partition];
+            int anchor2 = AnchorIndex3_2[partition];
+
+            FixedArray16<Color> output = default;
+            for (int i = 0; i < 16; i++)
+            {
+                int bits = (i == anchor0 || i == anchor1 || i == anchor2) ? 2 : 3;
+                int idx = reader.ReadBits(bits);
+                int subset = PartitionTable3[partition * 16 + i];
+                int w = Weights3[idx];
+
+                int ri,
+                    gi,
+                    bi;
+                switch (subset)
+                {
+                    case 0:
+                        ri = BC7Interpolate(ur0s0, ur1s0, w);
+                        gi = BC7Interpolate(ug0s0, ug1s0, w);
+                        bi = BC7Interpolate(ub0s0, ub1s0, w);
+                        break;
+                    case 1:
+                        ri = BC7Interpolate(ur0s1, ur1s1, w);
+                        gi = BC7Interpolate(ug0s1, ug1s1, w);
+                        bi = BC7Interpolate(ub0s1, ub1s1, w);
+                        break;
+                    default:
+                        ri = BC7Interpolate(ur0s2, ur1s2, w);
+                        gi = BC7Interpolate(ug0s2, ug1s2, w);
+                        bi = BC7Interpolate(ub0s2, ub1s2, w);
+                        break;
+                }
+                output[i] = ToColor(ri, gi, bi, 255);
+            }
+            return output;
+        }
+
+        static FixedArray16<Color> DecodeMode1Block(ref BitReader reader)
+        {
+            int partition = reader.ReadBits(6);
+
+            int rS0E0 = reader.ReadBits(6),
+                rS0E1 = reader.ReadBits(6);
+            int rS1E0 = reader.ReadBits(6),
+                rS1E1 = reader.ReadBits(6);
+            int gS0E0 = reader.ReadBits(6),
+                gS0E1 = reader.ReadBits(6);
+            int gS1E0 = reader.ReadBits(6),
+                gS1E1 = reader.ReadBits(6);
+            int bS0E0 = reader.ReadBits(6),
+                bS0E1 = reader.ReadBits(6);
+            int bS1E0 = reader.ReadBits(6),
+                bS1E1 = reader.ReadBits(6);
+
+            int pb0 = reader.ReadBits(1),
+                pb1 = reader.ReadBits(1);
+
+            rS0E0 = (rS0E0 << 1) | pb0;
+            rS0E1 = (rS0E1 << 1) | pb0;
+            rS1E0 = (rS1E0 << 1) | pb1;
+            rS1E1 = (rS1E1 << 1) | pb1;
+            gS0E0 = (gS0E0 << 1) | pb0;
+            gS0E1 = (gS0E1 << 1) | pb0;
+            gS1E0 = (gS1E0 << 1) | pb1;
+            gS1E1 = (gS1E1 << 1) | pb1;
+            bS0E0 = (bS0E0 << 1) | pb0;
+            bS0E1 = (bS0E1 << 1) | pb0;
+            bS1E0 = (bS1E0 << 1) | pb1;
+            bS1E1 = (bS1E1 << 1) | pb1;
+
+            int ur0s0 = BC7Unquantize(rS0E0, 7),
+                ur1s0 = BC7Unquantize(rS0E1, 7);
+            int ur0s1 = BC7Unquantize(rS1E0, 7),
+                ur1s1 = BC7Unquantize(rS1E1, 7);
+            int ug0s0 = BC7Unquantize(gS0E0, 7),
+                ug1s0 = BC7Unquantize(gS0E1, 7);
+            int ug0s1 = BC7Unquantize(gS1E0, 7),
+                ug1s1 = BC7Unquantize(gS1E1, 7);
+            int ub0s0 = BC7Unquantize(bS0E0, 7),
+                ub1s0 = BC7Unquantize(bS0E1, 7);
+            int ub0s1 = BC7Unquantize(bS1E0, 7),
+                ub1s1 = BC7Unquantize(bS1E1, 7);
+
+            int anchor1 = AnchorIndex2_1[partition];
+
+            FixedArray16<Color> output = default;
+            for (int i = 0; i < 16; i++)
+            {
+                int bits = (i == 0 || i == anchor1) ? 2 : 3;
+                int idx = reader.ReadBits(bits);
+                int subset = PartitionTable2[partition * 16 + i];
+                int w = Weights3[idx];
+
+                int ri,
+                    gi,
+                    bi;
+                if (subset == 0)
+                {
+                    ri = BC7Interpolate(ur0s0, ur1s0, w);
+                    gi = BC7Interpolate(ug0s0, ug1s0, w);
+                    bi = BC7Interpolate(ub0s0, ub1s0, w);
+                }
+                else
+                {
+                    ri = BC7Interpolate(ur0s1, ur1s1, w);
+                    gi = BC7Interpolate(ug0s1, ug1s1, w);
+                    bi = BC7Interpolate(ub0s1, ub1s1, w);
+                }
+                output[i] = ToColor(ri, gi, bi, 255);
+            }
+            return output;
+        }
+
+        static FixedArray16<Color> DecodeMode2Block(ref BitReader reader)
+        {
+            int partition = reader.ReadBits(6);
+
+            int rS0E0 = reader.ReadBits(5),
+                rS0E1 = reader.ReadBits(5);
+            int rS1E0 = reader.ReadBits(5),
+                rS1E1 = reader.ReadBits(5);
+            int rS2E0 = reader.ReadBits(5),
+                rS2E1 = reader.ReadBits(5);
+            int gS0E0 = reader.ReadBits(5),
+                gS0E1 = reader.ReadBits(5);
+            int gS1E0 = reader.ReadBits(5),
+                gS1E1 = reader.ReadBits(5);
+            int gS2E0 = reader.ReadBits(5),
+                gS2E1 = reader.ReadBits(5);
+            int bS0E0 = reader.ReadBits(5),
+                bS0E1 = reader.ReadBits(5);
+            int bS1E0 = reader.ReadBits(5),
+                bS1E1 = reader.ReadBits(5);
+            int bS2E0 = reader.ReadBits(5),
+                bS2E1 = reader.ReadBits(5);
+
+            int ur0s0 = BC7Unquantize(rS0E0, 5),
+                ur1s0 = BC7Unquantize(rS0E1, 5);
+            int ur0s1 = BC7Unquantize(rS1E0, 5),
+                ur1s1 = BC7Unquantize(rS1E1, 5);
+            int ur0s2 = BC7Unquantize(rS2E0, 5),
+                ur1s2 = BC7Unquantize(rS2E1, 5);
+            int ug0s0 = BC7Unquantize(gS0E0, 5),
+                ug1s0 = BC7Unquantize(gS0E1, 5);
+            int ug0s1 = BC7Unquantize(gS1E0, 5),
+                ug1s1 = BC7Unquantize(gS1E1, 5);
+            int ug0s2 = BC7Unquantize(gS2E0, 5),
+                ug1s2 = BC7Unquantize(gS2E1, 5);
+            int ub0s0 = BC7Unquantize(bS0E0, 5),
+                ub1s0 = BC7Unquantize(bS0E1, 5);
+            int ub0s1 = BC7Unquantize(bS1E0, 5),
+                ub1s1 = BC7Unquantize(bS1E1, 5);
+            int ub0s2 = BC7Unquantize(bS2E0, 5),
+                ub1s2 = BC7Unquantize(bS2E1, 5);
+
+            int anchor0 = 0;
+            int anchor1 = AnchorIndex3_1[partition];
+            int anchor2 = AnchorIndex3_2[partition];
+
+            FixedArray16<Color> output = default;
+            for (int i = 0; i < 16; i++)
+            {
+                int bits = (i == anchor0 || i == anchor1 || i == anchor2) ? 1 : 2;
+                int idx = reader.ReadBits(bits);
+                int subset = PartitionTable3[partition * 16 + i];
+                int w = Weights2[idx];
+
+                int ri,
+                    gi,
+                    bi;
+                switch (subset)
+                {
+                    case 0:
+                        ri = BC7Interpolate(ur0s0, ur1s0, w);
+                        gi = BC7Interpolate(ug0s0, ug1s0, w);
+                        bi = BC7Interpolate(ub0s0, ub1s0, w);
+                        break;
+                    case 1:
+                        ri = BC7Interpolate(ur0s1, ur1s1, w);
+                        gi = BC7Interpolate(ug0s1, ug1s1, w);
+                        bi = BC7Interpolate(ub0s1, ub1s1, w);
+                        break;
+                    default:
+                        ri = BC7Interpolate(ur0s2, ur1s2, w);
+                        gi = BC7Interpolate(ug0s2, ug1s2, w);
+                        bi = BC7Interpolate(ub0s2, ub1s2, w);
+                        break;
+                }
+                output[i] = ToColor(ri, gi, bi, 255);
+            }
+            return output;
+        }
+
+        static FixedArray16<Color> DecodeMode3Block(ref BitReader reader)
+        {
+            int partition = reader.ReadBits(6);
+
+            int rS0E0 = reader.ReadBits(7),
+                rS0E1 = reader.ReadBits(7);
+            int rS1E0 = reader.ReadBits(7),
+                rS1E1 = reader.ReadBits(7);
+            int gS0E0 = reader.ReadBits(7),
+                gS0E1 = reader.ReadBits(7);
+            int gS1E0 = reader.ReadBits(7),
+                gS1E1 = reader.ReadBits(7);
+            int bS0E0 = reader.ReadBits(7),
+                bS0E1 = reader.ReadBits(7);
+            int bS1E0 = reader.ReadBits(7),
+                bS1E1 = reader.ReadBits(7);
+
+            int pb0 = reader.ReadBits(1),
+                pb1 = reader.ReadBits(1);
+            int pb2 = reader.ReadBits(1),
+                pb3 = reader.ReadBits(1);
+
+            rS0E0 = (rS0E0 << 1) | pb0;
+            rS0E1 = (rS0E1 << 1) | pb1;
+            rS1E0 = (rS1E0 << 1) | pb2;
+            rS1E1 = (rS1E1 << 1) | pb3;
+            gS0E0 = (gS0E0 << 1) | pb0;
+            gS0E1 = (gS0E1 << 1) | pb1;
+            gS1E0 = (gS1E0 << 1) | pb2;
+            gS1E1 = (gS1E1 << 1) | pb3;
+            bS0E0 = (bS0E0 << 1) | pb0;
+            bS0E1 = (bS0E1 << 1) | pb1;
+            bS1E0 = (bS1E0 << 1) | pb2;
+            bS1E1 = (bS1E1 << 1) | pb3;
+
+            int ur0s0 = BC7Unquantize(rS0E0, 8),
+                ur1s0 = BC7Unquantize(rS0E1, 8);
+            int ur0s1 = BC7Unquantize(rS1E0, 8),
+                ur1s1 = BC7Unquantize(rS1E1, 8);
+            int ug0s0 = BC7Unquantize(gS0E0, 8),
+                ug1s0 = BC7Unquantize(gS0E1, 8);
+            int ug0s1 = BC7Unquantize(gS1E0, 8),
+                ug1s1 = BC7Unquantize(gS1E1, 8);
+            int ub0s0 = BC7Unquantize(bS0E0, 8),
+                ub1s0 = BC7Unquantize(bS0E1, 8);
+            int ub0s1 = BC7Unquantize(bS1E0, 8),
+                ub1s1 = BC7Unquantize(bS1E1, 8);
+
+            int anchor1 = AnchorIndex2_1[partition];
+
+            FixedArray16<Color> output = default;
+            for (int i = 0; i < 16; i++)
+            {
+                int bits = (i == 0 || i == anchor1) ? 1 : 2;
+                int idx = reader.ReadBits(bits);
+                int subset = PartitionTable2[partition * 16 + i];
+                int w = Weights2[idx];
+
+                int ri,
+                    gi,
+                    bi;
+                if (subset == 0)
+                {
+                    ri = BC7Interpolate(ur0s0, ur1s0, w);
+                    gi = BC7Interpolate(ug0s0, ug1s0, w);
+                    bi = BC7Interpolate(ub0s0, ub1s0, w);
+                }
+                else
+                {
+                    ri = BC7Interpolate(ur0s1, ur1s1, w);
+                    gi = BC7Interpolate(ug0s1, ug1s1, w);
+                    bi = BC7Interpolate(ub0s1, ub1s1, w);
+                }
+                output[i] = ToColor(ri, gi, bi, 255);
+            }
+            return output;
+        }
+
+        static FixedArray16<Color> DecodeMode4Block(ref BitReader reader)
+        {
+            int rotation = reader.ReadBits(2);
+            int idxMode = reader.ReadBits(1);
+
+            int r0 = reader.ReadBits(5),
+                r1 = reader.ReadBits(5);
+            int g0 = reader.ReadBits(5),
+                g1 = reader.ReadBits(5);
+            int b0 = reader.ReadBits(5),
+                b1 = reader.ReadBits(5);
+            int a0 = reader.ReadBits(6),
+                a1 = reader.ReadBits(6);
+
+            int ur0 = BC7Unquantize(r0, 5),
+                ur1 = BC7Unquantize(r1, 5);
+            int ug0 = BC7Unquantize(g0, 5),
+                ug1 = BC7Unquantize(g1, 5);
+            int ub0 = BC7Unquantize(b0, 5),
+                ub1 = BC7Unquantize(b1, 5);
+            int ua0 = BC7Unquantize(a0, 6),
+                ua1 = BC7Unquantize(a1, 6);
+
+            // Read 2-bit index set
+            FixedArray16<int> indices2 = default;
+            for (int i = 0; i < 16; i++)
+            {
+                int bits = (i == 0) ? 1 : 2;
+                indices2[i] = reader.ReadBits(bits);
+            }
+
+            // Read 3-bit index set
+            FixedArray16<int> indices3 = default;
+            for (int i = 0; i < 16; i++)
+            {
+                int bits = (i == 0) ? 2 : 3;
+                indices3[i] = reader.ReadBits(bits);
+            }
+
+            FixedArray16<Color> output = default;
+            for (int i = 0; i < 16; i++)
+            {
+                int colorIdx,
+                    alphaIdx;
+                if (idxMode == 0)
+                {
+                    colorIdx = indices2[i];
+                    alphaIdx = indices3[i];
+                }
+                else
+                {
+                    colorIdx = indices3[i];
+                    alphaIdx = indices2[i];
+                }
+
+                int colorWeight = idxMode == 0 ? Weights2[colorIdx] : Weights3[colorIdx];
+                int alphaWeight = idxMode == 0 ? Weights3[alphaIdx] : Weights2[alphaIdx];
+
+                int ri = BC7Interpolate(ur0, ur1, colorWeight);
+                int gi = BC7Interpolate(ug0, ug1, colorWeight);
+                int bi = BC7Interpolate(ub0, ub1, colorWeight);
+                int ai = BC7Interpolate(ua0, ua1, alphaWeight);
+
+                ApplyRotation(rotation, ref ri, ref gi, ref bi, ref ai);
+                output[i] = ToColor(ri, gi, bi, ai);
+            }
+            return output;
+        }
+
+        static FixedArray16<Color> DecodeMode5Block(ref BitReader reader)
+        {
+            int rotation = reader.ReadBits(2);
+
+            int r0 = reader.ReadBits(7),
+                r1 = reader.ReadBits(7);
+            int g0 = reader.ReadBits(7),
+                g1 = reader.ReadBits(7);
+            int b0 = reader.ReadBits(7),
+                b1 = reader.ReadBits(7);
+            int a0 = reader.ReadBits(8),
+                a1 = reader.ReadBits(8);
+
+            int ur0 = BC7Unquantize(r0, 7),
+                ur1 = BC7Unquantize(r1, 7);
+            int ug0 = BC7Unquantize(g0, 7),
+                ug1 = BC7Unquantize(g1, 7);
+            int ub0 = BC7Unquantize(b0, 7),
+                ub1 = BC7Unquantize(b1, 7);
+            int ua0 = BC7Unquantize(a0, 8),
+                ua1 = BC7Unquantize(a1, 8);
+
+            FixedArray16<int> colorIndices = default;
+            for (int i = 0; i < 16; i++)
+            {
+                int bits = (i == 0) ? 1 : 2;
+                colorIndices[i] = reader.ReadBits(bits);
+            }
+
+            FixedArray16<int> alphaIndices = default;
+            for (int i = 0; i < 16; i++)
+            {
+                int bits = (i == 0) ? 1 : 2;
+                alphaIndices[i] = reader.ReadBits(bits);
+            }
+
+            FixedArray16<Color> output = default;
+            for (int i = 0; i < 16; i++)
+            {
+                int ri = BC7Interpolate(ur0, ur1, Weights2[colorIndices[i]]);
+                int gi = BC7Interpolate(ug0, ug1, Weights2[colorIndices[i]]);
+                int bi = BC7Interpolate(ub0, ub1, Weights2[colorIndices[i]]);
+                int ai = BC7Interpolate(ua0, ua1, Weights2[alphaIndices[i]]);
+
+                ApplyRotation(rotation, ref ri, ref gi, ref bi, ref ai);
+                output[i] = ToColor(ri, gi, bi, ai);
+            }
+            return output;
+        }
+
+        static FixedArray16<Color> DecodeMode6Block(ref BitReader reader)
+        {
+            int r0 = reader.ReadBits(7),
+                r1 = reader.ReadBits(7);
+            int g0 = reader.ReadBits(7),
+                g1 = reader.ReadBits(7);
+            int b0 = reader.ReadBits(7),
+                b1 = reader.ReadBits(7);
+            int a0 = reader.ReadBits(7),
+                a1 = reader.ReadBits(7);
+
+            int pb0 = reader.ReadBits(1),
+                pb1 = reader.ReadBits(1);
+
+            r0 = (r0 << 1) | pb0;
+            r1 = (r1 << 1) | pb1;
+            g0 = (g0 << 1) | pb0;
+            g1 = (g1 << 1) | pb1;
+            b0 = (b0 << 1) | pb0;
+            b1 = (b1 << 1) | pb1;
+            a0 = (a0 << 1) | pb0;
+            a1 = (a1 << 1) | pb1;
+
+            int ur0 = BC7Unquantize(r0, 8),
+                ur1 = BC7Unquantize(r1, 8);
+            int ug0 = BC7Unquantize(g0, 8),
+                ug1 = BC7Unquantize(g1, 8);
+            int ub0 = BC7Unquantize(b0, 8),
+                ub1 = BC7Unquantize(b1, 8);
+            int ua0 = BC7Unquantize(a0, 8),
+                ua1 = BC7Unquantize(a1, 8);
+
+            FixedArray16<Color> output = default;
+            for (int i = 0; i < 16; i++)
+            {
+                int bits = (i == 0) ? 3 : 4;
+                int idx = reader.ReadBits(bits);
+                int w = Weights4[idx];
+
+                output[i] = ToColor(
+                    BC7Interpolate(ur0, ur1, w),
+                    BC7Interpolate(ug0, ug1, w),
+                    BC7Interpolate(ub0, ub1, w),
+                    BC7Interpolate(ua0, ua1, w)
+                );
+            }
+            return output;
+        }
+
+        static FixedArray16<Color> DecodeMode7Block(ref BitReader reader)
+        {
+            int partition = reader.ReadBits(6);
+
+            int rS0E0 = reader.ReadBits(5),
+                rS0E1 = reader.ReadBits(5);
+            int rS1E0 = reader.ReadBits(5),
+                rS1E1 = reader.ReadBits(5);
+            int gS0E0 = reader.ReadBits(5),
+                gS0E1 = reader.ReadBits(5);
+            int gS1E0 = reader.ReadBits(5),
+                gS1E1 = reader.ReadBits(5);
+            int bS0E0 = reader.ReadBits(5),
+                bS0E1 = reader.ReadBits(5);
+            int bS1E0 = reader.ReadBits(5),
+                bS1E1 = reader.ReadBits(5);
+            int aS0E0 = reader.ReadBits(5),
+                aS0E1 = reader.ReadBits(5);
+            int aS1E0 = reader.ReadBits(5),
+                aS1E1 = reader.ReadBits(5);
+
+            int pb0 = reader.ReadBits(1),
+                pb1 = reader.ReadBits(1);
+            int pb2 = reader.ReadBits(1),
+                pb3 = reader.ReadBits(1);
+
+            rS0E0 = (rS0E0 << 1) | pb0;
+            rS0E1 = (rS0E1 << 1) | pb1;
+            rS1E0 = (rS1E0 << 1) | pb2;
+            rS1E1 = (rS1E1 << 1) | pb3;
+            gS0E0 = (gS0E0 << 1) | pb0;
+            gS0E1 = (gS0E1 << 1) | pb1;
+            gS1E0 = (gS1E0 << 1) | pb2;
+            gS1E1 = (gS1E1 << 1) | pb3;
+            bS0E0 = (bS0E0 << 1) | pb0;
+            bS0E1 = (bS0E1 << 1) | pb1;
+            bS1E0 = (bS1E0 << 1) | pb2;
+            bS1E1 = (bS1E1 << 1) | pb3;
+            aS0E0 = (aS0E0 << 1) | pb0;
+            aS0E1 = (aS0E1 << 1) | pb1;
+            aS1E0 = (aS1E0 << 1) | pb2;
+            aS1E1 = (aS1E1 << 1) | pb3;
+
+            int ur0s0 = BC7Unquantize(rS0E0, 6),
+                ur1s0 = BC7Unquantize(rS0E1, 6);
+            int ur0s1 = BC7Unquantize(rS1E0, 6),
+                ur1s1 = BC7Unquantize(rS1E1, 6);
+            int ug0s0 = BC7Unquantize(gS0E0, 6),
+                ug1s0 = BC7Unquantize(gS0E1, 6);
+            int ug0s1 = BC7Unquantize(gS1E0, 6),
+                ug1s1 = BC7Unquantize(gS1E1, 6);
+            int ub0s0 = BC7Unquantize(bS0E0, 6),
+                ub1s0 = BC7Unquantize(bS0E1, 6);
+            int ub0s1 = BC7Unquantize(bS1E0, 6),
+                ub1s1 = BC7Unquantize(bS1E1, 6);
+            int ua0s0 = BC7Unquantize(aS0E0, 6),
+                ua1s0 = BC7Unquantize(aS0E1, 6);
+            int ua0s1 = BC7Unquantize(aS1E0, 6),
+                ua1s1 = BC7Unquantize(aS1E1, 6);
+
+            int anchor1 = AnchorIndex2_1[partition];
+
+            FixedArray16<Color> output = default;
+            for (int i = 0; i < 16; i++)
+            {
+                int bits = (i == 0 || i == anchor1) ? 1 : 2;
+                int idx = reader.ReadBits(bits);
+                int subset = PartitionTable2[partition * 16 + i];
+                int w = Weights2[idx];
+
+                int ri,
+                    gi,
+                    bi,
+                    ai;
+                if (subset == 0)
+                {
+                    ri = BC7Interpolate(ur0s0, ur1s0, w);
+                    gi = BC7Interpolate(ug0s0, ug1s0, w);
+                    bi = BC7Interpolate(ub0s0, ub1s0, w);
+                    ai = BC7Interpolate(ua0s0, ua1s0, w);
+                }
+                else
+                {
+                    ri = BC7Interpolate(ur0s1, ur1s1, w);
+                    gi = BC7Interpolate(ug0s1, ug1s1, w);
+                    bi = BC7Interpolate(ub0s1, ub1s1, w);
+                    ai = BC7Interpolate(ua0s1, ua1s1, w);
+                }
+                output[i] = ToColor(ri, gi, bi, ai);
+            }
+            return output;
         }
 
         // Mode 0: 3 subsets, 4-bit endpoints (RGB), 1 unique pbit per endpoint, 3-bit indices
