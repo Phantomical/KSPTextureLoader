@@ -1501,8 +1501,186 @@ public class BC7Tests : CPUTexture2DTests
         }
     }
 
+    // ---- Solid block builders for all modes ----
+
+    byte[] BuildSolidMode0(int r, int g, int b, int pbit)
+    {
+        var blk = new byte[16];
+        var bw = new BitWriter(blk);
+        bw.Write(0b00000001, 1); // mode 0
+        bw.Write(0, 4); // partition 0
+        bw.WriteN(r, 4, 6); // R: 6 endpoints
+        bw.WriteN(g, 4, 6); // G
+        bw.WriteN(b, 4, 6); // B
+        bw.WriteN(pbit, 1, 6); // 6 p-bits
+        return blk;
+    }
+
+    byte[] BuildSolidMode1(int r, int g, int b, int pbit)
+    {
+        var blk = new byte[16];
+        var bw = new BitWriter(blk);
+        bw.Write(0b00000010, 2); // mode 1
+        bw.Write(0, 6); // partition 0
+        bw.WriteN(r, 6, 4); // R: 4 endpoints
+        bw.WriteN(g, 6, 4); // G
+        bw.WriteN(b, 6, 4); // B
+        bw.WriteN(pbit, 1, 2); // 2 shared p-bits
+        return blk;
+    }
+
+    byte[] BuildSolidMode2(int r, int g, int b)
+    {
+        var blk = new byte[16];
+        var bw = new BitWriter(blk);
+        bw.Write(0b00000100, 3); // mode 2
+        bw.Write(0, 6); // partition 0
+        bw.WriteN(r, 5, 6); // R: 6 endpoints
+        bw.WriteN(g, 5, 6); // G
+        bw.WriteN(b, 5, 6); // B
+        return blk;
+    }
+
+    byte[] BuildSolidMode3(int r, int g, int b, int pbit)
+    {
+        var blk = new byte[16];
+        var bw = new BitWriter(blk);
+        bw.Write(0b00001000, 4); // mode 3
+        bw.Write(0, 6); // partition 0
+        bw.WriteN(r, 7, 4); // R: 4 endpoints
+        bw.WriteN(g, 7, 4); // G
+        bw.WriteN(b, 7, 4); // B
+        bw.WriteN(pbit, 1, 4); // 4 p-bits
+        return blk;
+    }
+
+    byte[] BuildSolidMode4(int r, int g, int b, int a)
+    {
+        var blk = new byte[16];
+        var bw = new BitWriter(blk);
+        bw.Write(0b00010000, 5); // mode 4
+        bw.Write(0, 2); // rotation 0
+        bw.Write(0, 1); // idxMode 0
+        bw.WriteN(r, 5, 2); // R
+        bw.WriteN(g, 5, 2); // G
+        bw.WriteN(b, 5, 2); // B
+        bw.WriteN(a, 6, 2); // A
+        return blk;
+    }
+
+    byte[] BuildSolidMode5(int r, int g, int b, int a)
+    {
+        var blk = new byte[16];
+        var bw = new BitWriter(blk);
+        bw.Write(0b00100000, 6); // mode 5
+        bw.Write(0, 2); // rotation 0
+        bw.WriteN(r, 7, 2); // R
+        bw.WriteN(g, 7, 2); // G
+        bw.WriteN(b, 7, 2); // B
+        bw.WriteN(a, 8, 2); // A
+        return blk;
+    }
+
+    byte[] BuildSolidMode7(int r, int g, int b, int a, int pbit)
+    {
+        var blk = new byte[16];
+        var bw = new BitWriter(blk);
+        bw.Write(0b10000000, 8); // mode 7
+        bw.Write(0, 6); // partition 0
+        bw.WriteN(r, 5, 4); // R: 4 endpoints
+        bw.WriteN(g, 5, 4); // G
+        bw.WriteN(b, 5, 4); // B
+        bw.WriteN(a, 5, 4); // A
+        bw.WriteN(pbit, 1, 4); // 4 p-bits
+        return blk;
+    }
+
+    /// <summary>
+    /// Build a 16x8 (4x2 = 8 blocks) texture with one solid block per BC7 mode (0-7).
+    /// Returns the raw block data.
+    /// </summary>
+    byte[] BuildAllModeBlocks()
+    {
+        var blocks = new byte[8 * 16];
+        // Row 0 (y=0..3): modes 0, 1, 2, 3
+        Array.Copy(BuildSolidMode0(10, 5, 2, 1), 0, blocks, 0 * 16, 16);
+        Array.Copy(BuildSolidMode1(40, 20, 10, 0), 0, blocks, 1 * 16, 16);
+        Array.Copy(BuildSolidMode2(20, 10, 5), 0, blocks, 2 * 16, 16);
+        Array.Copy(BuildSolidMode3(100, 50, 25, 0), 0, blocks, 3 * 16, 16);
+        // Row 1 (y=4..7): modes 4, 5, 6, 7
+        Array.Copy(BuildSolidMode4(20, 10, 5, 40), 0, blocks, 4 * 16, 16);
+        Array.Copy(BuildSolidMode5(100, 50, 25, 200), 0, blocks, 5 * 16, 16);
+        Array.Copy(BuildSolidMode6(50, 30, 10, 60), 0, blocks, 6 * 16, 16);
+        Array.Copy(BuildSolidMode7(20, 10, 5, 25, 0), 0, blocks, 7 * 16, 16);
+        return blocks;
+    }
+
     // ================================================================
-    // 29. Multi-block comparison against Texture2D.GetPixel
+    // 29. GetPixels returns the same colors as GetPixel for all 8 BC7 modes
+    // ================================================================
+
+    [TestInfo("CPUTexture2D_BC7_GetPixels")]
+    public void TestBC7GetPixels()
+    {
+        // 16x8 = 4x2 blocks, one solid block per mode (0-7)
+        var allBlocks = BuildAllModeBlocks();
+
+        var (bc7, data) = BC7_Make(allBlocks, 16, 8);
+        try
+        {
+            var pixels = bc7.GetPixels();
+
+            if (pixels.Length != 128)
+                throw new Exception($"BC7.GetPixels: expected 128 pixels, got {pixels.Length}");
+
+            for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 16; x++)
+            {
+                Color expected = bc7.GetPixel(x, y);
+                Color actual = pixels[y * 16 + x];
+                assertColorEquals($"BC7.GetPixels({x},{y})", actual, expected, 1e-6f);
+            }
+        }
+        finally
+        {
+            data.Dispose();
+        }
+    }
+
+    // ================================================================
+    // 30. GetPixels32 returns the same colors as GetPixel32 for all 8 BC7 modes
+    // ================================================================
+
+    [TestInfo("CPUTexture2D_BC7_GetPixels32")]
+    public void TestBC7GetPixels32()
+    {
+        // 16x8 = 4x2 blocks, one solid block per mode (0-7)
+        var allBlocks = BuildAllModeBlocks();
+
+        var (bc7, data) = BC7_Make(allBlocks, 16, 8);
+        try
+        {
+            var pixels = bc7.GetPixels32();
+
+            if (pixels.Length != 128)
+                throw new Exception($"BC7.GetPixels32: expected 128 pixels, got {pixels.Length}");
+
+            for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 16; x++)
+            {
+                Color32 expected = bc7.GetPixel32(x, y);
+                Color32 actual = pixels[y * 16 + x];
+                assertColor32Equals($"BC7.GetPixels32({x},{y})", actual, expected, 0);
+            }
+        }
+        finally
+        {
+            data.Dispose();
+        }
+    }
+
+    // ================================================================
+    // 31. Multi-block comparison against Texture2D.GetPixel
     // ================================================================
 
     [TestInfo("CPUTexture2D_BC7_VsUnity")]
