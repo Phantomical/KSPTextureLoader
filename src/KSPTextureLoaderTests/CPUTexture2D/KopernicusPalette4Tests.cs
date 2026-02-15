@@ -103,8 +103,8 @@ public class KopernicusPalette4Tests : CPUTexture2DTests
             throw new Exception($"Height: expected 4, got {tex.Height}");
         if (tex.MipCount != 1)
             throw new Exception($"MipCount: expected 1, got {tex.MipCount}");
-        if (tex.Format != TextureFormat.RGBA32)
-            throw new Exception($"Format: expected RGBA32, got {tex.Format}");
+        if (tex.Format != default)
+            throw new Exception($"Format: expected default, got {tex.Format}");
     }
 
     // ================================================================
