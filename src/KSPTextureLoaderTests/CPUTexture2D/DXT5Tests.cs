@@ -883,7 +883,143 @@ public class DXT5Tests : CPUTexture2DTests
     }
 
     // ================================================================
-    // 18. Full comparison against Texture2D.GetPixel for varied pixels
+    // 18. GetPixels returns the same colors as GetPixel for an 8x8 multi-block texture
+    // ================================================================
+
+    [TestInfo("CPUTexture2D_DXT5_GetPixels")]
+    public void TestDXT5GetPixels()
+    {
+        // Block (0,0): red/blue color with mixed indices, varied alpha
+        var block00 = DXT5_BuildBlock(
+            240,
+            30,
+            new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 3, 2, 1, 0 },
+            DXT5_PackRGB565(255, 0, 0),
+            DXT5_PackRGB565(0, 0, 255),
+            new byte[] { 0, 1, 2, 3, 3, 2, 1, 0, 0, 1, 2, 3, 3, 2, 1, 0 }
+        );
+
+        // Block (1,0): white/green color, 6-value alpha palette (a0 <= a1)
+        var block10 = DXT5_BuildBlock(
+            50,
+            200,
+            new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7 },
+            DXT5_PackRGB565(255, 255, 255),
+            DXT5_PackRGB565(0, 255, 0),
+            new byte[] { 0, 0, 1, 1, 2, 2, 3, 3, 0, 0, 1, 1, 2, 2, 3, 3 }
+        );
+
+        // Block (0,1): solid blue, solid alpha
+        var block01 = DXT5_BuildSolidBlock(180, DXT5_PackRGB565(0, 0, 255));
+
+        // Block (1,1): yellow/cyan, equal alpha endpoints
+        var block11 = DXT5_BuildBlock(
+            128,
+            128,
+            new byte[] { 0, 1, 2, 6, 3, 4, 5, 7, 0, 0, 0, 0, 0, 0, 0, 0 },
+            DXT5_PackRGB565(255, 255, 0),
+            DXT5_PackRGB565(0, 255, 255),
+            new byte[] { 0, 1, 2, 3, 3, 2, 1, 0, 0, 1, 2, 3, 3, 2, 1, 0 }
+        );
+
+        var allBlocks = new byte[64];
+        Array.Copy(block00, 0, allBlocks, 0, 16);
+        Array.Copy(block10, 0, allBlocks, 16, 16);
+        Array.Copy(block01, 0, allBlocks, 32, 16);
+        Array.Copy(block11, 0, allBlocks, 48, 16);
+
+        var (dxt5, data) = DXT5_Make(allBlocks, 8, 8);
+        try
+        {
+            var pixels = dxt5.GetPixels();
+
+            if (pixels.Length != 64)
+                throw new Exception($"DXT5.GetPixels: expected 64 pixels, got {pixels.Length}");
+
+            for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 8; x++)
+            {
+                Color expected = dxt5.GetPixel(x, y);
+                Color actual = pixels[y * 8 + x];
+                assertColorEquals($"DXT5.GetPixels({x},{y})", actual, expected, 1e-6f);
+            }
+        }
+        finally
+        {
+            data.Dispose();
+        }
+    }
+
+    // ================================================================
+    // 19. GetPixels32 returns the same colors as GetPixel32 for an 8x8 multi-block texture
+    // ================================================================
+
+    [TestInfo("CPUTexture2D_DXT5_GetPixels32")]
+    public void TestDXT5GetPixels32()
+    {
+        // Block (0,0): red/blue color with mixed indices, varied alpha
+        var block00 = DXT5_BuildBlock(
+            240,
+            30,
+            new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 3, 2, 1, 0 },
+            DXT5_PackRGB565(255, 0, 0),
+            DXT5_PackRGB565(0, 0, 255),
+            new byte[] { 0, 1, 2, 3, 3, 2, 1, 0, 0, 1, 2, 3, 3, 2, 1, 0 }
+        );
+
+        // Block (1,0): white/green color, 6-value alpha palette (a0 <= a1)
+        var block10 = DXT5_BuildBlock(
+            50,
+            200,
+            new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7 },
+            DXT5_PackRGB565(255, 255, 255),
+            DXT5_PackRGB565(0, 255, 0),
+            new byte[] { 0, 0, 1, 1, 2, 2, 3, 3, 0, 0, 1, 1, 2, 2, 3, 3 }
+        );
+
+        // Block (0,1): solid blue, solid alpha
+        var block01 = DXT5_BuildSolidBlock(180, DXT5_PackRGB565(0, 0, 255));
+
+        // Block (1,1): yellow/cyan, equal alpha endpoints
+        var block11 = DXT5_BuildBlock(
+            128,
+            128,
+            new byte[] { 0, 1, 2, 6, 3, 4, 5, 7, 0, 0, 0, 0, 0, 0, 0, 0 },
+            DXT5_PackRGB565(255, 255, 0),
+            DXT5_PackRGB565(0, 255, 255),
+            new byte[] { 0, 1, 2, 3, 3, 2, 1, 0, 0, 1, 2, 3, 3, 2, 1, 0 }
+        );
+
+        var allBlocks = new byte[64];
+        Array.Copy(block00, 0, allBlocks, 0, 16);
+        Array.Copy(block10, 0, allBlocks, 16, 16);
+        Array.Copy(block01, 0, allBlocks, 32, 16);
+        Array.Copy(block11, 0, allBlocks, 48, 16);
+
+        var (dxt5, data) = DXT5_Make(allBlocks, 8, 8);
+        try
+        {
+            var pixels = dxt5.GetPixels32();
+
+            if (pixels.Length != 64)
+                throw new Exception($"DXT5.GetPixels32: expected 64 pixels, got {pixels.Length}");
+
+            for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 8; x++)
+            {
+                Color32 expected = dxt5.GetPixel32(x, y);
+                Color32 actual = pixels[y * 8 + x];
+                assertColor32Equals($"DXT5.GetPixels32({x},{y})", actual, expected, 0);
+            }
+        }
+        finally
+        {
+            data.Dispose();
+        }
+    }
+
+    // ================================================================
+    // 20. Full comparison against Texture2D.GetPixel for varied pixels
     // ================================================================
 
     [TestInfo("CPUTexture2D_DXT5_VsUnity")]
