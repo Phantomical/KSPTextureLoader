@@ -1,4 +1,6 @@
 using System;
+using KSPTextureLoader.Burst;
+using Unity.Burst;
 using Unity.Collections;
 using UnityEngine;
 
@@ -6,6 +8,7 @@ namespace KSPTextureLoader;
 
 partial class CPUTexture2D
 {
+    [BurstCompile]
     public readonly struct BGRA32 : ICPUTexture2D
     {
         const int bpp = 4;
@@ -56,6 +59,69 @@ partial class CPUTexture2D
             where T : unmanaged
         {
             return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(byte));
+        }
+
+        public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp)
+        {
+            return GetPixels<BGRA32, Color32, GetPixelsJob>(
+                in this,
+                mipLevel,
+                allocator,
+                (data, pixels) => new GetPixelsJob { data = data, pixels = pixels }
+            );
+        }
+
+        public NativeArray<Color32> GetPixels32(
+            int mipLevel = 0,
+            Allocator allocator = Allocator.Temp
+        )
+        {
+            return GetPixels32<BGRA32, Color32, GetPixels32Job>(
+                in this,
+                mipLevel,
+                allocator,
+                (data, pixels) => new GetPixels32Job { data = data, pixels = pixels }
+            );
+        }
+
+        [BurstCompile]
+        struct GetPixelsJob : IJobParallelForBatch
+        {
+            public NativeArray<Color32> data;
+            public NativeArray<Color> pixels;
+
+            public void Execute(int start, int count)
+            {
+                int end = start + count;
+                for (int i = start; i < end; ++i)
+                {
+                    // data is BGRA in memory: .r=B, .g=G, .b=R, .a=A
+                    var c = data[i];
+                    pixels[i] = new Color(
+                        c.b * Byte2Float,
+                        c.g * Byte2Float,
+                        c.r * Byte2Float,
+                        c.a * Byte2Float
+                    );
+                }
+            }
+        }
+
+        [BurstCompile]
+        struct GetPixels32Job : IJobParallelForBatch
+        {
+            public NativeArray<Color32> data;
+            public NativeArray<Color32> pixels;
+
+            public void Execute(int start, int count)
+            {
+                int end = start + count;
+                for (int i = start; i < end; ++i)
+                {
+                    var c = data[i];
+                    pixels[i] = new Color32(c.b, c.g, c.r, c.a);
+                }
+            }
         }
     }
 }

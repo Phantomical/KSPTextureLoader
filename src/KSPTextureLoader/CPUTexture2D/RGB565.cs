@@ -1,4 +1,6 @@
 using System;
+using KSPTextureLoader.Burst;
+using Unity.Burst;
 using Unity.Collections;
 using UnityEngine;
 
@@ -6,6 +8,7 @@ namespace KSPTextureLoader;
 
 partial class CPUTexture2D
 {
+    [BurstCompile]
     public readonly struct RGB565 : ICPUTexture2D
     {
         public int Width { get; }
@@ -54,6 +57,69 @@ partial class CPUTexture2D
             where T : unmanaged
         {
             return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(ushort));
+        }
+
+        public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp)
+        {
+            return GetPixels<RGB565, ushort, GetPixelsJob>(
+                in this,
+                mipLevel,
+                allocator,
+                (data, pixels) => new GetPixelsJob { data = data, pixels = pixels }
+            );
+        }
+
+        public NativeArray<Color32> GetPixels32(
+            int mipLevel = 0,
+            Allocator allocator = Allocator.Temp
+        )
+        {
+            return GetPixels32<RGB565, ushort, GetPixels32Job>(
+                in this,
+                mipLevel,
+                allocator,
+                (data, pixels) => new GetPixels32Job { data = data, pixels = pixels }
+            );
+        }
+
+        [BurstCompile]
+        struct GetPixelsJob : IJobParallelForBatch
+        {
+            public NativeArray<ushort> data;
+            public NativeArray<Color> pixels;
+
+            public void Execute(int start, int count)
+            {
+                int end = start + count;
+                for (int i = start; i < end; ++i)
+                {
+                    ushort pixel = data[i];
+                    float r = ((pixel >> 11) & 0x1F) * (1f / 31f);
+                    float g = ((pixel >> 5) & 0x3F) * (1f / 63f);
+                    float b = (pixel & 0x1F) * (1f / 31f);
+                    pixels[i] = new Color(r, g, b, 1f);
+                }
+            }
+        }
+
+        [BurstCompile]
+        struct GetPixels32Job : IJobParallelForBatch
+        {
+            public NativeArray<ushort> data;
+            public NativeArray<Color32> pixels;
+
+            public void Execute(int start, int count)
+            {
+                int end = start + count;
+                for (int i = start; i < end; ++i)
+                {
+                    ushort pixel = data[i];
+                    float r = ((pixel >> 11) & 0x1F) * (1f / 31f);
+                    float g = ((pixel >> 5) & 0x3F) * (1f / 63f);
+                    float b = (pixel & 0x1F) * (1f / 31f);
+                    pixels[i] = (Color32)new Color(r, g, b, 1f);
+                }
+            }
         }
     }
 }

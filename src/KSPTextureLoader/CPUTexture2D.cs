@@ -2,6 +2,8 @@ using System;
 using System.IO.MemoryMappedFiles;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using KSPTextureLoader.Burst;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
@@ -20,6 +22,9 @@ public interface ICPUTexture2D
     public Color GetPixel(int x, int y, int mipLevel = 0);
     public Color32 GetPixel32(int x, int y, int mipLevel = 0);
     public Color GetPixelBilinear(float u, float v, int mipLevel = 0);
+
+    public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp);
+    public NativeArray<Color32> GetPixels32(int mipLevel = 0, Allocator allocator = Allocator.Temp);
 
     public NativeArray<T> GetRawTextureData<T>()
         where T : unmanaged;
@@ -43,6 +48,7 @@ public interface ICompileToTexture
 /// of the actual file on disk, or the texture data for a <see cref="Texture2D" />
 /// loaded from an asset bundle.
 /// </remarks>
+[BurstCompile]
 public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, IDisposable
 {
     protected const float Byte2Float = 1f / 255f;
@@ -757,6 +763,78 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             if (!readable)
                 copy.Apply(false, true);
             return copy;
+        }
+    }
+
+    static NativeArray<Color> GetPixels<TTex, TData, TJob>(
+        in TTex texture,
+        int mipLevel,
+        Allocator allocator,
+        Func<NativeArray<TData>, NativeArray<Color>, TJob> jobFunc
+    )
+        where TTex : ICPUTexture2D
+        where TJob : struct, IJobParallelForBatch
+        where TData : unmanaged
+    {
+        var info = GetMipProperties(in texture, mipLevel);
+        var pixels = new NativeArray<Color>(
+            info.width * info.height,
+            allocator,
+            NativeArrayOptions.UninitializedMemory
+        );
+
+        try
+        {
+            var data = texture.GetRawTextureData<TData>().GetSubArray(info.offset, pixels.Length);
+            var job = jobFunc(data, pixels);
+
+            if (pixels.Length < 16384)
+                job.RunBatch(pixels.Length, 4096);
+            else
+                job.ScheduleBatch(pixels.Length, 4096).Complete();
+
+            return pixels;
+        }
+        catch
+        {
+            pixels.Dispose();
+            throw;
+        }
+    }
+
+    static NativeArray<Color32> GetPixels32<TTex, TData, TJob>(
+        in TTex texture,
+        int mipLevel,
+        Allocator allocator,
+        Func<NativeArray<TData>, NativeArray<Color32>, TJob> jobFunc
+    )
+        where TTex : ICPUTexture2D
+        where TJob : struct, IJobParallelForBatch
+        where TData : unmanaged
+    {
+        var info = GetMipProperties(in texture, mipLevel);
+        var pixels = new NativeArray<Color32>(
+            info.width * info.height,
+            allocator,
+            NativeArrayOptions.UninitializedMemory
+        );
+
+        try
+        {
+            var data = texture.GetRawTextureData<TData>().GetSubArray(info.offset, pixels.Length);
+            var job = jobFunc(data, pixels);
+
+            if (pixels.Length < 16384)
+                job.RunBatch(pixels.Length, 4096);
+            else
+                job.ScheduleBatch(pixels.Length, 4096).Complete();
+
+            return pixels;
+        }
+        catch
+        {
+            pixels.Dispose();
+            throw;
         }
     }
     #endregion
