@@ -63,7 +63,7 @@ public interface ICompileToTexture
 /// safe to use on other threads and in burst-compiled code.
 /// </para>
 /// </remarks>
-[BurstCompile]
+[BurstCompile(FloatMode = FloatMode.Fast)]
 public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, IDisposable
 {
     protected const float Byte2Float = 1f / 255f;

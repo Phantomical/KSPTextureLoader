@@ -10,7 +10,7 @@ namespace KSPTextureLoader.Jobs;
 //
 // It has a 16-element RGBA color palette, followed by 4-bpp color indices.
 // Each batch item represents one byte (two pixels).
-[BurstCompile]
+[BurstCompile(FloatMode = FloatMode.Fast)]
 struct DecodeKopernicusPalette4bitJob : IJobParallelForBatch
 {
     [ReadOnly]
@@ -39,7 +39,7 @@ struct DecodeKopernicusPalette4bitJob : IJobParallelForBatch
 // Another custom palette texture format for Kopernicus.
 //
 // This one has 256 palette entries followed by 8bpp palette pixel indices.
-[BurstCompile]
+[BurstCompile(FloatMode = FloatMode.Fast)]
 struct DecodeKopernicusPalette8bitJob : IJobParallelForBatch
 {
     [ReadOnly]

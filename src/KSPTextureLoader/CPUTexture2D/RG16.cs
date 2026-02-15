@@ -8,7 +8,7 @@ namespace KSPTextureLoader;
 
 partial class CPUTexture2D
 {
-    [BurstCompile]
+    [BurstCompile(FloatMode = FloatMode.Fast)]
     public readonly struct RG16 : ICPUTexture2D
     {
         const int bpp = 2;
@@ -79,7 +79,7 @@ partial class CPUTexture2D
             );
         }
 
-        [BurstCompile]
+        [BurstCompile(FloatMode = FloatMode.Fast)]
         struct GetPixelsJob : IJobParallelForBatch
         {
             public NativeArray<ushort> data;
@@ -96,7 +96,7 @@ partial class CPUTexture2D
             }
         }
 
-        [BurstCompile]
+        [BurstCompile(FloatMode = FloatMode.Fast)]
         struct GetPixels32Job : IJobParallelForBatch
         {
             public NativeArray<ushort> data;

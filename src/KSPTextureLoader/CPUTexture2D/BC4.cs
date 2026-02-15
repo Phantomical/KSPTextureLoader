@@ -79,7 +79,7 @@ partial class CPUTexture2D
             );
         }
 
-        [BurstCompile]
+        [BurstCompile(FloatMode = FloatMode.Fast)]
         struct GetPixelsJob : IGetPixelsBlockJob
         {
             [ReadOnly]

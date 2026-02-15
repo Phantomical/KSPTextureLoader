@@ -13,7 +13,7 @@ partial class CPUTexture2D
     /// A texture with 8-bit red and alpha channels. This does not correspond to
     /// a real unity texture format, but is used by some mods.
     /// </summary>
-    [BurstCompile]
+    [BurstCompile(FloatMode = FloatMode.Fast)]
     public readonly struct RA16 : ICPUTexture2D, ICompileToTexture
     {
         const int bpp = 2;
@@ -108,7 +108,7 @@ partial class CPUTexture2D
             return texture;
         }
 
-        [BurstCompile]
+        [BurstCompile(FloatMode = FloatMode.Fast)]
         struct GetPixelsJob : IJobParallelForBatch
         {
             public NativeArray<ushort> data;
@@ -125,7 +125,7 @@ partial class CPUTexture2D
             }
         }
 
-        [BurstCompile]
+        [BurstCompile(FloatMode = FloatMode.Fast)]
         struct GetPixels32Job : IJobParallelForBatch
         {
             public NativeArray<ushort> data;
