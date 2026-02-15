@@ -1,3 +1,4 @@
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
@@ -8,6 +9,7 @@ namespace KSPTextureLoader.Jobs;
 // This one is a custom texture format for Kopernicus.
 //
 // It has a 16-element RGBA color palette, followed by 4-bpp color indices.
+[BurstCompile]
 struct DecodeKopernicusPalette4bitJob : IJob
 {
     [ReadOnly]
@@ -35,6 +37,7 @@ struct DecodeKopernicusPalette4bitJob : IJob
 // Another custom palette texture format for Kopernicus.
 //
 // This one has 256 palette entries followed by 8bpp palette pixel indices.
+[BurstCompile]
 struct DecodeKopernicusPalette8bitJob : IJob
 {
     [ReadOnly]

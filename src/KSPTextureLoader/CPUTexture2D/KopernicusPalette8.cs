@@ -59,6 +59,49 @@ partial class CPUTexture2D
             return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(byte));
         }
 
+        public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp)
+        {
+            using var pixels32 = GetPixels32(mipLevel, Allocator.Temp);
+            var result = new NativeArray<Color>(
+                pixels32.Length,
+                allocator,
+                NativeArrayOptions.UninitializedMemory
+            );
+            for (int i = 0; i < pixels32.Length; i++)
+            {
+                var c = pixels32[i];
+                result[i] = new Color(
+                    c.r * Byte2Float,
+                    c.g * Byte2Float,
+                    c.b * Byte2Float,
+                    c.a * Byte2Float
+                );
+            }
+            return result;
+        }
+
+        public NativeArray<Color32> GetPixels32(
+            int mipLevel = 0,
+            Allocator allocator = Allocator.Temp
+        )
+        {
+            int pixelCount = Width * Height;
+            var result = new NativeArray<Color32>(
+                pixelCount,
+                allocator,
+                NativeArrayOptions.UninitializedMemory
+            );
+            new DecodeKopernicusPalette8bitJob
+            {
+                data = this.data,
+                colors = result,
+                pixels = pixelCount,
+            }
+                .Schedule()
+                .Complete();
+            return result;
+        }
+
         public Texture2D CompileToTexture(bool readable)
         {
             var texture = TextureUtils.CreateUninitializedTexture2D(
