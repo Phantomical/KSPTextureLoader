@@ -1,4 +1,5 @@
 using System;
+using KSPTextureLoader.Burst;
 using KSPTextureLoader.Jobs;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -91,13 +92,8 @@ partial class CPUTexture2D
                 allocator,
                 NativeArrayOptions.UninitializedMemory
             );
-            new DecodeKopernicusPalette8bitJob
-            {
-                data = this.data,
-                colors = result,
-                pixels = pixelCount,
-            }
-                .Schedule()
+            new DecodeKopernicusPalette8bitJob { data = this.data, colors = result }
+                .ScheduleBatch(pixelCount, 4096)
                 .Complete();
             return result;
         }
@@ -119,7 +115,7 @@ partial class CPUTexture2D
                 data = GetRawTextureData<byte>().GetSubArray(0, PaletteBytes + Width * Height),
                 colors = data,
             };
-            var handle = job.Schedule();
+            var handle = job.ScheduleBatch(Width * Height, 4096);
             JobHandle.ScheduleBatchedJobs();
 
             var texdata = texture.GetRawTextureData<Color32>();

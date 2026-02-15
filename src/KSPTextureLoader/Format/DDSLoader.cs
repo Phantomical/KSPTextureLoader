@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using DDSHeaders;
+using KSPTextureLoader.Burst;
 using KSPTextureLoader.Format.DDS;
 using KSPTextureLoader.Jobs;
 using KSPTextureLoader.Utils;
@@ -203,10 +204,13 @@ internal static unsafe class DDSLoader
                     {
                         data = buffer,
                         colors = colors.Slice().SliceConvert<Color32>(),
-                        pixels = width * height,
                     };
 
-                    jobGuard.JobHandle = job.Schedule(jobGuard.JobHandle);
+                    jobGuard.JobHandle = job.ScheduleBatch(
+                        width * height / 2,
+                        4096,
+                        jobGuard.JobHandle
+                    );
                     buffer.DisposeExt(jobGuard.JobHandle);
                     bufGuard.array = colors;
                     buffer = colors;
@@ -234,10 +238,13 @@ internal static unsafe class DDSLoader
                     {
                         data = buffer,
                         colors = colors.Slice().SliceConvert<Color32>(),
-                        pixels = width * height,
                     };
 
-                    jobGuard.JobHandle = job.Schedule(jobGuard.JobHandle);
+                    jobGuard.JobHandle = job.ScheduleBatch(
+                        width * height,
+                        4096,
+                        jobGuard.JobHandle
+                    );
                     buffer.DisposeExt(jobGuard.JobHandle);
                     bufGuard.array = colors;
                     buffer = colors;
