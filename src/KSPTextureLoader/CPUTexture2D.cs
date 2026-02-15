@@ -879,22 +879,18 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
 
     private protected static Texture2D CloneReadableTexture(Texture2D src, bool readable = false)
     {
-        if (SystemInfo.copyTextureSupport.HasFlag(CopyTextureSupport.Basic))
+        if (!readable && SystemInfo.copyTextureSupport.HasFlag(CopyTextureSupport.Basic))
         {
-            var flags = readable
-                ? default
-                : TextureUtils.InternalTextureCreationFlags.DontCreateSharedTextureData;
             var copy = TextureUtils.CreateUninitializedTexture2D(
                 src.width,
                 src.height,
                 src.mipmapCount,
                 src.graphicsFormat,
-                flags
+                TextureUtils.InternalTextureCreationFlags.DontCreateSharedTextureData
             );
+            copy.anisoLevel = src.anisoLevel;
 
-            if (!readable)
-                TextureUtils.MarkExternalTextureAsUnreadable(copy);
-
+            TextureUtils.MarkExternalTextureAsUnreadable(copy);
             Graphics.CopyTexture(src, copy);
             return copy;
         }
