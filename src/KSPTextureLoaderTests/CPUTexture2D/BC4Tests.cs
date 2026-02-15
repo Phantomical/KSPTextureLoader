@@ -933,7 +933,107 @@ public class BC4Tests : CPUTexture2DTests
     }
 
     // ================================================================
-    // 22. Reversed endpoints 8-value: r0=30, r1=240 swapped to check
+    // 22. GetPixels matches GetPixel for multi-block texture
+    // ================================================================
+
+    [TestInfo("CPUTexture2D_BC4_GetPixels")]
+    public void TestBC4_GetPixels()
+    {
+        // Build an 8x8 texture (2x2 blocks) with varied data
+        var block00 = BC4_BuildBlock(
+            240,
+            30,
+            new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 3, 2, 1, 0 }
+        );
+        var block10 = BC4_BuildSolidBlock(128);
+        var block01 = BC4_BuildBlock(
+            50,
+            200,
+            new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 0, 0, 0, 0, 0, 0, 0, 0 }
+        );
+        var block11 = BC4_BuildBlock(
+            0,
+            255,
+            new byte[] { 6, 7, 0, 1, 2, 3, 4, 5, 5, 4, 3, 2, 1, 0, 7, 6 }
+        );
+
+        var allBlocks = new byte[32];
+        Array.Copy(block00, 0, allBlocks, 0, 8);
+        Array.Copy(block10, 0, allBlocks, 8, 8);
+        Array.Copy(block01, 0, allBlocks, 16, 8);
+        Array.Copy(block11, 0, allBlocks, 24, 8);
+
+        int w = 8,
+            h = 8;
+        var (bc4, data) = BC4_Make(allBlocks, w, h);
+        try
+        {
+            var pixels = bc4.GetPixels();
+
+            if (pixels.Length != w * h)
+                throw new Exception($"BC4.GetPixels: expected {w * h} pixels, got {pixels.Length}");
+
+            for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                Color expected = bc4.GetPixel(x, y);
+                Color actual = pixels[y * w + x];
+                assertColorEquals($"BC4.GetPixels({x},{y})", actual, expected, 1e-6f);
+            }
+        }
+        finally
+        {
+            data.Dispose();
+        }
+    }
+
+    // ================================================================
+    // 23. GetPixels32 matches GetPixel32 for multi-block texture
+    // ================================================================
+
+    [TestInfo("CPUTexture2D_BC4_GetPixels32")]
+    public void TestBC4_GetPixels32()
+    {
+        // Build an 8x8 texture (2x2 blocks) with varied data
+        var block00 = BC4_BuildBlock(240, 30, [0, 1, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 3, 2, 1, 0]);
+        var block10 = BC4_BuildSolidBlock(128);
+        var block01 = BC4_BuildBlock(50, 200, [0, 1, 2, 3, 4, 5, 6, 7, 0, 0, 0, 0, 0, 0, 0, 0]);
+        var block11 = BC4_BuildBlock(0, 255, [6, 7, 0, 1, 2, 3, 4, 5, 5, 4, 3, 2, 1, 0, 7, 6]);
+
+        var allBlocks = new byte[32];
+        Array.Copy(block00, 0, allBlocks, 0, 8);
+        Array.Copy(block10, 0, allBlocks, 8, 8);
+        Array.Copy(block01, 0, allBlocks, 16, 8);
+        Array.Copy(block11, 0, allBlocks, 24, 8);
+
+        int w = 8,
+            h = 8;
+        var (bc4, data) = BC4_Make(allBlocks, w, h);
+        try
+        {
+            var pixels = bc4.GetPixels32();
+
+            if (pixels.Length != w * h)
+                throw new Exception(
+                    $"BC4.GetPixels32: expected {w * h} pixels, got {pixels.Length}"
+                );
+
+            for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                Color32 expected = bc4.GetPixel32(x, y);
+                Color32 actual = pixels[y * w + x];
+                assertColor32Equals($"BC4.GetPixels32({x},{y})", actual, expected, 0);
+            }
+        }
+        finally
+        {
+            data.Dispose();
+        }
+    }
+
+    // ================================================================
+    // 24. Reversed endpoints 8-value: r0=30, r1=240 swapped to check
     //     that the 6-value path is correctly selected
     // ================================================================
 
