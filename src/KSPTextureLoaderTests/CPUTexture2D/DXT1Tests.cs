@@ -282,4 +282,158 @@ public class DXT1Tests : CPUTexture2DTests
             UnityEngine.Object.Destroy(tex);
         }
     }
+
+    /// <summary>
+    /// GetPixels returns the same colors as GetPixel for an 8x8 multi-block texture.
+    /// </summary>
+    [TestInfo("CPUTexture2D_DXT1_GetPixels")]
+    public void TestDXT1GetPixels()
+    {
+        // Block (0,0): opaque, red/blue with mixed indices
+        var block00 = MakeDXT1Block(
+            EncodeRGB565(31, 0, 0),
+            EncodeRGB565(0, 0, 31),
+            MakeIndexRow(0, 1, 2, 3),
+            MakeIndexRow(3, 2, 1, 0),
+            MakeIndexRow(0, 1, 2, 3),
+            MakeIndexRow(3, 2, 1, 0)
+        );
+
+        // Block (1,0): opaque, white/green
+        var block10 = MakeDXT1Block(
+            EncodeRGB565(31, 63, 31),
+            EncodeRGB565(0, 63, 0),
+            MakeIndexRow(0, 0, 1, 1),
+            MakeIndexRow(2, 2, 3, 3),
+            MakeIndexRow(0, 0, 1, 1),
+            MakeIndexRow(2, 2, 3, 3)
+        );
+
+        // Block (0,1): transparent, blue/red (c0 < c1)
+        var block01 = MakeDXT1Block(
+            EncodeRGB565(0, 0, 31),
+            EncodeRGB565(31, 0, 0),
+            MakeIndexRow(0, 0, 0, 0),
+            MakeIndexRow(1, 1, 1, 1),
+            MakeIndexRow(2, 2, 2, 2),
+            MakeIndexRow(3, 3, 3, 3)
+        );
+
+        // Block (1,1): equal endpoints
+        ushort mid = EncodeRGB565(16, 32, 16);
+        var block11 = MakeDXT1Block(
+            mid,
+            mid,
+            MakeIndexRow(0, 1, 2, 3),
+            MakeIndexRow(0, 1, 2, 3),
+            MakeIndexRow(0, 1, 2, 3),
+            MakeIndexRow(0, 1, 2, 3)
+        );
+
+        var rawData = new byte[32];
+        Array.Copy(block00, 0, rawData, 0, 8);
+        Array.Copy(block10, 0, rawData, 8, 8);
+        Array.Copy(block01, 0, rawData, 16, 8);
+        Array.Copy(block11, 0, rawData, 24, 8);
+
+        var tex = CreateTexture(8, 8, TextureFormat.DXT1, rawData);
+        try
+        {
+            var nativeData = tex.GetRawTextureData<byte>();
+            var cpu = new CPUTexture2D.DXT1(nativeData, 8, 8, 1);
+            var pixels = cpu.GetPixels();
+
+            if (pixels.Length != 64)
+                throw new Exception($"DXT1.GetPixels: expected 64 pixels, got {pixels.Length}");
+
+            for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 8; x++)
+            {
+                Color expected = cpu.GetPixel(x, y);
+                Color actual = pixels[y * 8 + x];
+                assertColorEquals($"DXT1.GetPixels({x},{y})", actual, expected, 1e-6f);
+            }
+        }
+        finally
+        {
+            UnityEngine.Object.Destroy(tex);
+        }
+    }
+
+    /// <summary>
+    /// GetPixels32 returns the same colors as GetPixel32 for an 8x8 multi-block texture.
+    /// </summary>
+    [TestInfo("CPUTexture2D_DXT1_GetPixels32")]
+    public void TestDXT1GetPixels32()
+    {
+        // Block (0,0): opaque, red/blue with mixed indices
+        var block00 = MakeDXT1Block(
+            EncodeRGB565(31, 0, 0),
+            EncodeRGB565(0, 0, 31),
+            MakeIndexRow(0, 1, 2, 3),
+            MakeIndexRow(3, 2, 1, 0),
+            MakeIndexRow(0, 1, 2, 3),
+            MakeIndexRow(3, 2, 1, 0)
+        );
+
+        // Block (1,0): opaque, white/green
+        var block10 = MakeDXT1Block(
+            EncodeRGB565(31, 63, 31),
+            EncodeRGB565(0, 63, 0),
+            MakeIndexRow(0, 0, 1, 1),
+            MakeIndexRow(2, 2, 3, 3),
+            MakeIndexRow(0, 0, 1, 1),
+            MakeIndexRow(2, 2, 3, 3)
+        );
+
+        // Block (0,1): transparent, blue/red (c0 < c1)
+        var block01 = MakeDXT1Block(
+            EncodeRGB565(0, 0, 31),
+            EncodeRGB565(31, 0, 0),
+            MakeIndexRow(0, 0, 0, 0),
+            MakeIndexRow(1, 1, 1, 1),
+            MakeIndexRow(2, 2, 2, 2),
+            MakeIndexRow(3, 3, 3, 3)
+        );
+
+        // Block (1,1): equal endpoints
+        ushort mid = EncodeRGB565(16, 32, 16);
+        var block11 = MakeDXT1Block(
+            mid,
+            mid,
+            MakeIndexRow(0, 1, 2, 3),
+            MakeIndexRow(0, 1, 2, 3),
+            MakeIndexRow(0, 1, 2, 3),
+            MakeIndexRow(0, 1, 2, 3)
+        );
+
+        var rawData = new byte[32];
+        Array.Copy(block00, 0, rawData, 0, 8);
+        Array.Copy(block10, 0, rawData, 8, 8);
+        Array.Copy(block01, 0, rawData, 16, 8);
+        Array.Copy(block11, 0, rawData, 24, 8);
+
+        var tex = CreateTexture(8, 8, TextureFormat.DXT1, rawData);
+        try
+        {
+            var nativeData = tex.GetRawTextureData<byte>();
+            var cpu = new CPUTexture2D.DXT1(nativeData, 8, 8, 1);
+            var pixels = cpu.GetPixels32();
+
+            if (pixels.Length != 64)
+                throw new Exception($"DXT1.GetPixels32: expected 64 pixels, got {pixels.Length}");
+
+            for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 8; x++)
+            {
+                Color32 expected = cpu.GetPixel32(x, y);
+                Color32 actual = pixels[y * 8 + x];
+                assertColor32Equals($"DXT1.GetPixels32({x},{y})", actual, expected, 0);
+            }
+        }
+        finally
+        {
+            UnityEngine.Object.Destroy(tex);
+        }
+    }
 }
