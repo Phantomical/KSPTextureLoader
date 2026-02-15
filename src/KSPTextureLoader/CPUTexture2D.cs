@@ -819,6 +819,56 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
         }
     }
 
+    /// <summary>
+    /// Decodes an entire DXT1 block (8 bytes packed as a ulong) into 16 Color values
+    /// in row-major order (4 rows of 4 pixels).
+    /// </summary>
+    internal static unsafe void DecodeDXT1Block(ulong bits, Color* output)
+    {
+        ushort c0Raw = (ushort)(bits & 0xFFFF);
+        ushort c1Raw = (ushort)((bits >> 16) & 0xFFFF);
+
+        float r0 = ((c0Raw >> 11) & 0x1F) * (1f / 31f);
+        float g0 = ((c0Raw >> 5) & 0x3F) * (1f / 63f);
+        float b0 = (c0Raw & 0x1F) * (1f / 31f);
+
+        float r1 = ((c1Raw >> 11) & 0x1F) * (1f / 31f);
+        float g1 = ((c1Raw >> 5) & 0x3F) * (1f / 63f);
+        float b1 = (c1Raw & 0x1F) * (1f / 31f);
+
+        Color* palette = stackalloc Color[4];
+        palette[0] = new Color(r0, g0, b0, 1f);
+        palette[1] = new Color(r1, g1, b1, 1f);
+
+        if (c0Raw > c1Raw)
+        {
+            palette[2] = new Color(
+                (2f * r0 + r1) * (1f / 3f),
+                (2f * g0 + g1) * (1f / 3f),
+                (2f * b0 + b1) * (1f / 3f),
+                1f
+            );
+            palette[3] = new Color(
+                (r0 + 2f * r1) * (1f / 3f),
+                (g0 + 2f * g1) * (1f / 3f),
+                (b0 + 2f * b1) * (1f / 3f),
+                1f
+            );
+        }
+        else
+        {
+            palette[2] = new Color((r0 + r1) * 0.5f, (g0 + g1) * 0.5f, (b0 + b1) * 0.5f, 1f);
+            palette[3] = new Color(0f, 0f, 0f, 0f);
+        }
+
+        uint indices = (uint)(bits >> 32);
+        for (int i = 0; i < 16; i++)
+        {
+            output[i] = palette[indices & 0x3];
+            indices >>= 2;
+        }
+    }
+
     private protected static Texture2D CloneReadableTexture(Texture2D src, bool readable = false)
     {
         if (SystemInfo.copyTextureSupport.HasFlag(CopyTextureSupport.Basic))
@@ -919,6 +969,82 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             pixels.Dispose();
             throw;
         }
+    }
+
+    static unsafe NativeArray<Color> GetBlockPixels<TTex, TBlock, TJob>(
+        in TTex texture,
+        int mipLevel,
+        Allocator allocator,
+        Func<NativeArray<TBlock>, NativeArray<Color>, int, int, int, TJob> jobFunc
+    )
+        where TTex : ICPUTexture2D
+        where TBlock : unmanaged
+        where TJob : struct, IJobParallelForBatch
+    {
+        GetBlockMipProperties(
+            texture.Width,
+            texture.Height,
+            mipLevel,
+            out int mipWidth,
+            out int mipHeight,
+            out int blockOffset,
+            out int blocksPerRow,
+            out int blockCount
+        );
+
+        var pixels = new NativeArray<Color>(
+            mipWidth * mipHeight,
+            allocator,
+            NativeArrayOptions.UninitializedMemory
+        );
+
+        var blocks = texture.GetRawTextureData<TBlock>().GetSubArray(blockOffset, blockCount);
+        var job = jobFunc(blocks, pixels, blocksPerRow, mipWidth, mipHeight);
+
+        if (blockCount < 1024)
+            job.RunBatch(blockCount, 256);
+        else
+            job.ScheduleBatch(blockCount, 256).Complete();
+
+        return pixels;
+    }
+
+    static unsafe NativeArray<Color32> GetBlockPixels32<TTex, TBlock, TJob>(
+        in TTex texture,
+        int mipLevel,
+        Allocator allocator,
+        Func<NativeArray<TBlock>, NativeArray<Color32>, int, int, int, TJob> jobFunc
+    )
+        where TTex : ICPUTexture2D
+        where TBlock : unmanaged
+        where TJob : struct, IJobParallelForBatch
+    {
+        GetBlockMipProperties(
+            texture.Width,
+            texture.Height,
+            mipLevel,
+            out int mipWidth,
+            out int mipHeight,
+            out int blockOffset,
+            out int blocksPerRow,
+            out int blockCount
+        );
+
+        var pixels = new NativeArray<Color32>(
+            mipWidth * mipHeight,
+            allocator,
+            NativeArrayOptions.UninitializedMemory
+        );
+
+        var blocks = texture.GetRawTextureData<TBlock>().GetSubArray(blockOffset, blockCount);
+        var job = jobFunc(blocks, pixels, blocksPerRow, mipWidth, mipHeight);
+
+        if (blockCount < 1024)
+            job.RunBatch(blockCount, 256);
+        else
+            job.ScheduleBatch(blockCount, 256).Complete();
+
+        return pixels;
     }
     #endregion
 }

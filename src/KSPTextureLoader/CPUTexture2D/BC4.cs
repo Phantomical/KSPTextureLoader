@@ -57,39 +57,20 @@ partial class CPUTexture2D
 
         public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp)
         {
-            GetBlockMipProperties(
-                Width,
-                Height,
+            return GetBlockPixels<BC4, Block, GetPixelsJob>(
+                in this,
                 mipLevel,
-                out int mipWidth,
-                out int mipHeight,
-                out int blockOffset,
-                out int blocksPerRow,
-                out int blockCount
-            );
-
-            var pixels = new NativeArray<Color>(
-                mipWidth * mipHeight,
                 allocator,
-                NativeArrayOptions.UninitializedMemory
+                (blocks, pixels, blocksPerRow, width, height) =>
+                    new GetPixelsJob
+                    {
+                        blocks = blocks,
+                        pixels = pixels,
+                        blocksPerRow = blocksPerRow,
+                        width = width,
+                        height = height,
+                    }
             );
-
-            var blocks = GetRawTextureData<ulong>().GetSubArray(blockOffset, blockCount);
-            var job = new GetPixelsJob
-            {
-                blocks = blocks,
-                pixels = pixels,
-                blocksPerRow = blocksPerRow,
-                width = mipWidth,
-                height = mipHeight,
-            };
-
-            if (blockCount < 1024)
-                job.RunBatch(blockCount, 256);
-            else
-                job.ScheduleBatch(blockCount, 256).Complete();
-
-            return pixels;
         }
 
         public NativeArray<Color32> GetPixels32(
@@ -97,46 +78,27 @@ partial class CPUTexture2D
             Allocator allocator = Allocator.Temp
         )
         {
-            GetBlockMipProperties(
-                Width,
-                Height,
+            return GetBlockPixels32<BC4, Block, GetPixels32Job>(
+                in this,
                 mipLevel,
-                out int mipWidth,
-                out int mipHeight,
-                out int blockOffset,
-                out int blocksPerRow,
-                out int blockCount
-            );
-
-            var pixels = new NativeArray<Color32>(
-                mipWidth * mipHeight,
                 allocator,
-                NativeArrayOptions.UninitializedMemory
+                (blocks, pixels, blocksPerRow, width, height) =>
+                    new GetPixels32Job
+                    {
+                        blocks = blocks,
+                        pixels = pixels,
+                        blocksPerRow = blocksPerRow,
+                        width = width,
+                        height = height,
+                    }
             );
-
-            var blocks = GetRawTextureData<ulong>().GetSubArray(blockOffset, blockCount);
-            var job = new GetPixels32Job
-            {
-                blocks = blocks,
-                pixels = pixels,
-                blocksPerRow = blocksPerRow,
-                width = mipWidth,
-                height = mipHeight,
-            };
-
-            if (blockCount < 1024)
-                job.RunBatch(blockCount, 256);
-            else
-                job.ScheduleBatch(blockCount, 256).Complete();
-
-            return pixels;
         }
 
         [BurstCompile]
         struct GetPixelsJob : IJobParallelForBatch
         {
             [ReadOnly]
-            public NativeArray<ulong> blocks;
+            public NativeArray<Block> blocks;
 
             [WriteOnly]
             [NativeDisableParallelForRestriction]
@@ -153,7 +115,7 @@ partial class CPUTexture2D
 
                 for (int blockIdx = start; blockIdx < end; blockIdx++)
                 {
-                    DecodeBC4Block(blocks[blockIdx], decoded);
+                    DecodeBC4Block(blocks[blockIdx].bits, decoded);
 
                     int blockX = blockIdx % blocksPerRow;
                     int blockY = blockIdx / blocksPerRow;
@@ -183,7 +145,7 @@ partial class CPUTexture2D
         struct GetPixels32Job : IJobParallelForBatch
         {
             [ReadOnly]
-            public NativeArray<ulong> blocks;
+            public NativeArray<Block> blocks;
 
             [WriteOnly]
             [NativeDisableParallelForRestriction]
@@ -200,7 +162,7 @@ partial class CPUTexture2D
 
                 for (int blockIdx = start; blockIdx < end; blockIdx++)
                 {
-                    DecodeBC4Block(blocks[blockIdx], decoded);
+                    DecodeBC4Block(blocks[blockIdx].bits, decoded);
 
                     int blockX = blockIdx % blocksPerRow;
                     int blockY = blockIdx / blocksPerRow;
@@ -219,12 +181,7 @@ partial class CPUTexture2D
                             if (px >= width)
                                 break;
 
-                            pixels[py * width + px] = new Color32(
-                                (byte)(decoded[row * 4 + col] * Byte2Float),
-                                0,
-                                0,
-                                0
-                            );
+                            pixels[py * width + px] = new Color(decoded[row * 4 + col], 0f, 0f, 0f);
                         }
                     }
                 }

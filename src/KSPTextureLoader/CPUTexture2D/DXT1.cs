@@ -1,4 +1,6 @@
 using System;
+using KSPTextureLoader.Burst;
+using Unity.Burst;
 using Unity.Collections;
 using UnityEngine;
 
@@ -49,6 +51,139 @@ partial class CPUTexture2D
             where T : unmanaged
         {
             return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(Block));
+        }
+
+        public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp)
+        {
+            return GetBlockPixels<DXT1, Block, GetPixelsJob>(
+                in this,
+                mipLevel,
+                allocator,
+                (blocks, pixels, blocksPerRow, width, height) =>
+                    new GetPixelsJob
+                    {
+                        blocks = blocks,
+                        pixels = pixels,
+                        blocksPerRow = blocksPerRow,
+                        width = width,
+                        height = height,
+                    }
+            );
+        }
+
+        public NativeArray<Color32> GetPixels32(
+            int mipLevel = 0,
+            Allocator allocator = Allocator.Temp
+        )
+        {
+            return GetBlockPixels32<DXT1, Block, GetPixels32Job>(
+                in this,
+                mipLevel,
+                allocator,
+                (blocks, pixels, blocksPerRow, width, height) =>
+                    new GetPixels32Job
+                    {
+                        blocks = blocks,
+                        pixels = pixels,
+                        blocksPerRow = blocksPerRow,
+                        width = width,
+                        height = height,
+                    }
+            );
+        }
+
+        [BurstCompile]
+        struct GetPixelsJob : IJobParallelForBatch
+        {
+            [ReadOnly]
+            public NativeArray<Block> blocks;
+
+            [WriteOnly]
+            [NativeDisableParallelForRestriction]
+            public NativeArray<Color> pixels;
+
+            public int blocksPerRow;
+            public int width;
+            public int height;
+
+            public unsafe void Execute(int start, int count)
+            {
+                Color* decoded = stackalloc Color[16];
+                int end = start + count;
+
+                for (int blockIdx = start; blockIdx < end; blockIdx++)
+                {
+                    DecodeDXT1Block(blocks[blockIdx].bits, decoded);
+
+                    int blockX = blockIdx % blocksPerRow;
+                    int blockY = blockIdx / blocksPerRow;
+                    int baseX = blockX * 4;
+                    int baseY = blockY * 4;
+
+                    for (int row = 0; row < 4; row++)
+                    {
+                        int py = baseY + row;
+                        if (py >= height)
+                            break;
+
+                        for (int col = 0; col < 4; col++)
+                        {
+                            int px = baseX + col;
+                            if (px >= width)
+                                break;
+
+                            pixels[py * width + px] = decoded[row * 4 + col];
+                        }
+                    }
+                }
+            }
+        }
+
+        [BurstCompile]
+        struct GetPixels32Job : IJobParallelForBatch
+        {
+            [ReadOnly]
+            public NativeArray<Block> blocks;
+
+            [WriteOnly]
+            [NativeDisableParallelForRestriction]
+            public NativeArray<Color32> pixels;
+
+            public int blocksPerRow;
+            public int width;
+            public int height;
+
+            public unsafe void Execute(int start, int count)
+            {
+                Color* decoded = stackalloc Color[16];
+                int end = start + count;
+
+                for (int blockIdx = start; blockIdx < end; blockIdx++)
+                {
+                    DecodeDXT1Block(blocks[blockIdx].bits, decoded);
+
+                    int blockX = blockIdx % blocksPerRow;
+                    int blockY = blockIdx / blocksPerRow;
+                    int baseX = blockX * 4;
+                    int baseY = blockY * 4;
+
+                    for (int row = 0; row < 4; row++)
+                    {
+                        int py = baseY + row;
+                        if (py >= height)
+                            break;
+
+                        for (int col = 0; col < 4; col++)
+                        {
+                            int px = baseX + col;
+                            if (px >= width)
+                                break;
+
+                            pixels[py * width + px] = decoded[row * 4 + col];
+                        }
+                    }
+                }
+            }
         }
     }
 }
