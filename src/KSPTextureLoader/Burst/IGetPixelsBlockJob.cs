@@ -32,7 +32,7 @@ internal static class IGetPixelsBlockJobExtensions
         public int width;
         public int height;
 
-        void Execute(ref JobRanges ranges, int jobIndex)
+        void DoExecute(ref JobRanges ranges, int jobIndex)
         {
             while (
                 JobsUtility.GetWorkStealingRange(ref ranges, jobIndex, out var begin, out var end)
@@ -74,7 +74,7 @@ internal static class IGetPixelsBlockJobExtensions
             int jobIndex
         )
         {
-            jobData.Execute(ref ranges, jobIndex);
+            jobData.DoExecute(ref ranges, jobIndex);
         }
 
         delegate void ExecuteJobFunction(
@@ -106,7 +106,7 @@ internal static class IGetPixelsBlockJobExtensions
         public int width;
         public int height;
 
-        void Execute(ref JobRanges ranges, int jobIndex)
+        void DoExecute(ref JobRanges ranges, int jobIndex)
         {
             while (
                 JobsUtility.GetWorkStealingRange(ref ranges, jobIndex, out var begin, out var end)
@@ -148,7 +148,7 @@ internal static class IGetPixelsBlockJobExtensions
             int jobIndex
         )
         {
-            jobData.Execute(ref ranges, jobIndex);
+            jobData.DoExecute(ref ranges, jobIndex);
         }
 
         delegate void ExecuteJobFunction(

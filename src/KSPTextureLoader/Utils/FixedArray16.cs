@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 namespace KSPTextureLoader.Utils;
 
 #pragma warning disable CS8500 // This takes the address of, gets the size of, or declares a pointer to a managed type
+#pragma warning disable CS0169 // The field 'X' is never used
 
 internal struct FixedArray16<T>
 {
