@@ -69,6 +69,16 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
 
     public abstract NativeArray<byte> GetRawTextureData();
 
+    public abstract NativeArray<Color> GetPixels(
+        int mipLevel = 0,
+        Allocator allocator = Allocator.Temp
+    );
+
+    public abstract NativeArray<Color32> GetPixels32(
+        int mipLevel = 0,
+        Allocator allocator = Allocator.Temp
+    );
+
     public NativeArray<T> GetRawTextureData<T>()
         where T : unmanaged => GetRawTextureData().Reinterpret<T>(sizeof(byte));
 
@@ -873,6 +883,16 @@ public class CPUTexture2D<TTexture>(TTexture texture) : CPUTexture2D
 
     public sealed override NativeArray<byte> GetRawTextureData() =>
         texture.GetRawTextureData<byte>();
+
+    public sealed override NativeArray<Color> GetPixels(
+        int mipLevel = 0,
+        Allocator allocator = Allocator.Temp
+    ) => texture.GetPixels(mipLevel, allocator);
+
+    public sealed override NativeArray<Color32> GetPixels32(
+        int mipLevel = 0,
+        Allocator allocator = Allocator.Temp
+    ) => texture.GetPixels32(mipLevel, allocator);
 
     public override Texture2D CompileToTexture(bool readable = false)
     {
