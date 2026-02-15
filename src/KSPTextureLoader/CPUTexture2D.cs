@@ -18,6 +18,12 @@ public interface ICPUTexture2D
     public int Width { get; }
     public int Height { get; }
     public int MipCount { get; }
+
+    /// <summary>
+    /// The <see cref="TextureFormat"/> that this texture corresponds to. Some
+    /// implementations may not match any format, in that case they will return
+    /// <c>default(TextureFormat)</c> here.
+    /// </summary>
     public TextureFormat Format { get; }
 
     public Color GetPixel(int x, int y, int mipLevel = 0);
