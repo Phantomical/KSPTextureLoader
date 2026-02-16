@@ -208,8 +208,8 @@ public partial class TextureLoader
         // loading jobs from being run on the main thread, which can cause frame stalls.
         if (options.Hint <= TextureLoadHint.BatchAsynchronous)
         {
-            while (activeTextureLoads >= MaxConcurrentLoads)
-                yield return null;
+            if (activeTextureLoads >= MaxConcurrentLoads)
+                yield return new WaitUntil(() => activeTextureLoads < MaxConcurrentLoads);
         }
 
         using var loadGuard = new ActiveTextureLoadGuard(this);
