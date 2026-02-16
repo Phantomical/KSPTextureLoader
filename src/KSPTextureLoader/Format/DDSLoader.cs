@@ -499,108 +499,129 @@ internal static unsafe class DDSLoader
     {
         texture = null;
 
-        var info = ReadFileHeader(diskPath);
-        var header = info.header;
-        var header10 = info.header10;
-        var flags = (DDS_HEADER_FLAGS)header.dwFlags;
+        var (mmf, accessor, data, info) = ReadFileHeaderFromMemoryMap(diskPath);
 
-        var height = (int)header.dwHeight;
-        var width = (int)header.dwWidth;
-        var mipCount = (int)header.dwMipMapCount;
-        if (mipCount == 0)
-            mipCount = 1;
-
-        GraphicsFormat format;
-
-        if (header10 is not null)
+        try
         {
-            // Reject non-2D textures
-            if (header10.miscFlag.HasFlag((DDSHeaderDX10MiscFlags)0x4)) // cubemap
-                return false;
-            if (
-                header10.resourceDimension
-                == D3D10_RESOURCE_DIMENSION.D3D11_RESOURCE_DIMENSION_TEXTURE3D
-            )
-                return false;
-            if (header10.arraySize > 1)
-                return false;
+            var header = info.header;
+            var header10 = info.header10;
+            var flags = (DDS_HEADER_FLAGS)header.dwFlags;
 
-            format = GetDxgiGraphicsFormat(header10.dxgiFormat);
-        }
-        else
-        {
-            // Reject non-2D textures
-            if (flags.HasFlag(DDS_HEADER_FLAGS.DEPTH))
-                return false;
-            if (header.dwCaps2.HasFlag(DDSPixelFormatCaps2.CUBEMAP))
-                return false;
+            var height = (int)header.dwHeight;
+            var width = (int)header.dwWidth;
+            var mipCount = (int)header.dwMipMapCount;
+            if (mipCount == 0)
+                mipCount = 1;
 
-            format = GetDDSPixelGraphicsFormat(header.ddspf);
-            if (format == GraphicsFormat.None)
+            GraphicsFormat format;
+
+            if (header10 is not null)
             {
-                // Try Kopernicus palette formats
-                if (header.ddspf.dwRGBBitCount == 4)
+                // Reject non-2D textures
+                if (header10.miscFlag.HasFlag((DDSHeaderDX10MiscFlags)0x4)) // cubemap
+                    return false;
+                if (
+                    header10.resourceDimension
+                    == D3D10_RESOURCE_DIMENSION.D3D11_RESOURCE_DIMENSION_TEXTURE3D
+                )
+                    return false;
+                if (header10.arraySize > 1)
+                    return false;
+
+                format = GetDxgiGraphicsFormat(header10.dxgiFormat);
+            }
+            else
+            {
+                // Reject non-2D textures
+                if (flags.HasFlag(DDS_HEADER_FLAGS.DEPTH))
+                    return false;
+                if (header.dwCaps2.HasFlag(DDSPixelFormatCaps2.CUBEMAP))
+                    return false;
+
+                format = GetDDSPixelGraphicsFormat(header.ddspf);
+                if (format == GraphicsFormat.None)
                 {
-                    var expected = width * height / 2 + 16 * 4;
-                    if (info.fileLength != expected)
-                        return false;
+                    // Try Kopernicus palette formats
+                    if (header.ddspf.dwRGBBitCount == 4)
+                    {
+                        var expected = width * height / 2 + 16 * 4;
+                        if (info.fileLength != expected)
+                            return false;
 
-                    var (mmf, accessor, data) = OpenMemoryMappedData(diskPath, info);
-                    texture = new CPUTexture2D_MemoryMapped<KopernicusPalette4>(
-                        mmf,
-                        accessor,
-                        new(data, width, height)
-                    );
-                    return true;
+                        texture = new CPUTexture2D_MemoryMapped<KopernicusPalette4>(
+                            mmf,
+                            accessor,
+                            new(data, width, height)
+                        );
+                        return true;
+                    }
+                    else if (header.ddspf.dwRGBBitCount == 8)
+                    {
+                        var expected = width * height + 256 * 4;
+                        if (info.fileLength != expected)
+                            return false;
+
+                        texture = new CPUTexture2D_MemoryMapped<KopernicusPalette8>(
+                            mmf,
+                            accessor,
+                            new(data, width, height)
+                        );
+                        return true;
+                    }
+
+                    return false; // unsupported pixel format
                 }
-                else if (header.ddspf.dwRGBBitCount == 8)
-                {
-                    var expected = width * height + 256 * 4;
-                    if (info.fileLength != expected)
-                        return false;
+            }
 
-                    var (mmf, accessor, data) = OpenMemoryMappedData(diskPath, info);
-                    texture = new CPUTexture2D_MemoryMapped<KopernicusPalette8>(
-                        mmf,
-                        accessor,
-                        new(data, width, height)
-                    );
-                    return true;
-                }
+            if (linear is bool lin)
+            {
+                var tformat = GraphicsFormatUtility.GetTextureFormat(format);
+                format = GraphicsFormatUtility.GetGraphicsFormat(tformat, isSRGB: !lin);
+            }
 
-                return false; // unsupported pixel format
+            {
+                var textureFormat = GraphicsFormatUtility.GetTextureFormat(format);
+
+                texture = CPUTexture2D.Create(
+                    mmf,
+                    accessor,
+                    data,
+                    width,
+                    height,
+                    mipCount,
+                    textureFormat
+                );
+                return true;
             }
         }
-
-        if (linear is bool lin)
+        finally
         {
-            var tformat = GraphicsFormatUtility.GetTextureFormat(format);
-            format = GraphicsFormatUtility.GetGraphicsFormat(tformat, isSRGB: !lin);
-        }
-
-        {
-            var textureFormat = GraphicsFormatUtility.GetTextureFormat(format);
-            var (mmf, accessor, data) = OpenMemoryMappedData(diskPath, info);
-
-            texture = CPUTexture2D.Create(
-                mmf,
-                accessor,
-                data,
-                width,
-                height,
-                mipCount,
-                textureFormat
-            );
-            return true;
+            // If texture was not assigned, we own the resources and must clean up.
+            // If texture was assigned, ownership transferred to CPUTexture2D_MemoryMapped.
+            if (texture == null)
+            {
+                accessor?.SafeMemoryMappedViewHandle.ReleasePointer();
+                accessor?.Dispose();
+                mmf?.Dispose();
+            }
         }
     }
 
-    static (
+    static readonly ProfilerMarker ReadFileHeaderFromMemoryMapMarker = new(
+        "ReadFileHeaderFromMemoryMap"
+    );
+
+    internal static (
         MemoryMappedFile mmf,
         MemoryMappedViewAccessor accessor,
-        NativeArray<byte> data
-    ) OpenMemoryMappedData(string diskPath, FileInfo info)
+        NativeArray<byte> data,
+        FileInfo info
+    ) ReadFileHeaderFromMemoryMap(string diskPath)
     {
+        using var scope = ReadFileHeaderFromMemoryMapMarker.Auto();
+
+        long fileLength = new System.IO.FileInfo(diskPath).Length;
+
         var mmf = MemoryMappedFile.CreateFromFile(
             diskPath,
             FileMode.Open,
@@ -609,18 +630,74 @@ internal static unsafe class DDSLoader
             MemoryMappedFileAccess.Read
         );
 
-        var accessor = mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
-
+        MemoryMappedViewAccessor accessor = null;
         byte* pointer = null;
-        accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref pointer);
 
-        var data = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<byte>(
-            pointer + info.dataOffset,
-            (int)info.fileLength,
-            Allocator.Invalid
-        );
+        try
+        {
+            accessor = mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+            accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref pointer);
 
-        return (mmf, accessor, data);
+            using var stream = new UnmanagedMemoryStream(
+                pointer,
+                fileLength,
+                fileLength,
+                FileAccess.Read
+            );
+            var br = new BinaryReader(stream);
+
+            var magic = br.ReadUInt32();
+            if (magic != DDSValues.uintMagic)
+                throw new Exception("Invalid DDS file: incorrect magic number");
+
+            DDSHeader header = new(br);
+            DDSHeaderDX10 header10 = null;
+
+            // file.Position doesn't reliably return the amount of bytes read
+            // under certain conditions on some systems. To avoid this being an
+            // issue we manually track the offset ourselves.
+            long fileOffset = 128;
+            if (header.ddspf.dwFourCC == DDSValues.uintDX10)
+            {
+                header10 = new DDSHeaderDX10(br);
+                fileOffset += 20;
+            }
+
+            if (header.dwSize != 124)
+                throw new Exception("Invalid DDS file: incorrect header size");
+            if (header.ddspf.dwSize != 32)
+                throw new Exception("Invalid DDS file: invalid pixel format size");
+
+            long dataLength = fileLength - fileOffset;
+            if (dataLength > int.MaxValue)
+                throw new Exception(
+                    "DDS file is too large to load. Only files < 2GB in size are supported"
+                );
+
+            var info = new FileInfo
+            {
+                header = header,
+                header10 = header10,
+                fileLength = dataLength,
+                dataOffset = fileOffset,
+            };
+
+            var data = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<byte>(
+                pointer + fileOffset,
+                (int)dataLength,
+                Allocator.Invalid
+            );
+
+            return (mmf, accessor, data, info);
+        }
+        catch
+        {
+            if (pointer != null)
+                accessor?.SafeMemoryMappedViewHandle.ReleasePointer();
+            accessor?.Dispose();
+            mmf.Dispose();
+            throw;
+        }
     }
 
     internal struct FileInfo
