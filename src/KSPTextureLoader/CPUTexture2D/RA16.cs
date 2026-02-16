@@ -14,7 +14,7 @@ partial class CPUTexture2D
     /// a real unity texture format, but is used by some mods.
     /// </summary>
     [BurstCompile(FloatMode = FloatMode.Fast)]
-    public readonly struct RA16 : ICPUTexture2D, ICompileToTexture
+    public readonly struct RA16 : ICPUTexture2D, ICompileToTexture, IGetPixels
     {
         const int bpp = 2;
 

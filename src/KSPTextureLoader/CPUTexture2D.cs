@@ -30,9 +30,6 @@ public interface ICPUTexture2D
     public Color32 GetPixel32(int x, int y, int mipLevel = 0);
     public Color GetPixelBilinear(float u, float v, int mipLevel = 0);
 
-    public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp);
-    public NativeArray<Color32> GetPixels32(int mipLevel = 0, Allocator allocator = Allocator.Temp);
-
     public NativeArray<T> GetRawTextureData<T>()
         where T : unmanaged;
 }
@@ -44,6 +41,16 @@ public interface ICPUTexture2D
 public interface ICompileToTexture
 {
     public Texture2D CompileToTexture(bool readable);
+}
+
+/// <summary>
+/// Interface for texture that have custom implementations of <see cref="GetPixels"/>
+/// and <see cref="GetPixels32"/>.
+/// </summary>
+public interface IGetPixels
+{
+    public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp);
+    public NativeArray<Color32> GetPixels32(int mipLevel = 0, Allocator allocator = Allocator.Temp);
 }
 
 /// <summary>
@@ -86,15 +93,67 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
 
     public abstract NativeArray<byte> GetRawTextureData();
 
-    public abstract NativeArray<Color> GetPixels(
+    public virtual NativeArray<Color> GetPixels(
         int mipLevel = 0,
         Allocator allocator = Allocator.Temp
-    );
+    )
+    {
+        var tex = this;
+        var p = GetMipProperties(in tex, mipLevel);
 
-    public abstract NativeArray<Color32> GetPixels32(
+        var pixels = new NativeArray<Color>(
+            p.width * p.height,
+            allocator,
+            NativeArrayOptions.UninitializedMemory
+        );
+        try
+        {
+            int i = 0;
+            for (int y = 0; y < p.height; ++y)
+            {
+                for (int x = 0; x < p.height; ++x)
+                    pixels[i] = GetPixel(x, y, mipLevel);
+            }
+
+            return pixels;
+        }
+        catch
+        {
+            pixels.Dispose();
+            throw;
+        }
+    }
+
+    public virtual NativeArray<Color32> GetPixels32(
         int mipLevel = 0,
         Allocator allocator = Allocator.Temp
-    );
+    )
+    {
+        var tex = this;
+        var p = GetMipProperties(in tex, mipLevel);
+
+        var pixels = new NativeArray<Color32>(
+            p.width * p.height,
+            allocator,
+            NativeArrayOptions.UninitializedMemory
+        );
+        try
+        {
+            int i = 0;
+            for (int y = 0; y < p.height; ++y)
+            {
+                for (int x = 0; x < p.height; ++x)
+                    pixels[i] = GetPixel32(x, y, mipLevel);
+            }
+
+            return pixels;
+        }
+        catch
+        {
+            pixels.Dispose();
+            throw;
+        }
+    }
 
     public NativeArray<T> GetRawTextureData<T>()
         where T : unmanaged => GetRawTextureData().Reinterpret<T>(sizeof(byte));
@@ -1096,12 +1155,22 @@ public class CPUTexture2D<TTexture>(TTexture texture) : CPUTexture2D
     public sealed override NativeArray<Color> GetPixels(
         int mipLevel = 0,
         Allocator allocator = Allocator.Temp
-    ) => texture.GetPixels(mipLevel, allocator);
+    )
+    {
+        if (GetPixelsFunc is not null)
+            return GetPixelsFunc(ref texture, mipLevel, allocator);
+        return base.GetPixels(mipLevel, allocator);
+    }
 
     public sealed override NativeArray<Color32> GetPixels32(
         int mipLevel = 0,
         Allocator allocator = Allocator.Temp
-    ) => texture.GetPixels32(mipLevel, allocator);
+    )
+    {
+        if (GetPixels32Func is not null)
+            return GetPixels32Func(ref texture, mipLevel, allocator);
+        return base.GetPixels32(mipLevel, allocator);
+    }
 
     public override Texture2D CompileToTexture(bool readable = false)
     {
@@ -1144,6 +1213,58 @@ public class CPUTexture2D<TTexture>(TTexture texture) : CPUTexture2D
         where T : ICompileToTexture
     {
         return texture.CompileToTexture(readable);
+    }
+    #endregion
+
+    #region GetPixels Helpers
+    delegate NativeArray<Color> GetPixelsDelegate(
+        ref TTexture texture,
+        int mipLevel,
+        Allocator allocator
+    );
+    delegate NativeArray<Color32> GetPixels32Delegate(
+        ref TTexture texture,
+        int mipLevel,
+        Allocator allocator
+    );
+
+    static readonly GetPixelsDelegate GetPixelsFunc = MakeGetPixelsDelegate();
+    static readonly GetPixels32Delegate GetPixels32Func = MakeGetPixels32Delegate();
+
+    static GetPixelsDelegate MakeGetPixelsDelegate()
+    {
+        if (!typeof(IGetPixels).IsAssignableFrom(typeof(TTexture)))
+            return null;
+
+        var method = typeof(CPUTexture2D<TTexture>)
+            .GetMethod(nameof(DoGetPixels), BindingFlags.Static | BindingFlags.NonPublic)
+            .MakeGenericMethod(typeof(TTexture));
+
+        return (GetPixelsDelegate)Delegate.CreateDelegate(typeof(GetPixelsDelegate), method);
+    }
+
+    static GetPixels32Delegate MakeGetPixels32Delegate()
+    {
+        if (!typeof(IGetPixels).IsAssignableFrom(typeof(TTexture)))
+            return null;
+
+        var method = typeof(CPUTexture2D<TTexture>)
+            .GetMethod(nameof(DoGetPixels32), BindingFlags.Static | BindingFlags.NonPublic)
+            .MakeGenericMethod(typeof(TTexture));
+
+        return (GetPixels32Delegate)Delegate.CreateDelegate(typeof(GetPixels32Delegate), method);
+    }
+
+    static NativeArray<Color> DoGetPixels<T>(ref T texture, int mipLevel, Allocator allocator)
+        where T : IGetPixels
+    {
+        return texture.GetPixels(mipLevel, allocator);
+    }
+
+    static NativeArray<Color32> DoGetPixels32<T>(ref T texture, int mipLevel, Allocator allocator)
+        where T : IGetPixels
+    {
+        return texture.GetPixels32(mipLevel, allocator);
     }
     #endregion
 

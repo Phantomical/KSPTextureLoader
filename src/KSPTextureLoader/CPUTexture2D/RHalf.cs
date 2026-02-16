@@ -10,7 +10,7 @@ namespace KSPTextureLoader;
 partial class CPUTexture2D
 {
     [BurstCompile(FloatMode = FloatMode.Fast)]
-    public readonly struct RHalf : ICPUTexture2D
+    public readonly struct RHalf : ICPUTexture2D, IGetPixels
     {
         public int Width { get; }
         public int Height { get; }

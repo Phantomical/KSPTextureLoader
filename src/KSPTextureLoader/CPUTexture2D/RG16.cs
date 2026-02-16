@@ -9,7 +9,7 @@ namespace KSPTextureLoader;
 partial class CPUTexture2D
 {
     [BurstCompile(FloatMode = FloatMode.Fast)]
-    public readonly struct RG16 : ICPUTexture2D
+    public readonly struct RG16 : ICPUTexture2D, IGetPixels
     {
         const int bpp = 2;
 

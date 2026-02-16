@@ -72,7 +72,7 @@ public class CPUTexture2DTests : KSPTextureLoaderTestBase
         Func<NativeArray<byte>, int, int, int, T> factory,
         string name
     )
-        where T : ICPUTexture2D
+        where T : ICPUTexture2D, IGetPixels
     {
         var (tex, _) = MakeTestTexture(fmt);
         try
@@ -111,7 +111,7 @@ public class CPUTexture2DTests : KSPTextureLoaderTestBase
         Func<NativeArray<byte>, int, int, int, T> factory,
         string name
     )
-        where T : ICPUTexture2D
+        where T : ICPUTexture2D, IGetPixels
     {
         var (tex, _) = MakeTestTexture(fmt);
         try

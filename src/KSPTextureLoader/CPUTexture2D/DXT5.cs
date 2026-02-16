@@ -10,7 +10,7 @@ namespace KSPTextureLoader;
 partial class CPUTexture2D
 {
     [BurstCompile(FloatMode = FloatMode.Fast)]
-    public readonly struct DXT5 : ICPUTexture2D
+    public readonly struct DXT5 : ICPUTexture2D, IGetPixels
     {
         struct Block(ulong alpha, ulong color)
         {

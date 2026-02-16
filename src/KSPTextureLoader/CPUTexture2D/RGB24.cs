@@ -12,7 +12,7 @@ namespace KSPTextureLoader;
 partial class CPUTexture2D
 {
     [BurstCompile(FloatMode = FloatMode.Fast)]
-    public readonly struct RGB24 : ICPUTexture2D
+    public readonly struct RGB24 : ICPUTexture2D, IGetPixels
     {
         [StructLayout(LayoutKind.Sequential)]
         struct Color24

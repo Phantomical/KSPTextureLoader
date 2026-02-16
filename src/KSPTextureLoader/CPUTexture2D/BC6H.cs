@@ -9,7 +9,7 @@ namespace KSPTextureLoader;
 
 partial class CPUTexture2D
 {
-    public readonly struct BC6H : ICPUTexture2D
+    public readonly struct BC6H : ICPUTexture2D, IGetPixels
     {
         struct Block(ulong lo, ulong hi)
         {

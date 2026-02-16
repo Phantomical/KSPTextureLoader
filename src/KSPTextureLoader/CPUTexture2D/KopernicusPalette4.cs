@@ -14,7 +14,7 @@ partial class CPUTexture2D
     /// Kopernicus custom 4-bit palette format: 16-entry RGBA32 palette (64 bytes)
     /// followed by 4bpp color indices (two pixels per byte).
     /// </summary>
-    public readonly struct KopernicusPalette4 : ICPUTexture2D, ICompileToTexture
+    public readonly struct KopernicusPalette4 : ICPUTexture2D, ICompileToTexture, IGetPixels
     {
         const int PaletteEntries = 16;
         const int PaletteBytes = PaletteEntries * 4;
