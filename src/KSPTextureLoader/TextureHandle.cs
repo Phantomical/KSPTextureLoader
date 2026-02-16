@@ -196,6 +196,11 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
             // Destroy the handle immediately if its texture has been taken.
             Destroy();
         }
+        else if (TextureLoader.Instance is null)
+        {
+            // If for some reason the Instance is null then just destroy immediately.
+            Destroy();
+        }
         else
         {
             // The destroy queue will clear out the textures at the end of the frame.
@@ -206,7 +211,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
     internal uint Destroy(bool immediate = false)
     {
         var key = TextureLoader.CanonicalizeResourcePath(Path);
-        TextureLoader.Instance.textures.Remove(key);
+        TextureLoader.Instance?.textures.Remove(key);
 
         if (texture == null)
             return 0;

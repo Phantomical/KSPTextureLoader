@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.MemoryMappedFiles;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using DDSHeaders;
+using KSPTextureLoader.Burst;
 using KSPTextureLoader.Format.DDS;
 using KSPTextureLoader.Jobs;
 using KSPTextureLoader.Utils;
@@ -15,6 +17,7 @@ using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
+using static KSPTextureLoader.CPUTexture2D;
 using static KSPTextureLoader.Format.DDS.DDSUtil;
 
 namespace KSPTextureLoader.Format;
@@ -201,10 +204,13 @@ internal static unsafe class DDSLoader
                     {
                         data = buffer,
                         colors = colors.Slice().SliceConvert<Color32>(),
-                        pixels = width * height,
                     };
 
-                    jobGuard.JobHandle = job.Schedule(jobGuard.JobHandle);
+                    jobGuard.JobHandle = job.ScheduleBatch(
+                        width * height / 2,
+                        4096,
+                        jobGuard.JobHandle
+                    );
                     buffer.DisposeExt(jobGuard.JobHandle);
                     bufGuard.array = colors;
                     buffer = colors;
@@ -232,10 +238,13 @@ internal static unsafe class DDSLoader
                     {
                         data = buffer,
                         colors = colors.Slice().SliceConvert<Color32>(),
-                        pixels = width * height,
                     };
 
-                    jobGuard.JobHandle = job.Schedule(jobGuard.JobHandle);
+                    jobGuard.JobHandle = job.ScheduleBatch(
+                        width * height,
+                        4096,
+                        jobGuard.JobHandle
+                    );
                     buffer.DisposeExt(jobGuard.JobHandle);
                     bufGuard.array = colors;
                     buffer = colors;
@@ -355,6 +364,7 @@ internal static unsafe class DDSLoader
                                 );
 
                             tex2dArray.SetPixelData(buffer, mip, element, offset);
+                            offset += mipSize;
                         }
                     }
 
@@ -481,7 +491,216 @@ internal static unsafe class DDSLoader
         }
     }
 
-    struct FileInfo
+    internal static bool TryLoadDDSCPUTexture(
+        string diskPath,
+        bool? linear,
+        out CPUTexture2D texture
+    )
+    {
+        texture = null;
+
+        var (mmf, accessor, data, info) = ReadFileHeaderFromMemoryMap(diskPath);
+
+        try
+        {
+            var header = info.header;
+            var header10 = info.header10;
+            var flags = (DDS_HEADER_FLAGS)header.dwFlags;
+
+            var height = (int)header.dwHeight;
+            var width = (int)header.dwWidth;
+            var mipCount = (int)header.dwMipMapCount;
+            if (mipCount == 0)
+                mipCount = 1;
+
+            GraphicsFormat format;
+
+            if (header10 is not null)
+            {
+                // Reject non-2D textures
+                if (header10.miscFlag.HasFlag((DDSHeaderDX10MiscFlags)0x4)) // cubemap
+                    return false;
+                if (
+                    header10.resourceDimension
+                    == D3D10_RESOURCE_DIMENSION.D3D11_RESOURCE_DIMENSION_TEXTURE3D
+                )
+                    return false;
+                if (header10.arraySize > 1)
+                    return false;
+
+                format = GetDxgiGraphicsFormat(header10.dxgiFormat);
+            }
+            else
+            {
+                // Reject non-2D textures
+                if (flags.HasFlag(DDS_HEADER_FLAGS.DEPTH))
+                    return false;
+                if (header.dwCaps2.HasFlag(DDSPixelFormatCaps2.CUBEMAP))
+                    return false;
+
+                format = GetDDSPixelGraphicsFormat(header.ddspf);
+                if (format == GraphicsFormat.None)
+                {
+                    // Try Kopernicus palette formats
+                    if (header.ddspf.dwRGBBitCount == 4)
+                    {
+                        var expected = width * height / 2 + 16 * 4;
+                        if (info.fileLength != expected)
+                            return false;
+
+                        texture = new CPUTexture2D_MemoryMapped<KopernicusPalette4>(
+                            mmf,
+                            accessor,
+                            new(data, width, height)
+                        );
+                        return true;
+                    }
+                    else if (header.ddspf.dwRGBBitCount == 8)
+                    {
+                        var expected = width * height + 256 * 4;
+                        if (info.fileLength != expected)
+                            return false;
+
+                        texture = new CPUTexture2D_MemoryMapped<KopernicusPalette8>(
+                            mmf,
+                            accessor,
+                            new(data, width, height)
+                        );
+                        return true;
+                    }
+
+                    return false; // unsupported pixel format
+                }
+            }
+
+            if (linear is bool lin)
+            {
+                var tformat = GraphicsFormatUtility.GetTextureFormat(format);
+                format = GraphicsFormatUtility.GetGraphicsFormat(tformat, isSRGB: !lin);
+            }
+
+            {
+                var textureFormat = GraphicsFormatUtility.GetTextureFormat(format);
+
+                texture = CPUTexture2D.Create(
+                    mmf,
+                    accessor,
+                    data,
+                    width,
+                    height,
+                    mipCount,
+                    textureFormat
+                );
+                return true;
+            }
+        }
+        finally
+        {
+            // If texture was not assigned, we own the resources and must clean up.
+            // If texture was assigned, ownership transferred to CPUTexture2D_MemoryMapped.
+            if (texture == null)
+            {
+                accessor?.SafeMemoryMappedViewHandle.ReleasePointer();
+                accessor?.Dispose();
+                mmf?.Dispose();
+            }
+        }
+    }
+
+    static readonly ProfilerMarker ReadFileHeaderFromMemoryMapMarker = new(
+        "ReadFileHeaderFromMemoryMap"
+    );
+
+    internal static (
+        MemoryMappedFile mmf,
+        MemoryMappedViewAccessor accessor,
+        NativeArray<byte> data,
+        FileInfo info
+    ) ReadFileHeaderFromMemoryMap(string diskPath)
+    {
+        using var scope = ReadFileHeaderFromMemoryMapMarker.Auto();
+
+        long fileLength = new System.IO.FileInfo(diskPath).Length;
+
+        var mmf = MemoryMappedFile.CreateFromFile(
+            diskPath,
+            FileMode.Open,
+            null,
+            0,
+            MemoryMappedFileAccess.Read
+        );
+
+        MemoryMappedViewAccessor accessor = null;
+        byte* pointer = null;
+
+        try
+        {
+            accessor = mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+            accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref pointer);
+
+            using var stream = new UnmanagedMemoryStream(
+                pointer,
+                fileLength,
+                fileLength,
+                FileAccess.Read
+            );
+            var br = new BinaryReader(stream);
+
+            var magic = br.ReadUInt32();
+            if (magic != DDSValues.uintMagic)
+                throw new Exception("Invalid DDS file: incorrect magic number");
+
+            DDSHeader header = new(br);
+            DDSHeaderDX10 header10 = null;
+
+            // file.Position doesn't reliably return the amount of bytes read
+            // under certain conditions on some systems. To avoid this being an
+            // issue we manually track the offset ourselves.
+            long fileOffset = 128;
+            if (header.ddspf.dwFourCC == DDSValues.uintDX10)
+            {
+                header10 = new DDSHeaderDX10(br);
+                fileOffset += 20;
+            }
+
+            if (header.dwSize != 124)
+                throw new Exception("Invalid DDS file: incorrect header size");
+            if (header.ddspf.dwSize != 32)
+                throw new Exception("Invalid DDS file: invalid pixel format size");
+
+            long dataLength = fileLength - fileOffset;
+            if (dataLength > int.MaxValue)
+                throw new Exception(
+                    "DDS file is too large to load. Only files < 2GB in size are supported"
+                );
+
+            var info = new FileInfo
+            {
+                header = header,
+                header10 = header10,
+                fileLength = dataLength,
+                dataOffset = fileOffset,
+            };
+
+            var data = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<byte>(
+                pointer + fileOffset,
+                (int)dataLength,
+                Allocator.Invalid
+            );
+
+            return (mmf, accessor, data, info);
+        }
+        catch
+        {
+            if (pointer != null)
+                accessor?.SafeMemoryMappedViewHandle.ReleasePointer();
+            accessor?.Dispose();
+            mmf.Dispose();
+            throw;
+        }
+    }
+
+    internal struct FileInfo
     {
         public DDSHeader header;
         public DDSHeaderDX10 header10;
@@ -514,7 +733,7 @@ internal static unsafe class DDSLoader
 
     static readonly ProfilerMarker ReadFileHeaderMarker = new("ReadFileHeader");
 
-    static FileInfo ReadFileHeader(string diskPath)
+    internal static FileInfo ReadFileHeader(string diskPath)
     {
         using var scope = ReadFileHeaderMarker.Auto();
         using var file = File.OpenRead(diskPath);
