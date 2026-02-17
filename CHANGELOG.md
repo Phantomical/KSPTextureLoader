@@ -6,13 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+
+## v1.0.23
 ### Added
 * Added a helper method to create `TextureHandle`s from pre-existing textures.
+* Added a `CPUTexture2D` type and associated helpers to allow directly memory
+  mapping DDS textures without ever having to load them into main memory.
+* The debug menu has been expanded with a number of additional functions for
+  seeing what textures are loaded and previewing them.
 
 ### Changed
 * Reduced stutter even more for async texture loads by reading file headers
   using a background thread.
-* Attempt to avoid loading all queued asset bundle requests when one is loaded.
+* KSPTL now sets asset bundle priorities before blocking on them synchronously.
+  This should allow such textures to "jump the queue" and load without needing
+  to wait for everything else to finish first.
+* The debug menu has been moved to KSP's Alt+F12 menu.
 
 ### Fixed
 * KSPTL now accurately detects whether it is running on a debug build of Unity.
