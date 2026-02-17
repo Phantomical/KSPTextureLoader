@@ -15,6 +15,13 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 
     private static readonly ProfilerMarker CompleteMarker = new("TextureHandle.Complete");
 
+    internal static readonly EventData<TextureHandleImpl> HandleCreated = new(
+        "TextureHandle.Created"
+    );
+    internal static readonly EventData<TextureHandleImpl> HandleDestroyed = new(
+        "TextureHandle.Destroyed"
+    );
+
     private readonly bool isReadable;
     private readonly bool isExternal;
     internal int RefCount { get; private set; } = 1;
@@ -37,10 +44,11 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
     {
         Path = path;
         isReadable = !unreadable;
+        HandleCreated.Fire(this);
     }
 
     internal TextureHandleImpl(string path, ExceptionDispatchInfo ex)
-        : this(path, false)
+        : this(path, false) // HandleCreated fires in delegated ctor
     {
         exception = ex;
     }
@@ -53,6 +61,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         Path = texture.name;
         isReadable = texture.isReadable;
         this.texture = texture;
+        HandleCreated.Fire(this);
     }
 
     internal TextureHandleImpl(Texture texture, ExternalMarker _)
@@ -64,6 +73,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         isReadable = texture.isReadable;
         isExternal = true;
         this.texture = texture;
+        HandleCreated.Fire(this);
     }
 
     /// <summary>
@@ -210,6 +220,8 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 
     internal uint Destroy(bool immediate = false)
     {
+        HandleDestroyed.Fire(this);
+
         var key = TextureLoader.CanonicalizeResourcePath(Path);
         TextureLoader.Instance?.textures.Remove(key);
 

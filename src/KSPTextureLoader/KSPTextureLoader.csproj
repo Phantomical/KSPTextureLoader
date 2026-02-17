@@ -50,6 +50,8 @@
     </ItemGroup>
 
     <ItemGroup>
+        <Publicize Include="Assembly-CSharp:KSP.UI.Screens.DebugToolbar.DebugScreenSpawner.screen" />
+        <Publicize Include="Assembly-CSharp:KSP.UI.Screens.DebugToolbar.DebugScreenSpawner.debugScreens" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Object.m_CachedPtr" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Object.CurrentThreadIsMainThread" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Cubemap.Internal_Create" />
