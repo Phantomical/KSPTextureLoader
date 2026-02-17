@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace KSPTextureLoader;
 
-internal sealed class CPUTexture2D_Texture : CPUTexture2D
+internal sealed class CPUTexture2D_Wrapper : CPUTexture2D
 {
     TextureHandle<Texture2D> handle;
     Texture2D texture;
@@ -17,7 +17,7 @@ internal sealed class CPUTexture2D_Texture : CPUTexture2D
 
     public override TextureFormat Format => texture.format;
 
-    public CPUTexture2D_Texture(TextureHandle<Texture2D> handle)
+    public CPUTexture2D_Wrapper(TextureHandle<Texture2D> handle)
     {
         using (handle)
         {

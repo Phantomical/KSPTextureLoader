@@ -409,7 +409,7 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
                     texture.mipmapCount
                 )
             ),
-            _ => new CPUTexture2D_Texture(handle),
+            _ => new CPUTexture2D_Wrapper(handle),
         };
     }
 
