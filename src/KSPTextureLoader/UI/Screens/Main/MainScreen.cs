@@ -77,6 +77,15 @@ internal class MainScreenContent : MonoBehaviour
             btnRow.transform,
             "Dump Textures Layout"
         );
+
+        var btnRow2 = DebugUIManager.CreateHorizontalLayout(content);
+        var btnHlg2 = btnRow2.GetComponent<HorizontalLayoutGroup>();
+        btnHlg2.childControlWidth = true;
+        btnHlg2.childForceExpandWidth = true;
+        DebugUIManager.CreateButton<DumpHandleReferencesButton>(
+            btnRow2.transform,
+            "Dump Handle Refs"
+        );
     }
 
     void Update()
