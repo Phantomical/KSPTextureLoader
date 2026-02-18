@@ -13,6 +13,16 @@ internal sealed class TextureHandleWrapper2D(TextureHandle<Texture2D> handle)
         base.Dispose();
         handle.Dispose();
         handle = null;
+
+        GC.SuppressFinalize(this);
+    }
+
+    ~TextureHandleWrapper2D()
+    {
+        if (handle is null)
+            return;
+
+        TextureLoader.Instance?.ExecuteOnMainThread(handle.Dispose);
     }
 
     internal new readonly struct Factory : ICPUTexture2DFactory
@@ -52,5 +62,15 @@ internal sealed class TextureHandleWrapper2D<T>(T texture, TextureHandle<Texture
         base.Dispose();
         handle.Dispose();
         handle = null;
+
+        GC.SuppressFinalize(this);
+    }
+
+    ~TextureHandleWrapper2D()
+    {
+        if (handle is null)
+            return;
+
+        TextureLoader.Instance?.ExecuteOnMainThread(handle.Dispose);
     }
 }

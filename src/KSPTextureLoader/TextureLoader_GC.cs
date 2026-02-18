@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.ExceptionServices;
 using KSPTextureLoader.Utils;
 using Unity.Profiling;
@@ -20,13 +22,35 @@ partial class TextureLoader
         "TextureLoader.DestroyTextures"
     );
 
+    // A background tasks queue for stuff to be sent from a finalizer
+    private readonly ConcurrentQueue<Action> tasks = [];
     private readonly Queue<TextureHandleImpl> destroyQueue = [];
     private Coroutine gcCoroutine = null;
+
+    void Update()
+    {
+        while (tasks.TryDequeue(out var task))
+        {
+            try
+            {
+                task();
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+        }
+    }
 
     internal void QueueForDestroy(TextureHandleImpl handle)
     {
         destroyQueue.Enqueue(handle);
         gcCoroutine ??= StartCoroutine(GcCoroutine());
+    }
+
+    internal void ExecuteOnMainThread(Action action)
+    {
+        tasks.Append(action);
     }
 
     IEnumerator GcCoroutine()

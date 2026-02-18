@@ -84,5 +84,15 @@ internal class UnityTexture2D<T>(T texture, Texture2D unity, bool owned = true)
             Texture2D.Destroy(unity);
 
         unity = null;
+
+        GC.SuppressFinalize(this);
+    }
+
+    ~UnityTexture2D()
+    {
+        if (!owned || unity is null)
+            return;
+
+        TextureLoader.Instance?.ExecuteOnMainThread(() => Texture2D.Destroy(unity));
     }
 }
