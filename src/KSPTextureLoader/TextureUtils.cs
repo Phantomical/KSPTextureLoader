@@ -456,6 +456,7 @@ internal static class TextureUtils
         cube.SetPixels(src.GetPixels(0, cubedim, cubedim, cubedim), CubemapFace.NegativeZ);
         cube.SetPixels(src.GetPixels(2 * cubedim, 0, cubedim, cubedim), CubemapFace.PositiveY);
 
+        cube.Apply(false, false);
         cube.name = src.name;
         return cube;
     }
