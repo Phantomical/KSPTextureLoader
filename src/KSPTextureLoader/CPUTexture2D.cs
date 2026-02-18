@@ -173,6 +173,15 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
 
     public virtual void Dispose() { }
 
+    #region Create Methods
+    internal interface ICPUTexture2DFactory
+    {
+        public CPUTexture2D CreateTexture2D<T>(T texture)
+            where T : ICPUTexture2D;
+
+        public CPUTexture2D CreateFallback();
+    }
+
     /// <summary>
     /// Create a <see cref="CPUTexture2D"/> that wraps a type that implements
     /// <see cref="ICPUTexture2D"/>.
@@ -193,224 +202,50 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
     /// <returns></returns>
     public static CPUTexture2D Create(TextureHandle<Texture2D> handle)
     {
-        if (handle is null)
-            throw new ArgumentNullException(nameof(handle));
-
+        using var guard = handle;
+        var factory = new CPU.TextureHandleWrapper2D.Factory(handle);
         var texture = handle.GetTexture();
-        if (!texture.isReadable)
-            throw new Exception($"texture {texture.name} is not readable");
 
-        return texture.format switch
+        return Create(
+            factory,
+            texture.GetRawTextureData<byte>(),
+            texture.width,
+            texture.height,
+            texture.mipmapCount,
+            texture.format
+        );
+    }
+
+    /// <summary>
+    /// Create a new CPUTexture2D from an existing <see cref="Texture2D"/>.
+    /// </summary>
+    /// <param name="texture">The texture that will be wrapped.</param>
+    /// <param name="owned">
+    ///   Whether the resulting <see cref="CPUTexture2D"/> owns the texture and
+    ///   it responsible for destroying it when it is disposed of.
+    /// </param>
+    /// <returns></returns>
+    public static CPUTexture2D Create(Texture2D texture, bool owned = false)
+    {
+        try
         {
-            TextureFormat.Alpha8 => new CPUTexture2D_TextureHandle<Alpha8>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.R8 => new CPUTexture2D_TextureHandle<R8>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.RG16 => new CPUTexture2D_TextureHandle<RG16>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.RGB24 => new CPUTexture2D_TextureHandle<RGB24>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.RGBA32 => new CPUTexture2D_TextureHandle<RGBA32>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.ARGB32 => new CPUTexture2D_TextureHandle<ARGB32>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.BGRA32 => new CPUTexture2D_TextureHandle<BGRA32>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.R16 => new CPUTexture2D_TextureHandle<R16>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.RGB565 => new CPUTexture2D_TextureHandle<RGB565>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.RGBA4444 => new CPUTexture2D_TextureHandle<RGBA4444>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.ARGB4444 => new CPUTexture2D_TextureHandle<ARGB4444>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.RFloat => new CPUTexture2D_TextureHandle<RFloat>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.RGFloat => new CPUTexture2D_TextureHandle<RGFloat>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.RGBAFloat => new CPUTexture2D_TextureHandle<RGBAFloat>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.RHalf => new CPUTexture2D_TextureHandle<RHalf>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.RGHalf => new CPUTexture2D_TextureHandle<RGHalf>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.RGBAHalf => new CPUTexture2D_TextureHandle<RGBAHalf>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.DXT1 => new CPUTexture2D_TextureHandle<DXT1>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.DXT5 => new CPUTexture2D_TextureHandle<DXT5>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.BC4 => new CPUTexture2D_TextureHandle<BC4>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.BC5 => new CPUTexture2D_TextureHandle<BC5>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.BC7 => new CPUTexture2D_TextureHandle<BC7>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            TextureFormat.BC6H => new CPUTexture2D_TextureHandle<BC6H>(
-                handle,
-                new(
-                    texture.GetRawTextureData<byte>(),
-                    texture.width,
-                    texture.height,
-                    texture.mipmapCount
-                )
-            ),
-            _ => new CPUTexture2D_Wrapper(handle),
-        };
+            var factory = new CPU.UnityTexture2D.Factory(texture, owned);
+
+            return Create(
+                factory,
+                texture.GetRawTextureData<byte>(),
+                texture.width,
+                texture.height,
+                texture.mipmapCount,
+                texture.format
+            );
+        }
+        catch
+        {
+            if (owned)
+                Texture2D.Destroy(texture);
+            throw;
+        }
     }
 
     /// <summary>
@@ -440,124 +275,74 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
         if (accessor is null)
             throw new ArgumentNullException(nameof(accessor));
 
+        var factory = new CPU.MemoryMappedTexture2D.Factory(mmf, accessor, format);
+        return Create(factory, data, width, height, mipCount, format);
+    }
+
+    static CPUTexture2D Create<F>(
+        F factory,
+        NativeArray<byte> data,
+        int width,
+        int height,
+        int mipCount,
+        TextureFormat format
+    )
+        where F : ICPUTexture2DFactory
+    {
         return format switch
         {
-            TextureFormat.Alpha8 => new CPUTexture2D_MemoryMapped<Alpha8>(
-                mmf,
-                accessor,
+            TextureFormat.Alpha8 => factory.CreateTexture2D<Alpha8>(
                 new(data, width, height, mipCount)
             ),
-            TextureFormat.R8 => new CPUTexture2D_MemoryMapped<R8>(
-                mmf,
-                accessor,
+            TextureFormat.R8 => factory.CreateTexture2D<R8>(new(data, width, height, mipCount)),
+            TextureFormat.RG16 => factory.CreateTexture2D<RG16>(new(data, width, height, mipCount)),
+            TextureFormat.RGB24 => factory.CreateTexture2D<RGB24>(
                 new(data, width, height, mipCount)
             ),
-            TextureFormat.RG16 => new CPUTexture2D_MemoryMapped<RG16>(
-                mmf,
-                accessor,
+            TextureFormat.RGBA32 => factory.CreateTexture2D<RGBA32>(
                 new(data, width, height, mipCount)
             ),
-            TextureFormat.RGB24 => new CPUTexture2D_MemoryMapped<RGB24>(
-                mmf,
-                accessor,
+            TextureFormat.ARGB32 => factory.CreateTexture2D<ARGB32>(
                 new(data, width, height, mipCount)
             ),
-            TextureFormat.RGBA32 => new CPUTexture2D_MemoryMapped<RGBA32>(
-                mmf,
-                accessor,
+            TextureFormat.BGRA32 => factory.CreateTexture2D<BGRA32>(
                 new(data, width, height, mipCount)
             ),
-            TextureFormat.ARGB32 => new CPUTexture2D_MemoryMapped<ARGB32>(
-                mmf,
-                accessor,
+            TextureFormat.R16 => factory.CreateTexture2D<R16>(new(data, width, height, mipCount)),
+            TextureFormat.RGB565 => factory.CreateTexture2D<RGB565>(
                 new(data, width, height, mipCount)
             ),
-            TextureFormat.BGRA32 => new CPUTexture2D_MemoryMapped<BGRA32>(
-                mmf,
-                accessor,
+            TextureFormat.RGBA4444 => factory.CreateTexture2D<RGBA4444>(
                 new(data, width, height, mipCount)
             ),
-            TextureFormat.R16 => new CPUTexture2D_MemoryMapped<R16>(
-                mmf,
-                accessor,
+            TextureFormat.ARGB4444 => factory.CreateTexture2D<ARGB4444>(
                 new(data, width, height, mipCount)
             ),
-            TextureFormat.RGB565 => new CPUTexture2D_MemoryMapped<RGB565>(
-                mmf,
-                accessor,
+            TextureFormat.RFloat => factory.CreateTexture2D<RFloat>(
                 new(data, width, height, mipCount)
             ),
-            TextureFormat.RGBA4444 => new CPUTexture2D_MemoryMapped<RGBA4444>(
-                mmf,
-                accessor,
+            TextureFormat.RGFloat => factory.CreateTexture2D<RGFloat>(
                 new(data, width, height, mipCount)
             ),
-            TextureFormat.ARGB4444 => new CPUTexture2D_MemoryMapped<ARGB4444>(
-                mmf,
-                accessor,
+            TextureFormat.RGBAFloat => factory.CreateTexture2D<RGBAFloat>(
                 new(data, width, height, mipCount)
             ),
-            TextureFormat.RFloat => new CPUTexture2D_MemoryMapped<RFloat>(
-                mmf,
-                accessor,
+            TextureFormat.RHalf => factory.CreateTexture2D<RHalf>(
                 new(data, width, height, mipCount)
             ),
-            TextureFormat.RGFloat => new CPUTexture2D_MemoryMapped<RGFloat>(
-                mmf,
-                accessor,
+            TextureFormat.RGHalf => factory.CreateTexture2D<RGHalf>(
                 new(data, width, height, mipCount)
             ),
-            TextureFormat.RGBAFloat => new CPUTexture2D_MemoryMapped<RGBAFloat>(
-                mmf,
-                accessor,
+            TextureFormat.RGBAHalf => factory.CreateTexture2D<RGBAHalf>(
                 new(data, width, height, mipCount)
             ),
-            TextureFormat.RHalf => new CPUTexture2D_MemoryMapped<RHalf>(
-                mmf,
-                accessor,
-                new(data, width, height, mipCount)
-            ),
-            TextureFormat.RGHalf => new CPUTexture2D_MemoryMapped<RGHalf>(
-                mmf,
-                accessor,
-                new(data, width, height, mipCount)
-            ),
-            TextureFormat.RGBAHalf => new CPUTexture2D_MemoryMapped<RGBAHalf>(
-                mmf,
-                accessor,
-                new(data, width, height, mipCount)
-            ),
-            TextureFormat.DXT1 => new CPUTexture2D_MemoryMapped<DXT1>(
-                mmf,
-                accessor,
-                new(data, width, height, mipCount)
-            ),
-            TextureFormat.DXT5 => new CPUTexture2D_MemoryMapped<DXT5>(
-                mmf,
-                accessor,
-                new(data, width, height, mipCount)
-            ),
-            TextureFormat.BC4 => new CPUTexture2D_MemoryMapped<BC4>(
-                mmf,
-                accessor,
-                new(data, width, height, mipCount)
-            ),
-            TextureFormat.BC5 => new CPUTexture2D_MemoryMapped<BC5>(
-                mmf,
-                accessor,
-                new(data, width, height, mipCount)
-            ),
-            TextureFormat.BC7 => new CPUTexture2D_MemoryMapped<BC7>(
-                mmf,
-                accessor,
-                new(data, width, height, mipCount)
-            ),
-            TextureFormat.BC6H => new CPUTexture2D_MemoryMapped<BC6H>(
-                mmf,
-                accessor,
-                new(data, width, height, mipCount)
-            ),
-            _ => ThrowNotSupported<CPUTexture2D>(mmf, accessor, format),
+            TextureFormat.DXT1 => factory.CreateTexture2D<DXT1>(new(data, width, height, mipCount)),
+            TextureFormat.DXT5 => factory.CreateTexture2D<DXT5>(new(data, width, height, mipCount)),
+            TextureFormat.BC4 => factory.CreateTexture2D<BC4>(new(data, width, height, mipCount)),
+            TextureFormat.BC5 => factory.CreateTexture2D<BC5>(new(data, width, height, mipCount)),
+            TextureFormat.BC7 => factory.CreateTexture2D<BC7>(new(data, width, height, mipCount)),
+            TextureFormat.BC6H => factory.CreateTexture2D<BC6H>(new(data, width, height, mipCount)),
+            _ => factory.CreateFallback(),
         };
     }
 
@@ -574,6 +359,7 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             $"Unsupported texture format for memory-mapped CPU texture: {format}"
         );
     }
+    #endregion
 
     #region Internal Helpers
     struct MipProperties

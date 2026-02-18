@@ -548,7 +548,7 @@ internal static unsafe class DDSLoader
                         if (info.fileLength != expected)
                             return false;
 
-                        texture = new CPUTexture2D_MemoryMapped<KopernicusPalette4>(
+                        texture = new CPU.MemoryMappedTexture2D<KopernicusPalette4>(
                             mmf,
                             accessor,
                             new(data, width, height)
@@ -561,7 +561,7 @@ internal static unsafe class DDSLoader
                         if (info.fileLength != expected)
                             return false;
 
-                        texture = new CPUTexture2D_MemoryMapped<KopernicusPalette8>(
+                        texture = new CPU.MemoryMappedTexture2D<KopernicusPalette8>(
                             mmf,
                             accessor,
                             new(data, width, height)
