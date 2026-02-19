@@ -29,29 +29,46 @@ internal class MainScreenContent : MonoBehaviour
         // Configuration section
         DebugUIManager.CreateHeader(content, "Configuration");
 
-        DebugUIManager.CreateToggle<AllowNativeUploadsToggle>(content, "Allow Native Uploads");
+        DebugUIManager.CreateToggle<AllowNativeUploadsToggle>(
+            content,
+            "Allow Native Uploads",
+            "Allow direct use of native rendering extensions to upload textures to the GPU."
+        );
         DebugUIManager.CreateToggle<AsyncUploadPersistentBufferToggle>(
             content,
-            "Async Upload Persistent Buffer"
+            "Async Upload Persistent Buffer",
+            "Keep the upload buffer allocated when there are no pending asset bundle loads."
         );
-        DebugUIManager.CreateToggle<UseAsyncReadManagerToggle>(content, "Use Async Read Manager");
+        DebugUIManager.CreateToggle<UseAsyncReadManagerToggle>(
+            content,
+            "Use Async Read Manager",
+            "Use Unity's AsyncReadManager for file reads. If disabled, reads are done in a job."
+        );
 
-        DebugUIManager.CreateLabeledButton<DebugModeCycleButton>(content, "Debug Mode", "...");
+        DebugUIManager.CreateLabeledButton<DebugModeCycleButton>(
+            content,
+            "Debug Mode",
+            "...",
+            "Log verbosity level. Info shows warnings only, Debug adds load events, Trace logs everything."
+        );
 
         DebugUIManager.CreateLabeledInput<BundleDelayInput>(
             content,
             "Bundle Unload Delay",
-            TextAnchor.MiddleCenter
+            TextAnchor.MiddleCenter,
+            "Frames to keep asset bundles loaded after use. Set higher than the time needed to load all assets from bundles."
         );
         DebugUIManager.CreateLabeledInput<BufferSizeInput>(
             content,
             "Async Upload Buffer Size (MB)",
-            TextAnchor.MiddleCenter
+            TextAnchor.MiddleCenter,
+            "Size of the buffer Unity uses for background texture uploads."
         );
         DebugUIManager.CreateLabeledInput<MaxMemInput>(
             content,
             "Max Texture Load Memory (MB)",
-            TextAnchor.MiddleCenter
+            TextAnchor.MiddleCenter,
+            "Maximum temporary memory for async texture loading. Does not include the textures themselves."
         );
 
         DebugUIManager.CreateSpacer(content);
@@ -67,24 +84,50 @@ internal class MainScreenContent : MonoBehaviour
         // Dump tools section
         DebugUIManager.CreateHeader(content, "Dump Tools");
 
-        var btnRow = DebugUIManager.CreateHorizontalLayout(content);
-        var btnHlg = btnRow.GetComponent<HorizontalLayoutGroup>();
-        btnHlg.childControlWidth = true;
-        btnHlg.childForceExpandWidth = true;
-        DebugUIManager.CreateButton<DumpPrefabButton>(btnRow.transform, "Dump Prefab");
-        DebugUIManager.CreateButton<DumpLayoutButton>(btnRow.transform, "Dump Layout");
-        DebugUIManager.CreateButton<DumpTexturesLayoutButton>(
-            btnRow.transform,
-            "Dump Textures Layout"
+        var btnRow1 = DebugUIManager.CreateHorizontalLayout(content);
+        var btnHlg1 = btnRow1.GetComponent<HorizontalLayoutGroup>();
+        btnHlg1.childControlWidth = true;
+        btnHlg1.childForceExpandWidth = true;
+
+        var dumpHandleRefs = DebugUIManager.CreateButton<DumpHandleReferencesButton>(
+            btnRow1.transform,
+            "Dump Handle Refs"
+        );
+        DebugUIManager.AttachTooltip(
+            dumpHandleRefs.gameObject,
+            "Dump the scene paths to all objects which hold a reference to a texture handle to a file."
         );
 
         var btnRow2 = DebugUIManager.CreateHorizontalLayout(content);
         var btnHlg2 = btnRow2.GetComponent<HorizontalLayoutGroup>();
         btnHlg2.childControlWidth = true;
         btnHlg2.childForceExpandWidth = true;
-        DebugUIManager.CreateButton<DumpHandleReferencesButton>(
+
+        var dumpPrefab = DebugUIManager.CreateButton<DumpPrefabButton>(
             btnRow2.transform,
-            "Dump Handle Refs"
+            "Dump Prefab"
+        );
+        DebugUIManager.AttachTooltip(
+            dumpPrefab.gameObject,
+            "Dump the KSP debug screen prefab hierarchy to a log file."
+        );
+
+        var dumpLayout = DebugUIManager.CreateButton<DumpLayoutButton>(
+            btnRow2.transform,
+            "Dump Layout"
+        );
+        DebugUIManager.AttachTooltip(
+            dumpLayout.gameObject,
+            "Dump the live layout of all debug screens and the parent chain to a log file."
+        );
+
+        var dumpTexLayout = DebugUIManager.CreateButton<DumpTexturesLayoutButton>(
+            btnRow2.transform,
+            "Dump Textures Layout"
+        );
+        DebugUIManager.AttachTooltip(
+            dumpTexLayout.gameObject,
+            "Dump the textures screen layout and parent chain to a log file."
         );
     }
 

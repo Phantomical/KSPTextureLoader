@@ -210,6 +210,26 @@ internal static class DebugUIManager
         rt.offsetMax = Vector2.zero;
     }
 
+    /// <summary>
+    /// Attaches a tooltip to a UI element. The tooltip is shown on pointer hover.
+    /// </summary>
+    public static void AttachTooltip(GameObject target, string tooltip)
+    {
+        if (string.IsNullOrEmpty(tooltip))
+            return;
+
+        // Ensure the target has a Graphic that can receive pointer events.
+        // Without one, IPointerEnterHandler/IPointerExitHandler won't fire.
+        if (target.GetComponent<Graphic>() == null)
+        {
+            var img = target.AddComponent<Image>();
+            img.color = Color.clear;
+        }
+
+        var trigger = target.AddComponent<TooltipTrigger>();
+        trigger.text = tooltip;
+    }
+
     static GameObject ClonePrefab(GameObject source, string name)
     {
         var clone = Object.Instantiate(source);
@@ -520,7 +540,7 @@ internal static class DebugUIManager
         }
     }
 
-    public static T CreateToggle<T>(Transform parent, string label)
+    public static T CreateToggle<T>(Transform parent, string label, string tooltip = null)
         where T : DebugScreenToggle
     {
         var go = Object.Instantiate(_togglePrefab, parent, false);
@@ -546,6 +566,8 @@ internal static class DebugUIManager
         if (labelTransform != null)
             component.toggleText = labelTransform.GetComponent<TextMeshProUGUI>();
         component.text = label;
+
+        AttachTooltip(go, tooltip);
 
         // Activating triggers Awake() which calls SetupValues() and hooks OnToggleChanged
         go.SetActive(true);
@@ -730,7 +752,8 @@ internal static class DebugUIManager
     public static T CreateLabeledInput<T>(
         Transform parent,
         string label,
-        TextAnchor alignment = TextAnchor.MiddleLeft
+        TextAnchor alignment = TextAnchor.MiddleLeft,
+        string tooltip = null
     )
         where T : DebugScreenInput
     {
@@ -750,6 +773,7 @@ internal static class DebugUIManager
 
         // Label (left half)
         CreateLabel(row.transform, label);
+        AttachTooltip(row, tooltip);
 
         // Input field (right half)
         return CreateInput<T>(row.transform);
@@ -759,7 +783,12 @@ internal static class DebugUIManager
     /// Creates a horizontal row with a label on the left and a button on the right,
     /// each taking roughly half the available width.
     /// </summary>
-    public static T CreateLabeledButton<T>(Transform parent, string label, string buttonText)
+    public static T CreateLabeledButton<T>(
+        Transform parent,
+        string label,
+        string buttonText,
+        string tooltip = null
+    )
         where T : DebugScreenButton
     {
         var row = new GameObject("Row", typeof(RectTransform));
@@ -778,6 +807,7 @@ internal static class DebugUIManager
 
         // Label (left half)
         CreateLabel(row.transform, label);
+        AttachTooltip(row, tooltip);
 
         // Button (right half)
         return CreateButton<T>(row.transform, buttonText);
