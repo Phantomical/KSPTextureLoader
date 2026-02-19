@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.ExceptionServices;
+using System.Threading.Tasks;
 using KSPTextureLoader.Utils;
 using SharpDX;
 using SharpDX.Direct3D11;
+using Smooth.Pools;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
@@ -20,6 +22,7 @@ internal static unsafe class DX11
 {
     static readonly ProfilerMarker GetNativeTexturePtr = new("GetNativeTexturePtr");
     static readonly ProfilerMarker CreateExternalTexture = new("CreateExternalTexture");
+    static readonly ProfilerMarker CreateDX11Texture = new("CreateDX11Texture");
 
     static UnityEngine.Texture2D ReferenceTexture = null;
     static uint LastUpdateCount = uint.MaxValue;
@@ -87,45 +90,62 @@ internal static unsafe class DX11
 
         var reftex = Dx11Texture;
         var device = reftex.Device;
-        using var shared = new SharedData();
 
-        var job = new CreateTexture2DJob
+        var fileTask = AsyncUtil.WaitFor(jobGuard.JobHandle);
+        var task = Task.Run(async () =>
         {
-            buffer = bufGuard.array,
-            width = width,
-            height = height,
-            mipCount = mipCount,
-            graphicsFormat = format,
-            format = dx11format,
-            handle = new(shared),
-            device = device.NativePointer,
-            readStatus = new(readStatus),
-        };
-        jobGuard.JobHandle = job.Schedule(jobGuard.JobHandle);
-        bufGuard.array.DisposeExt(jobGuard.JobHandle);
-        JobHandle.ScheduleBatchedJobs();
+            var buffer = bufGuard.array;
+            using var guard = new NativeArrayAsyncGuard<byte>(buffer);
+            bufGuard.array = default;
 
-        using (handle.WithCompleteHandler(new JobHandleCompleteHandler(jobGuard.JobHandle)))
-            yield return new WaitUntil(() => jobGuard.JobHandle.IsCompleted);
-        jobGuard.JobHandle.Complete();
+            await fileTask;
+            readStatus.ThrowIfError();
 
-        // If the job failed with an exception then we should rethrow that.
-        shared.ex?.Throw();
+            using var scope = CreateDX11Texture.Auto();
 
-        if (shared.texture is null)
+            var desc = new Texture2DDescription
+            {
+                Width = width,
+                Height = height,
+                MipLevels = mipCount,
+                ArraySize = 1,
+                Format = dx11format,
+                SampleDescription = new(1, 0),
+                Usage = ResourceUsage.Default,
+                BindFlags = BindFlags.ShaderResource,
+            };
+
+            var boxes = new DataBox[mipCount];
+            FillInitData(width, height, mipCount, format, buffer, boxes);
+
+            return new Direct3D11.Texture2D(device, desc, boxes);
+        });
+
+        using (handle.WithCompleteHandler(new TaskCompleteHandler(task)))
+            yield return new WaitUntil(() => task.IsCompleted);
+
+        var dx11texture = task.Result;
+        if (dx11texture is null)
             throw new Exception("Job failed to create the texture but didn't throw an exception");
 
         UnityEngine.Texture2D texture;
-        using (CreateExternalTexture.Auto())
+
+        try
+        {
+            using var scope = CreateExternalTexture.Auto();
             texture = TextureUtils.CreateExternalTexture2D(
                 width,
                 height,
                 mipCount,
                 format,
-                shared.texture.NativePointer
+                dx11texture.NativePointer
             );
-
-        shared.texture = null;
+        }
+        catch
+        {
+            dx11texture.Dispose();
+            throw;
+        }
 
         // Unity doesn't configure anisotropic filtering for external textures
         // by default. Enable it if configured by default.
@@ -145,115 +165,49 @@ internal static unsafe class DX11
         handle.SetTexture<T>(texture, options);
     }
 
-    class SharedData : IDisposable
+    static void FillInitData(
+        int width,
+        int height,
+        int mipCount,
+        GraphicsFormat graphicsFormat,
+        NativeArray<byte> buffer,
+        DataBox[] boxes
+    )
     {
-        public Direct3D11.Texture2D texture = null;
-        public ExceptionDispatchInfo ex = null;
+        int w = width;
+        int h = height;
 
-        public void Dispose()
-        {
-            texture?.Dispose();
-            texture = null;
-            GC.SuppressFinalize(this);
-        }
+        var blockWidth = (int)GraphicsFormatUtility.GetBlockWidth(graphicsFormat);
+        var blockHeight = (int)GraphicsFormatUtility.GetBlockHeight(graphicsFormat);
+        var blockSize = (int)GraphicsFormatUtility.GetBlockSize(graphicsFormat);
 
-        ~SharedData()
+        var data = (byte*)buffer.GetUnsafePtr();
+        var offset = 0;
+
+        for (int m = 0; m < mipCount; ++m)
         {
-            texture?.Dispose();
+            var rowbytes = DivCeil(w, blockWidth) * blockSize;
+            var allbytes = DivCeil(h, blockHeight) * rowbytes;
+
+            boxes[m] = new DataBox((IntPtr)(data + offset), rowbytes, allbytes);
+            offset += allbytes;
+
+            if (offset > buffer.Length)
+                throw new IndexOutOfRangeException(
+                    "image buffer was too small for specified image dimensions and mipmaps"
+                );
+
+            w >>= 1;
+            h >>= 1;
+
+            if (w < 1)
+                w = 1;
+            if (h < 1)
+                h = 1;
         }
     }
 
-    struct CreateTexture2DJob : IJob
-    {
-        [ReadOnly]
-        public NativeArray<byte> buffer;
-
-        public int width;
-        public int height;
-        public int mipCount;
-        public GraphicsFormat graphicsFormat;
-        public DXGIFormat format;
-
-        public ObjectHandle<SharedData> handle;
-        public IntPtr device;
-        public ObjectHandle<IFileReadStatus> readStatus;
-
-        public void Execute()
-        {
-            using var guard = handle;
-            using var rs = readStatus;
-            using var device = new Direct3D11.Device(this.device);
-            var shared = handle.Target;
-
-            try
-            {
-                ExecuteImpl(device, shared);
-            }
-            catch (Exception ex)
-            {
-                shared.ex = ExceptionDispatchInfo.Capture(ex);
-            }
-        }
-
-        void FillInitData(DataBox[] boxes)
-        {
-            int w = width;
-            int h = height;
-
-            var blockWidth = (int)GraphicsFormatUtility.GetBlockWidth(graphicsFormat);
-            var blockHeight = (int)GraphicsFormatUtility.GetBlockHeight(graphicsFormat);
-            var blockSize = (int)GraphicsFormatUtility.GetBlockSize(graphicsFormat);
-
-            var data = (byte*)buffer.GetUnsafePtr();
-            var offset = 0;
-
-            for (int m = 0; m < mipCount; ++m)
-            {
-                var rowbytes = DivCeil(w, blockWidth) * blockSize;
-                var allbytes = DivCeil(h, blockHeight) * rowbytes;
-
-                boxes[m] = new DataBox((IntPtr)(data + offset), rowbytes, allbytes);
-                offset += allbytes;
-
-                if (offset > buffer.Length)
-                    throw new IndexOutOfRangeException(
-                        "image buffer was too small for specified image dimensions and mipmaps"
-                    );
-
-                w >>= 1;
-                h >>= 1;
-
-                if (w < 1)
-                    w = 1;
-                if (h < 1)
-                    h = 1;
-            }
-        }
-
-        void ExecuteImpl(Direct3D11.Device device, SharedData shared)
-        {
-            readStatus.Target.ThrowIfError();
-
-            var desc = new Texture2DDescription
-            {
-                Width = width,
-                Height = height,
-                MipLevels = mipCount,
-                ArraySize = 1,
-                Format = format,
-                SampleDescription = new(1, 0),
-                Usage = ResourceUsage.Default,
-                BindFlags = BindFlags.ShaderResource,
-            };
-
-            var boxes = new DataBox[mipCount];
-            FillInitData(boxes);
-
-            shared.texture = new Direct3D11.Texture2D(device, desc, boxes);
-        }
-
-        static int DivCeil(int x, int y) => (x + (y - 1)) / y;
-    }
+    static int DivCeil(int x, int y) => (x + (y - 1)) / y;
 
     static DXGIFormat? GetDxgiFormat(GraphicsFormat format)
     {

@@ -270,4 +270,42 @@ public partial class TextureLoader : MonoBehaviour
             return debug;
         }
     }
+
+    private Dictionary<string, TextureHandleImpl> LoadedTextures
+    {
+        get
+        {
+            var debug = new Dictionary<string, TextureHandleImpl>(textures.Count);
+            foreach (var (key, weak) in textures)
+            {
+                if (!weak.TryGetTarget(out var handle))
+                    continue;
+
+                if (!handle.IsComplete)
+                    continue;
+
+                debug.Add(key, handle);
+            }
+            return debug;
+        }
+    }
+
+    private Dictionary<string, TextureHandleImpl> PendingTextures
+    {
+        get
+        {
+            var debug = new Dictionary<string, TextureHandleImpl>(textures.Count);
+            foreach (var (key, weak) in textures)
+            {
+                if (!weak.TryGetTarget(out var handle))
+                    continue;
+
+                if (handle.IsComplete)
+                    continue;
+
+                debug.Add(key, handle);
+            }
+            return debug;
+        }
+    }
 }
