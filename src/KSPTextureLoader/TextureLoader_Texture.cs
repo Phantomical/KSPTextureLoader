@@ -205,14 +205,6 @@ public partial class TextureLoader
             );
         }
 
-        // If we can, try to avoid saturating the job workers. That should help prevent texture
-        // loading jobs from being run on the main thread, which can cause frame stalls.
-        if (options.Hint <= TextureLoadHint.BatchAsynchronous)
-        {
-            if (activeTextureLoads >= MaxConcurrentLoads)
-                yield return new WaitUntil(() => activeTextureLoads < MaxConcurrentLoads);
-        }
-
         using var loadGuard = new ActiveTextureLoadGuard(this);
 
         var extension = Path.GetExtension(handle.Path);
