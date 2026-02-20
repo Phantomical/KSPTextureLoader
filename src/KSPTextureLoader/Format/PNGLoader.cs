@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
+using KSPTextureLoader.Async;
 using KSPTextureLoader.Utils;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -58,35 +60,31 @@ internal static class PNGLoader
                 "image was too large to be loaded. Only images up to 2GB in size are supported."
             );
 
-        if (options.Hint < TextureLoadHint.BatchSynchronous && AllocatorUtil.IsAboveWatermark)
-            yield return AllocatorUtil.WaitUntilMemoryBelowWatermark();
-
-        var array = new byte[(int)length];
-        ulong gchandle;
-
-        IFileReadStatus readStatusTmp;
-        JobHandle jobHandle;
-        unsafe
+        var readInfo = new FileLoader.FileReadInfo
         {
-            var ptr = UnsafeUtility.PinGCArrayAndGetDataAddress(array, out gchandle);
-            var buffer = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<byte>(
-                ptr,
-                (int)length,
-                Allocator.Invalid
-            );
+            path = diskPath,
+            length = (int)length,
+            offset = 0,
+        };
+        var task = FileLoader
+            .ReadFileContentsAsync(readInfo)
+            .ContinueWith(task =>
+            {
+                var array = task.Result;
+                try
+                {
+                    return array.ToArray();
+                }
+                finally
+                {
+                    Task.Run(() => array.DisposeExt());
+                }
+            });
 
-            readStatusTmp = FileLoader.ReadFileContents(diskPath, 0, buffer, out jobHandle);
-        }
+        using (handle.WithCompleteHandler(new TaskCompleteHandler(task)))
+            yield return new WaitUntilTask(task);
 
-        using var readStatus = readStatusTmp;
-        using var gcHandleGuard = new GcHandleGuard(gchandle);
-
-        using (handle.WithCompleteHandler(new JobHandleCompleteHandler(jobHandle)))
-            yield return new WaitUntil(() => jobHandle.IsCompleted);
-        jobHandle.Complete();
-
-        readStatus.ThrowIfError();
-
+        var array = task.Result;
         texture = new Texture2D(1, 1);
         using (LoadImageMarker.Auto())
             texture.LoadImage(array, unreadable);

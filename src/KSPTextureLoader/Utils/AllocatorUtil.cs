@@ -38,8 +38,6 @@ internal static class AllocatorUtil
         }
     }
 
-    struct Request { }
-
     static readonly AsyncLock allocLock = new();
     static readonly AsyncConditionVariable condvar = new(allocLock);
 
