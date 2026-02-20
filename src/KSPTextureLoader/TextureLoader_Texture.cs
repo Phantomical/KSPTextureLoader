@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using Experience.Effects;
+using KSPTextureLoader.Async;
 using KSPTextureLoader.Format;
 using KSPTextureLoader.Utils;
 using Unity.Jobs.LowLevel.Unsafe;
@@ -228,8 +229,14 @@ public partial class TextureLoader
         }
         else if (extension == ".dds")
         {
-            foreach (var item in DDSLoader.LoadDDSTexture<T>(handle, options))
-                yield return item;
+            var task = AsyncUtil.LaunchMainThreadTask(() =>
+                DDSLoader.LoadDDSTextureAsync<T>(handle, options)
+            );
+
+            using (handle.WithCompleteHandler(new TaskCompleteHandler(task)))
+                yield return new WaitUntilTask(task);
+
+            task.GetAwaiter().GetResult();
         }
         else
         {

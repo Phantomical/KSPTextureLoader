@@ -3,8 +3,6 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.ExceptionServices;
-using KSPTextureLoader.Utils;
 using Unity.Profiling;
 using UnityEngine;
 
@@ -29,6 +27,8 @@ partial class TextureLoader
 
     void Update()
     {
+        Context.Update();
+
         while (tasks.TryDequeue(out var task))
         {
             try

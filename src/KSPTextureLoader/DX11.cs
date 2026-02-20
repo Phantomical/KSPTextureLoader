@@ -1,24 +1,21 @@
 using System;
-using System.Collections.Generic;
-using System.Runtime.ExceptionServices;
 using System.Threading.Tasks;
-using KSPTextureLoader.Utils;
 using SharpDX;
 using SharpDX.Direct3D11;
-using Smooth.Pools;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
-using Unity.Jobs;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using Direct3D11 = SharpDX.Direct3D11;
 using DXGIFormat = SharpDX.DXGI.Format;
+using TaskArrayDisposeGuard = KSPTextureLoader.Format.DDSLoader.TaskArrayDisposeGuard;
+using TextureMetadata = KSPTextureLoader.Format.DDSLoader.TextureMetadata;
 
 namespace KSPTextureLoader;
 
-internal static unsafe class DX11
+internal static class DX11
 {
     static readonly ProfilerMarker GetNativeTexturePtr = new("GetNativeTexturePtr");
     static readonly ProfilerMarker CreateExternalTexture = new("CreateExternalTexture");
@@ -55,20 +52,17 @@ internal static unsafe class DX11
         return GetDxgiFormat(format) is not null;
     }
 
-    internal static IEnumerable<object> UploadTexture2D<T>(
+    internal static async Task UploadTexture2DAsync<T>(
         TextureHandleImpl handle,
-        int width,
-        int height,
-        int mipCount,
-        GraphicsFormat format,
         TextureLoadOptions options,
-        NativeArrayGuard<byte> bufGuard,
-        IFileReadStatus readStatus,
-        JobCompleteGuard jobGuard
+        TextureMetadata metadata,
+        Task<NativeArray<byte>> dataTask
     )
         where T : Texture
     {
-        if (GetDxgiFormat(format) is not DXGIFormat dx11format)
+        using var dguard = new TaskArrayDisposeGuard(dataTask);
+
+        if (GetDxgiFormat(metadata.format) is not DXGIFormat dx11format)
             throw new NotSupportedException(
                 "DX11.UploadTexture2D called with a graphics format not natively supported by DX11"
             );
@@ -91,23 +85,19 @@ internal static unsafe class DX11
         var reftex = Dx11Texture;
         var device = reftex.Device;
 
-        var fileTask = AsyncUtil.WaitFor(jobGuard.JobHandle);
+        dguard.data = null;
         var task = Task.Run(async () =>
         {
-            var buffer = bufGuard.array;
-            using var guard = new NativeArrayAsyncGuard<byte>(buffer);
-            bufGuard.array = default;
-
-            await fileTask;
-            readStatus.ThrowIfError();
+            using var dguard = new TaskArrayDisposeGuard(dataTask);
+            var buffer = await dataTask;
 
             using var scope = CreateDX11Texture.Auto();
 
             var desc = new Texture2DDescription
             {
-                Width = width,
-                Height = height,
-                MipLevels = mipCount,
+                Width = metadata.width,
+                Height = metadata.height,
+                MipLevels = metadata.mipCount,
                 ArraySize = 1,
                 Format = dx11format,
                 SampleDescription = new(1, 0),
@@ -115,18 +105,11 @@ internal static unsafe class DX11
                 BindFlags = BindFlags.ShaderResource,
             };
 
-            var boxes = new DataBox[mipCount];
-            FillInitData(width, height, mipCount, format, buffer, boxes);
-
+            var boxes = FillInitData(metadata, buffer);
             return new Direct3D11.Texture2D(device, desc, boxes);
         });
 
-        using (handle.WithCompleteHandler(new TaskCompleteHandler(task)))
-            yield return new WaitUntil(() => task.IsCompleted);
-
-        var dx11texture = task.Result;
-        if (dx11texture is null)
-            throw new Exception("Job failed to create the texture but didn't throw an exception");
+        var dx11texture = await task;
 
         UnityEngine.Texture2D texture;
 
@@ -134,10 +117,10 @@ internal static unsafe class DX11
         {
             using var scope = CreateExternalTexture.Auto();
             texture = TextureUtils.CreateExternalTexture2D(
-                width,
-                height,
-                mipCount,
-                format,
+                metadata.width,
+                metadata.height,
+                metadata.mipCount,
+                metadata.format,
                 dx11texture.NativePointer
             );
         }
@@ -165,26 +148,20 @@ internal static unsafe class DX11
         handle.SetTexture<T>(texture, options);
     }
 
-    static void FillInitData(
-        int width,
-        int height,
-        int mipCount,
-        GraphicsFormat graphicsFormat,
-        NativeArray<byte> buffer,
-        DataBox[] boxes
-    )
+    static unsafe DataBox[] FillInitData(TextureMetadata metadata, NativeArray<byte> buffer)
     {
-        int w = width;
-        int h = height;
+        int w = metadata.width;
+        int h = metadata.height;
+        var boxes = new DataBox[metadata.mipCount];
 
-        var blockWidth = (int)GraphicsFormatUtility.GetBlockWidth(graphicsFormat);
-        var blockHeight = (int)GraphicsFormatUtility.GetBlockHeight(graphicsFormat);
-        var blockSize = (int)GraphicsFormatUtility.GetBlockSize(graphicsFormat);
+        var blockWidth = (int)GraphicsFormatUtility.GetBlockWidth(metadata.format);
+        var blockHeight = (int)GraphicsFormatUtility.GetBlockHeight(metadata.format);
+        var blockSize = (int)GraphicsFormatUtility.GetBlockSize(metadata.format);
 
         var data = (byte*)buffer.GetUnsafePtr();
         var offset = 0;
 
-        for (int m = 0; m < mipCount; ++m)
+        for (int m = 0; m < metadata.mipCount; ++m)
         {
             var rowbytes = DivCeil(w, blockWidth) * blockSize;
             var allbytes = DivCeil(h, blockHeight) * rowbytes;
@@ -205,6 +182,8 @@ internal static unsafe class DX11
             if (h < 1)
                 h = 1;
         }
+
+        return boxes;
     }
 
     static int DivCeil(int x, int y) => (x + (y - 1)) / y;

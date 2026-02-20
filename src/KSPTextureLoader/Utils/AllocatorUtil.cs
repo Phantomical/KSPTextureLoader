@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
+using KSPTextureLoader.Async;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
@@ -13,7 +16,7 @@ namespace KSPTextureLoader.Utils;
 /// Utilities for creating and disposing of <see cref="NativeArray{T}"/>s using
 /// <see cref="Marshal.AllocHGlobal(int)"/>.
 /// </summary>
-internal static unsafe class AllocatorUtil
+internal static class AllocatorUtil
 {
     static readonly ProfilerMarker AllocMarker = new("Marshal.AllocHGlobal");
     static readonly ProfilerMarker FreeMarker = new("Marshal.FreeHGlobal");
@@ -35,7 +38,25 @@ internal static unsafe class AllocatorUtil
         }
     }
 
-    internal static NativeArray<T> CreateNativeArrayHGlobal<T>(
+    struct Request { }
+
+    static readonly AsyncLock allocLock = new();
+    static readonly AsyncConditionVariable condvar = new(allocLock);
+
+    internal static async ValueTask<NativeArray<T>> CreateNativeArrayHGlobalAsync<T>(
+        int length,
+        NativeArrayOptions options = NativeArrayOptions.ClearMemory
+    )
+        where T : unmanaged
+    {
+        using var guard = await allocLock.Lock();
+        while (IsAboveWatermark)
+            await condvar.Wait(guard);
+
+        return CreateNativeArrayHGlobal<T>(length, options);
+    }
+
+    internal static unsafe NativeArray<T> CreateNativeArrayHGlobal<T>(
         int length,
         NativeArrayOptions options = NativeArrayOptions.ClearMemory
     )
@@ -75,9 +96,14 @@ internal static unsafe class AllocatorUtil
     {
         if (array.m_AllocatorLabel == HGlobal)
         {
-            using var scope = FreeMarker.Auto();
-            Marshal.FreeHGlobal((IntPtr)array.GetUnsafePtr());
-            Interlocked.Add(ref allocMem, -array.Length);
+            unsafe
+            {
+                using var scope = FreeMarker.Auto();
+                Marshal.FreeHGlobal((IntPtr)array.GetUnsafePtr());
+                Interlocked.Add(ref allocMem, -array.Length);
+            }
+
+            condvar.Notify();
         }
         else
             array.Dispose();

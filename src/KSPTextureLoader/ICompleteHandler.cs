@@ -58,13 +58,6 @@ internal class TaskCompleteHandler(Task task) : ICompleteHandler
 
     public void WaitUntilComplete()
     {
-        try
-        {
-            task.Wait();
-        }
-        catch
-        {
-            // This will be handled by the handler getting the task result.
-        }
+        TextureLoader.Context.WaitUntilComplete(task);
     }
 }

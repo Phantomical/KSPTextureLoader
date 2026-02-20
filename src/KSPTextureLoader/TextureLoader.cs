@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using KSPTextureLoader.Async;
 using Unity.Profiling;
 using UnityEngine;
 
@@ -10,6 +11,7 @@ namespace KSPTextureLoader;
 public partial class TextureLoader : MonoBehaviour
 {
     internal static TextureLoader Instance { get; private set; }
+    internal static LoaderSynchronizationContext Context { get; private set; }
 
     private static readonly Type[] SupportedTextureTypes =
     [
@@ -33,6 +35,7 @@ public partial class TextureLoader : MonoBehaviour
 
         DontDestroyOnLoad(this);
         Instance = this;
+        Context ??= new();
     }
 
     void OnDestroy()
