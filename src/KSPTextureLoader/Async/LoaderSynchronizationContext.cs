@@ -1,9 +1,9 @@
-using KSPTextureLoader.Utils;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using KSPTextureLoader.Utils;
 
 namespace KSPTextureLoader.Async;
 
@@ -34,7 +34,8 @@ internal class LoaderSynchronizationContext : SynchronizationContext
     }
 
     readonly Queue<WorkItem> queue = [];
-    readonly BlockingCollection<WorkItem> mailbox = [];
+    readonly BlockingQueue<WorkItem> mailbox = new();
+
     readonly int mainThreadId = Thread.CurrentThread.ManagedThreadId;
 
     public override void Post(SendOrPostCallback d, object state)
