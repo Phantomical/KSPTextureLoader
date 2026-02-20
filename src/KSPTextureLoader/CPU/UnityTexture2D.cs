@@ -1,4 +1,5 @@
 using System;
+using KSPTextureLoader.Utils;
 using Unity.Collections;
 using UnityEngine;
 
@@ -93,6 +94,6 @@ internal class UnityTexture2D<T>(T texture, Texture2D unity, bool owned = true)
         if (!owned || unity is null)
             return;
 
-        TextureLoader.Instance?.ExecuteOnMainThread(() => Texture2D.Destroy(unity));
+        _ = AsyncUtil.LaunchMainThreadTask(() => Texture2D.Destroy(unity));
     }
 }

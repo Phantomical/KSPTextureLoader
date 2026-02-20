@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using KSPTextureLoader.Async;
-using Unity.Profiling;
 using UnityEngine;
 
 namespace KSPTextureLoader;
@@ -44,6 +43,11 @@ public partial class TextureLoader : MonoBehaviour
             $"[KSPTextureLoader] TextureLoader was destroyed! This should never happen."
         );
         Instance = null;
+    }
+
+    void Update()
+    {
+        Context.Update();
     }
 
     /// <summary>

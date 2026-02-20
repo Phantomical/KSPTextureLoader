@@ -1,4 +1,5 @@
 using System;
+using KSPTextureLoader.Utils;
 using UnityEngine;
 
 namespace KSPTextureLoader.CPU;
@@ -22,7 +23,7 @@ internal sealed class TextureHandleWrapper2D(TextureHandle<Texture2D> handle)
         if (handle is null)
             return;
 
-        TextureLoader.Instance?.ExecuteOnMainThread(handle.Dispose);
+        _ = AsyncUtil.LaunchMainThreadTask(handle.Dispose);
     }
 
     internal new readonly struct Factory : ICPUTexture2DFactory
@@ -71,6 +72,6 @@ internal sealed class TextureHandleWrapper2D<T>(T texture, TextureHandle<Texture
         if (handle is null)
             return;
 
-        TextureLoader.Instance?.ExecuteOnMainThread(handle.Dispose);
+        _ = AsyncUtil.LaunchMainThreadTask(handle.Dispose);
     }
 }

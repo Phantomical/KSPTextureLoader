@@ -21,36 +21,13 @@ partial class TextureLoader
     );
 
     // A background tasks queue for stuff to be sent from a finalizer
-    private readonly ConcurrentQueue<Action> tasks = [];
     private readonly Queue<TextureHandleImpl> destroyQueue = [];
     private Coroutine gcCoroutine = null;
-
-    void Update()
-    {
-        Context.Update();
-
-        while (tasks.TryDequeue(out var task))
-        {
-            try
-            {
-                task();
-            }
-            catch (Exception e)
-            {
-                Debug.LogException(e);
-            }
-        }
-    }
 
     internal void QueueForDestroy(TextureHandleImpl handle)
     {
         destroyQueue.Enqueue(handle);
         gcCoroutine ??= StartCoroutine(GcCoroutine());
-    }
-
-    internal void ExecuteOnMainThread(Action action)
-    {
-        tasks.Append(action);
     }
 
     IEnumerator GcCoroutine()

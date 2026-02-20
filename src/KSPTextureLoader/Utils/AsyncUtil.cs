@@ -25,25 +25,6 @@ internal static class AsyncUtil
         });
     }
 
-    static Task<T> TaskFunc<T>(object state)
-    {
-        var ec = ExecutionContext.Capture().CreateCopy();
-        Task<T> result = null;
-        ExecutionContext.Run(
-            ec,
-            state =>
-            {
-                SynchronizationContext.SetSynchronizationContext(TextureLoader.Context);
-
-                var func = (Func<Task<T>>)state;
-                result = func();
-            },
-            state
-        );
-
-        return result;
-    }
-
     public static Task<T> LaunchMainThreadTask<T>(Func<Task<T>> func)
     {
         var tcs = new TaskCompletionSource<T>();
@@ -67,6 +48,38 @@ internal static class AsyncUtil
                             tcs.TrySetException(e);
                         }
                     });
+                }
+                catch (Exception e)
+                {
+                    tcs.TrySetException(e);
+                }
+            },
+            func
+        );
+
+        return tcs.Task;
+    }
+
+    public static Task LaunchMainThreadTask(Action func)
+    {
+        return LaunchMainThreadTask(() =>
+        {
+            func();
+            return default(Empty);
+        });
+    }
+
+    public static Task<T> LaunchMainThreadTask<T>(Func<T> func)
+    {
+        var tcs = new TaskCompletionSource<T>();
+
+        TextureLoader.Context.Submit(
+            state =>
+            {
+                try
+                {
+                    var func = (Func<T>)state;
+                    tcs.SetResult(func());
                 }
                 catch (Exception e)
                 {
