@@ -1,15 +1,23 @@
 using System.Collections.Concurrent;
-using System.Linq.Expressions;
 using System.Threading;
 
 namespace KSPTextureLoader.Async;
 
+/// <summary>
+/// A very simple blocking queue using a concurrent queue and a monitor to
+/// do the actual synchronization.
+/// </summary>
+/// <typeparam name="T"></typeparam>
 internal class BlockingQueue<T>
 {
     readonly object mutex = new();
     readonly ConcurrentQueue<T> queue = new();
 
-    public void Add(T value)
+    /// <summary>
+    /// Enqueue a new item.
+    /// </summary>
+    /// <param name="value"></param>
+    public void Enqueue(T value)
     {
         lock (mutex)
         {
@@ -18,18 +26,26 @@ internal class BlockingQueue<T>
         }
     }
 
-    public bool TryTake(out T value) => queue.TryDequeue(out value);
+    /// <summary>
+    /// Dequeue an element from the queue if there is one available.
+    /// Does not block.
+    /// </summary>
+    public bool TryDequeue(out T value) => queue.TryDequeue(out value);
 
-    public T Take()
+    /// <summary>
+    /// Dequeue an element from the queue, blocking until one is available.
+    /// </summary>
+    /// <returns></returns>
+    public T Dequeue()
     {
-        if (TryTake(out var value))
+        if (TryDequeue(out var value))
             return value;
 
         lock (mutex)
         {
             while (true)
             {
-                if (TryTake(out value))
+                if (TryDequeue(out value))
                     return value;
 
                 Monitor.Wait(mutex);

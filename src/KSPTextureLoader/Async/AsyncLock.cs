@@ -4,6 +4,9 @@ using System.Threading.Tasks;
 
 namespace KSPTextureLoader.Async;
 
+/// <summary>
+/// A fairly basic queueing async lock
+/// </summary>
 internal sealed class AsyncLock
 {
     static Func<AsyncLock, LockGuard> CtorFunc = null;
@@ -13,6 +16,8 @@ internal sealed class AsyncLock
 
     static AsyncLock()
     {
+        // Ensure that the static constructor for LockGuard has run.
+        // Without this CtorFunc will not be initialized.
         LockGuard.InternalInit();
     }
 

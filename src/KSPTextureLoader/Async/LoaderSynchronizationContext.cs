@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -43,7 +42,7 @@ internal class LoaderSynchronizationContext : SynchronizationContext
         if (Thread.CurrentThread.ManagedThreadId == mainThreadId)
             queue.Enqueue(new(d, state));
         else
-            mailbox.Add(new(d, state));
+            mailbox.Enqueue(new(d, state));
     }
 
     public override void Send(SendOrPostCallback d, object state)
@@ -55,7 +54,7 @@ internal class LoaderSynchronizationContext : SynchronizationContext
         else
         {
             var evt = new ManualResetEventSlim();
-            mailbox.Add(new(d, state, evt));
+            mailbox.Enqueue(new(d, state, evt));
             evt.Wait();
         }
     }
@@ -71,7 +70,7 @@ internal class LoaderSynchronizationContext : SynchronizationContext
     bool DrainMailbox()
     {
         bool progress = false;
-        while (mailbox.TryTake(out var item))
+        while (mailbox.TryDequeue(out var item))
         {
             queue.Enqueue(item);
             progress = true;
@@ -82,7 +81,7 @@ internal class LoaderSynchronizationContext : SynchronizationContext
 
     void BlockMailbox()
     {
-        queue.Enqueue(mailbox.Take());
+        queue.Enqueue(mailbox.Dequeue());
     }
 
     void Execute(WorkItem item)
