@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace KSPTextureLoader.Async;
 
@@ -12,6 +13,22 @@ internal class BlockingQueue<T>
 {
     readonly object mutex = new();
     readonly ConcurrentQueue<T> queue = new();
+
+    public BlockingQueue()
+    {
+        Task.Run(async () =>
+        {
+            while (true)
+            {
+                await Task.Delay(1000);
+
+                lock (mutex)
+                {
+                    Monitor.Pulse(mutex);
+                }
+            }
+        });
+    }
 
     /// <summary>
     /// Enqueue a new item.

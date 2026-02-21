@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading.Tasks;
+using KSPTextureLoader.Utils;
 using SharpDX;
 using SharpDX.Direct3D11;
 using Unity.Collections;
@@ -20,6 +23,7 @@ internal static class DX11
     static readonly ProfilerMarker GetNativeTexturePtr = new("GetNativeTexturePtr");
     static readonly ProfilerMarker CreateExternalTexture = new("CreateExternalTexture");
     static readonly ProfilerMarker CreateDX11Texture = new("CreateDX11Texture");
+    static readonly ProfilerMarker CopyTextureData = new("CopyTextureData");
 
     static UnityEngine.Texture2D ReferenceTexture = null;
     static uint LastUpdateCount = uint.MaxValue;
@@ -82,13 +86,12 @@ internal static class DX11
             Dx11Texture = new Direct3D11.Texture2D(ReferenceTexture.GetNativeTexturePtr());
         }
 
+        bool readable = TextureLoader.Texture2DShouldBeReadable<T>(options);
         var reftex = Dx11Texture;
         var device = reftex.Device;
 
-        dguard.data = null;
         var task = Task.Run(async () =>
         {
-            using var dguard = new TaskArrayDisposeGuard(dataTask);
             var buffer = await dataTask;
 
             using var scope = CreateDX11Texture.Auto();
@@ -109,13 +112,47 @@ internal static class DX11
             return new Direct3D11.Texture2D(device, desc, boxes);
         });
 
-        var dx11texture = await task;
+        using var texguard = new Dx11AsyncTextureGuard(task);
+        dguard.AddDependency(task);
 
-        UnityEngine.Texture2D texture;
+        UnityEngine.Texture2D texture = null;
 
-        try
+        if (readable)
         {
-            using var scope = CreateExternalTexture.Auto();
+            texture = TextureUtils.CreateUninitializedTexture2D(
+                metadata.width,
+                metadata.height,
+                metadata.mipCount,
+                metadata.format
+            );
+            using var uguard = new TextureDisposeGuard(texture);
+
+            if (options.Hint != TextureLoadHint.Synchronous)
+                await AsyncUtil.RunOnGraphicsThread(static () => { });
+
+            var rawdata = texture.GetRawTextureData<byte>();
+            var copy = Task.Run(async () =>
+            {
+                var data = await dataTask;
+                if (rawdata.Length != data.Length)
+                    throw new Exception("loaded file data did not match texture data length");
+                rawdata.CopyFrom(data);
+            });
+
+            dguard.AddDependency(copy);
+            dguard.Dispose();
+
+            var dx11texture = await task;
+            texture.UpdateExternalTexture(dx11texture.NativePointer);
+            texguard.task = null;
+
+            uguard.Clear();
+            await copy;
+        }
+        else
+        {
+            dguard.Dispose();
+            var dx11texture = await task;
             texture = TextureUtils.CreateExternalTexture2D(
                 metadata.width,
                 metadata.height,
@@ -123,11 +160,7 @@ internal static class DX11
                 metadata.format,
                 dx11texture.NativePointer
             );
-        }
-        catch
-        {
-            dx11texture.Dispose();
-            throw;
+            texguard.task = null;
         }
 
         // Unity doesn't configure anisotropic filtering for external textures
@@ -143,7 +176,8 @@ internal static class DX11
                 break;
         }
 
-        TextureUtils.MarkExternalTextureAsUnreadable(texture);
+        if (!readable)
+            TextureUtils.MarkExternalTextureAsUnreadable(texture);
 
         handle.SetTexture<T>(texture, options);
     }
@@ -284,5 +318,33 @@ internal static class DX11
 
             _ => null,
         };
+    }
+
+    class Dx11TextureGuard(Direct3D11.Texture2D texture = null) : IDisposable
+    {
+        public Direct3D11.Texture2D texture = texture;
+
+        public void Dispose()
+        {
+            texture?.Dispose();
+        }
+    }
+
+    class Dx11AsyncTextureGuard(Task<Direct3D11.Texture2D> task = null) : IDisposable
+    {
+        public Task<Direct3D11.Texture2D> task = task;
+
+        public void Dispose()
+        {
+            Task.Run(async () =>
+            {
+                try
+                {
+                    var texture = await task;
+                    texture.Dispose();
+                }
+                catch { }
+            });
+        }
     }
 }

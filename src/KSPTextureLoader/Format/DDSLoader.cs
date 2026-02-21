@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.IO.MemoryMappedFiles;
-using System.Reflection.Emit;
 using System.Threading.Tasks;
 using DDSHeaders;
 using KSPTextureLoader.Burst;
@@ -364,6 +363,20 @@ internal static class DDSLoader
     {
         public Task<NativeArray<byte>> data = data;
 
+        public void AddDependency(Task task)
+        {
+            var prev = data;
+            data = Task.Run(async () =>
+            {
+                try
+                {
+                    await task;
+                }
+                catch { }
+                return await prev;
+            });
+        }
+
         public void Dispose()
         {
             if (data is null)
@@ -379,6 +392,7 @@ internal static class DDSLoader
                 }
                 catch { }
             });
+            data = null;
         }
     }
     #endregion
@@ -438,7 +452,7 @@ internal static class DDSLoader
                 break;
 
             case DDSTextureType.Texture3D:
-                await LoadTexture2D<T>(handle, options, metadata, dataTask);
+                await LoadTexture3D<T>(handle, options, metadata, dataTask);
                 break;
 
             default:
@@ -464,7 +478,7 @@ internal static class DDSLoader
         var format = metadata.format;
 
         // Prefer a native texture upload if available.
-        if (unreadable && DX11.SupportsAsyncUpload(width, height, format))
+        if (DX11.SupportsAsyncUpload(width, height, format))
         {
             dguard.data = null;
             await DX11.UploadTexture2DAsync<T>(handle, options, metadata, dataTask);

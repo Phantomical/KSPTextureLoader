@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using Experience.Effects;
 using KSPTextureLoader.Async;
 using KSPTextureLoader.Format;
@@ -222,13 +223,15 @@ public partial class TextureLoader
         else if (extension == ".dds")
         {
             var task = AsyncUtil.LaunchMainThreadTask(() =>
-                DDSLoader.LoadDDSTextureAsync<T>(handle, options)
+                (Task)DDSLoader.LoadDDSTextureAsync<T>(handle, options)
             );
 
             using (handle.WithCompleteHandler(new TaskCompleteHandler(task)))
                 yield return new WaitUntilTask(task);
 
             task.GetAwaiter().GetResult();
+            if (!handle.IsComplete)
+                throw new Exception("internal error: task completed but has not set a texture");
         }
         else
         {
