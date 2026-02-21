@@ -76,6 +76,21 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         HandleCreated.Fire(this);
     }
 
+    // If the texture gets leaked
+    ~TextureHandleImpl()
+    {
+        if (texture is null)
+            return;
+
+        _ = AsyncUtil.LaunchMainThreadTask(() =>
+        {
+            if (TextureLoader.Instance is null)
+                Destroy();
+            else
+                TextureLoader.Instance.QueueForDestroy(this);
+        });
+    }
+
     /// <summary>
     /// Get the texture for this texture handle. Will block if the texture has
     /// not loaded yet and will throw an exception if the texture failed to load.
@@ -222,8 +237,18 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
     {
         HandleDestroyed.Fire(this);
 
-        var key = TextureLoader.CanonicalizeResourcePath(Path);
-        TextureLoader.Instance?.textures.Remove(key);
+        var instance = TextureLoader.Instance;
+        if (instance is not null)
+        {
+            var key = TextureLoader.CanonicalizeResourcePath(Path);
+            if (
+                instance.textures.TryGetValue(key, out var weak)
+                && (!weak.TryGetTarget(out var handle) || ReferenceEquals(this, handle))
+            )
+            {
+                instance.textures.Remove(key);
+            }
+        }
 
         if (texture == null)
             return 0;
@@ -239,6 +264,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
             Texture.Destroy(texture);
 
         texture = null;
+        GC.SuppressFinalize(this);
         return size;
     }
 
