@@ -1,12 +1,10 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using KSPTextureLoader.Jobs;
 using KSPTextureLoader.Utils;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.IO.LowLevel.Unsafe;
-using Unity.Jobs;
 using Unity.Profiling;
 
 namespace KSPTextureLoader;

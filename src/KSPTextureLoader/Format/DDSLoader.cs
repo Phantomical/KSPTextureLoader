@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.IO.MemoryMappedFiles;
+using System.Reflection.Emit;
 using System.Threading.Tasks;
 using DDSHeaders;
 using KSPTextureLoader.Burst;
@@ -484,7 +485,7 @@ internal static class DDSLoader
         {
             // This will wait until the texture has been uploaded by the graphics
             // and so it won't make a copy if we call GetRawTextureData.
-            await AsyncUtil.RunOnGraphicsThread(() => { });
+            await AsyncUtil.RunOnGraphicsThread(static () => { });
 
             var texdata = texture.GetRawTextureData<byte>();
             await Task.Run(async () =>

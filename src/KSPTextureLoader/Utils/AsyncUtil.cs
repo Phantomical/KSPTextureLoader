@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
+using UnityEngine;
 using UnityEngine.Rendering;
 
 namespace KSPTextureLoader.Utils;
@@ -142,7 +143,9 @@ internal static class AsyncUtil
 
         try
         {
+            GraphicsCommands.Clear();
             GraphicsCommands.IssuePluginEventAndData(ExecuteTaskPtr, 0, (IntPtr)data);
+            Graphics.ExecuteCommandBuffer(GraphicsCommands);
         }
         catch
         {
