@@ -364,6 +364,20 @@ internal static class DDSLoader
     {
         public Task<NativeArray<byte>> data = data;
 
+        public void AddDependency(Task task)
+        {
+            var prev = data;
+            data = Task.Run(async () =>
+            {
+                try
+                {
+                    await task;
+                }
+                catch { }
+                return await prev;
+            });
+        }
+
         public void Dispose()
         {
             if (data is null)
@@ -379,6 +393,7 @@ internal static class DDSLoader
                 }
                 catch { }
             });
+            data = null;
         }
     }
     #endregion
@@ -464,7 +479,7 @@ internal static class DDSLoader
         var format = metadata.format;
 
         // Prefer a native texture upload if available.
-        if (unreadable && DX11.SupportsAsyncUpload(width, height, format))
+        if (DX11.SupportsAsyncUpload(width, height, format))
         {
             dguard.data = null;
             await DX11.UploadTexture2DAsync<T>(handle, options, metadata, dataTask);
