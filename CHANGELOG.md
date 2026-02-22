@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.0.24
+### Added
+* Added a button to the debug menu to dump all references to texture handles.
+* Added tooltips to most items on the debug menu's main screen.
+
+### Changed
+* DDS texture loading has been moved out of jobs and onto the .NET threadpool.
+  This should help prevent stutter when the unity threadpool was saturated.
+* Readable textures can now be constructed using native uploads.
+* Loading a texture with a pending scene switch is now a hard error.
+  This should prevent issues like https://github.com/Kopernicus/Kopernicus/issues/785.
+
+### Fixed
+* Fixed a bug where readable textures would not actually have their data
+  uploaded to the GPU and would appear completely black.
+* CPUTexture2D handles that are leaked now properly clean up their resources.
+* Texture handles that are leaked now queue their textures for destruction
+  instead of leaking GPU memory.
+
 ## v1.0.23
 ### Added
 * Added a helper method to create `TextureHandle`s from pre-existing textures.
