@@ -24,14 +24,11 @@ public partial class TextureLoader
 {
     // Use weak references so that textures that get leaked will at least get
     // cleaned up during a scene switch.
-    internal readonly Dictionary<string, WeakReference<TextureHandleImpl>> textures = new(
+    internal static readonly Dictionary<string, WeakReference<TextureHandleImpl>> textures = new(
         StringComparer.OrdinalIgnoreCase
     );
 
-    private static uint MaxConcurrentLoads => (uint)Math.Max(JobsUtility.JobWorkerCount - 1, 1);
-
-    private uint activeAssetBundleLoads = 0;
-    private uint activeTextureLoads = 0;
+    private static uint activeAssetBundleLoads = 0;
 
     private TextureHandle<T> LoadTextureImpl<T>(string path, TextureLoadOptions options)
         where T : Texture
@@ -154,7 +151,7 @@ public partial class TextureLoader
                 {
                     // This prevents us from unloading any asset bundles while any loads are in
                     // flight.
-                    using var activeLoadGuard = new ActiveAssetBundleLoadGuard(this);
+                    using var activeLoadGuard = new ActiveAssetBundleLoadGuard();
 
                     var assetreq = bundle.LoadAssetAsync<Texture>(assetPath);
                     if (!assetreq.isDone)
@@ -205,8 +202,6 @@ public partial class TextureLoader
                 assetBundleExceptions
             );
         }
-
-        using var loadGuard = new ActiveTextureLoadGuard(this);
 
         var extension = Path.GetExtension(handle.Path);
         if (
@@ -389,33 +384,14 @@ public partial class TextureLoader
 
     readonly struct ActiveAssetBundleLoadGuard : IDisposable
     {
-        readonly TextureLoader loader;
-
-        public ActiveAssetBundleLoadGuard(TextureLoader loader)
+        public ActiveAssetBundleLoadGuard()
         {
-            this.loader = loader;
-            this.loader.activeAssetBundleLoads += 1;
+            activeAssetBundleLoads += 1;
         }
 
         public void Dispose()
         {
-            loader.activeAssetBundleLoads -= 1;
-        }
-    }
-
-    readonly struct ActiveTextureLoadGuard : IDisposable
-    {
-        readonly TextureLoader loader;
-
-        public ActiveTextureLoadGuard(TextureLoader loader)
-        {
-            this.loader = loader;
-            this.loader.activeTextureLoads += 1;
-        }
-
-        public void Dispose()
-        {
-            loader.activeTextureLoads -= 1;
+            activeAssetBundleLoads -= 1;
         }
     }
 }

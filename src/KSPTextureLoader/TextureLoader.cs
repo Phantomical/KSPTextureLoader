@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using KSPTextureLoader.Async;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 namespace KSPTextureLoader;
 
@@ -34,6 +33,7 @@ public partial class TextureLoader : MonoBehaviour
             );
         }
 
+        transform.parent = null;
         DontDestroyOnLoad(this);
         Instance = this;
         Context ??= new();

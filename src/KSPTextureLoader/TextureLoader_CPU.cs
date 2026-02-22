@@ -13,7 +13,7 @@ namespace KSPTextureLoader;
 
 public partial class TextureLoader
 {
-    internal readonly Dictionary<string, WeakReference<CPUTextureHandle>> cpuTextures = new(
+    internal static readonly Dictionary<string, WeakReference<CPUTextureHandle>> cpuTextures = new(
         StringComparer.OrdinalIgnoreCase
     );
 

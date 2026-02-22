@@ -39,12 +39,12 @@ internal class DebugHandleReferences
         );
 
         // Pre-populate from loader so handles with no component references still appear
-        foreach (var (_, weak) in loader.textures)
+        foreach (var (_, weak) in TextureLoader.textures)
         {
             if (weak.TryGetTarget(out var impl) && !texHandleRefs.ContainsKey(impl))
                 texHandleRefs[impl] = [];
         }
-        foreach (var (_, weak) in loader.cpuTextures)
+        foreach (var (_, weak) in TextureLoader.cpuTextures)
         {
             if (weak.TryGetTarget(out var cpu) && !cpuHandleRefs.ContainsKey(cpu))
                 cpuHandleRefs[cpu] = [];

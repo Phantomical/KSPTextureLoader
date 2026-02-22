@@ -133,20 +133,16 @@ internal class MainScreenContent : MonoBehaviour
 
     void Update()
     {
-        var loader = TextureLoader.Instance;
-        if (loader == null)
-            return;
-
         int alive = 0;
-        foreach (var (_, weak) in loader.textures)
+        foreach (var (_, weak) in TextureLoader.textures)
         {
             if (weak.TryGetTarget(out _))
                 alive++;
         }
 
         loadedTexturesValue.text = alive.ToString();
-        cpuTexturesValue.text = loader.cpuTextures.Count.ToString();
-        assetBundlesValue.text = loader.assetBundles.Count.ToString();
+        cpuTexturesValue.text = TextureLoader.cpuTextures.Count.ToString();
+        assetBundlesValue.text = TextureLoader.assetBundles.Count.ToString();
     }
 
     internal void DumpScreenPrefab()

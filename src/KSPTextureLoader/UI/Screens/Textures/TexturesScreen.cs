@@ -135,22 +135,17 @@ internal class TexturesScreenContent : MonoBehaviour
 
     void OnEnable()
     {
-        // Populate from existing texture handles
-        var loader = TextureLoader.Instance;
-        if (loader != null)
+        var alive = new List<(string path, TextureHandleImpl handle)>();
+        foreach (var (path, weak) in TextureLoader.textures)
         {
-            var alive = new List<(string path, TextureHandleImpl handle)>();
-            foreach (var (path, weak) in loader.textures)
-            {
-                if (weak.TryGetTarget(out var handle))
-                    alive.Add((path, handle));
-            }
-
-            alive.Sort((a, b) => string.CompareOrdinal(a.path, b.path));
-
-            foreach (var (_, handle) in alive)
-                CreateItem(handle);
+            if (weak.TryGetTarget(out var handle))
+                alive.Add((path, handle));
         }
+
+        alive.Sort((a, b) => string.CompareOrdinal(a.path, b.path));
+
+        foreach (var (_, handle) in alive)
+            CreateItem(handle);
 
         TextureHandleImpl.HandleCreated.Add(OnHandleCreated);
     }
@@ -238,12 +233,9 @@ internal class TexturePreviewButton : DebugScreenButton
 
     protected override void OnClick()
     {
-        var loader = TextureLoader.Instance;
-        if (loader == null)
-            return;
-
         if (
-            loader.textures.TryGetValue(path, out var weak) && weak.TryGetTarget(out var handleImpl)
+            TextureLoader.textures.TryGetValue(path, out var weak)
+            && weak.TryGetTarget(out var handleImpl)
         )
         {
             var textureHandle = new TextureHandle(handleImpl);

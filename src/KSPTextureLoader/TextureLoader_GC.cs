@@ -1,8 +1,6 @@
 using System;
 using System.Collections;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using Unity.Profiling;
 using UnityEngine;
 
@@ -21,7 +19,7 @@ partial class TextureLoader
     );
 
     // A background tasks queue for stuff to be sent from a finalizer
-    private readonly Queue<TextureHandleImpl> destroyQueue = [];
+    private static readonly Queue<TextureHandleImpl> destroyQueue = [];
     private Coroutine gcCoroutine = null;
 
     internal void QueueForDestroy(TextureHandleImpl handle)

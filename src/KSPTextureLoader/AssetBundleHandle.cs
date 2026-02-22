@@ -88,7 +88,7 @@ public class AssetBundleHandle
 
     internal void Destroy()
     {
-        TextureLoader.Instance.assetBundles.Remove(Path);
+        TextureLoader.assetBundles.Remove(Path);
         DestroyNoRemove();
     }
 

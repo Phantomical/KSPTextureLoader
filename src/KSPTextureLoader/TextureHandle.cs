@@ -242,17 +242,13 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
     {
         HandleDestroyed.Fire(this);
 
-        var instance = TextureLoader.Instance;
-        if (instance is not null)
+        var key = TextureLoader.CanonicalizeResourcePath(Path);
+        if (
+            TextureLoader.textures.TryGetValue(key, out var weak)
+            && (!weak.TryGetTarget(out var handle) || ReferenceEquals(this, handle))
+        )
         {
-            var key = TextureLoader.CanonicalizeResourcePath(Path);
-            if (
-                instance.textures.TryGetValue(key, out var weak)
-                && (!weak.TryGetTarget(out var handle) || ReferenceEquals(this, handle))
-            )
-            {
-                instance.textures.Remove(key);
-            }
+            TextureLoader.textures.Remove(key);
         }
 
         if (texture == null)
