@@ -140,6 +140,11 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         if (coroutine is null)
             return;
 
+        if (TextureLoader.LastSceneSwitchFrame == Time.frameCount)
+            throw new InvalidOperationException(
+                "Blocking on a texture handle while a scene is pending is not permitted."
+            );
+
         using var scope = CompleteMarker.Auto();
 
         while (!Step()) { }

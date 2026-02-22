@@ -83,6 +83,11 @@ public class CPUTextureHandle : CustomYieldInstruction, IDisposable, ISetExcepti
         if (coroutine is null)
             return;
 
+        if (TextureLoader.LastSceneSwitchFrame == Time.frameCount)
+            throw new InvalidOperationException(
+                "Blocking on a texture handle while a scene is pending is not permitted."
+            );
+
         using var scope = CompleteMarker.Auto();
 
         while (!Step()) { }

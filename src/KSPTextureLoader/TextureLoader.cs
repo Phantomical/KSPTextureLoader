@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using KSPTextureLoader.Async;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace KSPTextureLoader;
 
@@ -11,6 +12,7 @@ public partial class TextureLoader : MonoBehaviour
 {
     internal static TextureLoader Instance { get; private set; }
     internal static LoaderSynchronizationContext Context { get; private set; }
+    internal static int LastSceneSwitchFrame { get; private set; } = -1;
 
     private static readonly Type[] SupportedTextureTypes =
     [
@@ -35,6 +37,8 @@ public partial class TextureLoader : MonoBehaviour
         DontDestroyOnLoad(this);
         Instance = this;
         Context ??= new();
+
+        GameEvents.onGameSceneLoadRequested.Add(OnGameSceneLoadRequested);
     }
 
     void OnDestroy()
@@ -43,11 +47,18 @@ public partial class TextureLoader : MonoBehaviour
             $"[KSPTextureLoader] TextureLoader was destroyed! This should never happen."
         );
         Instance = null;
+
+        GameEvents.onGameSceneLoadRequested.Remove(OnGameSceneLoadRequested);
     }
 
     void Update()
     {
         Context.Update();
+    }
+
+    void OnGameSceneLoadRequested(GameScenes _)
+    {
+        LastSceneSwitchFrame = Time.frameCount;
     }
 
     /// <summary>
