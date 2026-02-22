@@ -83,14 +83,14 @@ public partial class TextureLoader
             for (int i = 0; i < assetBundles.Count; ++i)
                 bundles[i] = LoadAssetBundle(
                     assetBundles[i],
-                    sync: options.Hint < TextureLoadHint.BatchAsynchronous
+                    sync: ShouldBeSync(options, TextureLoadHint.BatchAsynchronous)
                 );
 
             var assetPath = CanonicalizeAssetPath(handle.Path);
             for (int i = 0; i < assetBundles.Count; ++i)
             {
                 var abHandle = bundles[i];
-                if (!abHandle.IsComplete && options.Hint < TextureLoadHint.BatchSynchronous)
+                if (!abHandle.IsComplete)
                     yield return abHandle;
 
                 AssetBundle bundle;

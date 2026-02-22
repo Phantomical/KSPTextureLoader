@@ -59,7 +59,9 @@ public partial class TextureLoader
 
         Debug.Log($"[KSPTextureLoader] Loading asset bundle {handle.Path}");
 
-        if (!sync)
+        // We cannot synchronously block on an asset bundle while waiting for
+        // a scene switch to complete.
+        if (!sync || PendingSceneSwitch)
         {
             handle.completeHandler = new AssetBundleCompleteHandler(request);
             yield return request;

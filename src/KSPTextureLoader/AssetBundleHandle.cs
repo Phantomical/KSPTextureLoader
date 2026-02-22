@@ -125,6 +125,11 @@ public class AssetBundleHandle
         if (coroutine is null)
             return;
 
+        if (TextureLoader.PendingSceneSwitch)
+            throw new InvalidOperationException(
+                "Blocking on an asset bundle handle while a scene switch is pending is not permitted."
+            );
+
         using var scope = CompleteMarker.Auto();
 
         while (true)

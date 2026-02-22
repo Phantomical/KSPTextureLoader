@@ -12,6 +12,7 @@ public partial class TextureLoader : MonoBehaviour
     internal static TextureLoader Instance { get; private set; }
     internal static LoaderSynchronizationContext Context { get; private set; }
     internal static int LastSceneSwitchFrame { get; private set; } = -1;
+    internal static bool PendingSceneSwitch => LastSceneSwitchFrame == Time.frameCount;
 
     private static readonly Type[] SupportedTextureTypes =
     [
@@ -271,6 +272,14 @@ public partial class TextureLoader : MonoBehaviour
     private static string CanonicalizeAssetPath(string path)
     {
         return path.Replace('\\', '/').ToLowerInvariant();
+    }
+
+    private static bool ShouldBeSync(TextureLoadOptions options, TextureLoadHint threshold)
+    {
+        if (PendingSceneSwitch)
+            return false;
+
+        return options.Hint >= threshold;
     }
 
     // UniverseExplorerKSP isn't really usefully able to call TryGetTarget.
