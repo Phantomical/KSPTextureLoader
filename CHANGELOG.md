@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.0.25
+### Fixed
+* Prevent more cases of asset bundles or assets being loaded synchronously.
+
 ## v1.0.24
 ### Added
 * Added a button to the debug menu to dump all references to texture handles.
