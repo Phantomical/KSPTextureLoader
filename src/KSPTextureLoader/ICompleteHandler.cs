@@ -1,8 +1,6 @@
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Unity.Jobs;
 using UnityEngine;
-using UnityEngine.Networking;
 
 namespace KSPTextureLoader;
 
