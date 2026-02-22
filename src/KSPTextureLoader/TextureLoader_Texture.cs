@@ -149,6 +149,17 @@ public partial class TextureLoader
                 Texture asset;
                 if (ShouldBeSync(options, TextureLoadHint.Synchronous))
                 {
+                    // If there is only one texture loaded and it is going to be
+                    // blocked on immediately then we might as well just load it
+                    // synchronously.
+                    //
+                    // This is likely to be painfully expensive if there are any
+                    // async loads happening in the background, since unity will
+                    // wait for all pending loads to complete first.
+                    asset = bundle.LoadAsset<Texture>(assetPath);
+                }
+                else
+                {
                     // This prevents us from unloading any asset bundles while any loads are in
                     // flight.
                     using var activeLoadGuard = new ActiveAssetBundleLoadGuard();
@@ -158,17 +169,6 @@ public partial class TextureLoader
                         yield return assetreq;
 
                     asset = (Texture)assetreq.asset;
-                }
-                else
-                {
-                    // If there is only one texture loaded and it is going to be
-                    // blocked on immediately then we might as well just load it
-                    // synchronously.
-                    //
-                    // This is likely to be painfully expensive if there are any
-                    // async loads happening in the background, since unity will
-                    // wait for all pending loads to complete first.
-                    asset = bundle.LoadAsset<Texture>(assetPath);
                 }
 
                 if (asset is null)
