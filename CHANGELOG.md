@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+## v1.0.26
+### Changed
+* Fixed asset bundles being loaded synchronously instead of asynchronously in
+  BatchAsync mode.
+
+### Fixed
+* Fixed sync and async asset loading cases being swapped, causing synchronous
+  loads to use async requests and vice versa.
 
 ## v1.0.25
 ### Fixed
