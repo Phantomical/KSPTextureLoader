@@ -121,7 +121,7 @@ public partial class TextureLoader
             for (int i = 0; i < assetBundles.Count; ++i)
                 bundles[i] = LoadAssetBundle(
                     assetBundles[i],
-                    sync: ShouldBeSync(options, TextureLoadHint.BatchAsynchronous)
+                    sync: ShouldBeSync(options, TextureLoadHint.BatchSynchronous)
                 );
 
             var assetPath = CanonicalizeAssetPath(handle.Path);
