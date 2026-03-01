@@ -140,8 +140,15 @@ internal class MainScreenContent : MonoBehaviour
                 alive++;
         }
 
+        int cpuAlive = 0;
+        foreach (var (_, weak) in TextureLoader.cpuTextures)
+        {
+            if (weak.TryGetTarget(out _))
+                cpuAlive++;
+        }
+
         loadedTexturesValue.text = alive.ToString();
-        cpuTexturesValue.text = TextureLoader.cpuTextures.Count.ToString();
+        cpuTexturesValue.text = cpuAlive.ToString();
         assetBundlesValue.text = TextureLoader.assetBundles.Count.ToString();
     }
 

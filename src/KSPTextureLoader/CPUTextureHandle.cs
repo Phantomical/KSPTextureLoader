@@ -157,6 +157,15 @@ public class CPUTextureHandle : CustomYieldInstruction, IDisposable, ISetExcepti
         if (RefCount != 0)
             return;
 
+        var key = TextureLoader.CanonicalizeResourcePath(Path);
+        if (
+            TextureLoader.cpuTextures.TryGetValue(key, out var weak)
+            && (!weak.TryGetTarget(out var handle) || ReferenceEquals(this, handle))
+        )
+        {
+            TextureLoader.cpuTextures.Remove(key);
+        }
+
         texture = null;
     }
 
