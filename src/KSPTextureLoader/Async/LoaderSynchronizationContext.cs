@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using KSPTextureLoader.Utils;
@@ -87,6 +88,7 @@ internal class LoaderSynchronizationContext : SynchronizationContext
     void Execute(WorkItem item)
     {
         var context = Current;
+        Report.OuterContext = context;
         try
         {
             SetSynchronizationContext(this);

@@ -298,7 +298,7 @@ public partial class TextureLoader : MonoBehaviour
         }
     }
 
-    private Dictionary<string, TextureHandleImpl> LoadedTextures
+    internal Dictionary<string, TextureHandleImpl> LoadedTextures
     {
         get
         {
@@ -317,7 +317,7 @@ public partial class TextureLoader : MonoBehaviour
         }
     }
 
-    private Dictionary<string, TextureHandleImpl> PendingTextures
+    internal Dictionary<string, TextureHandleImpl> PendingTextures
     {
         get
         {

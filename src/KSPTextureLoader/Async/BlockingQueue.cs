@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,22 +14,6 @@ internal class BlockingQueue<T>
 {
     readonly object mutex = new();
     readonly ConcurrentQueue<T> queue = new();
-
-    public BlockingQueue()
-    {
-        Task.Run(async () =>
-        {
-            while (true)
-            {
-                await Task.Delay(1000);
-
-                lock (mutex)
-                {
-                    Monitor.Pulse(mutex);
-                }
-            }
-        });
-    }
 
     /// <summary>
     /// Enqueue a new item.
@@ -60,12 +45,27 @@ internal class BlockingQueue<T>
 
         lock (mutex)
         {
+            int count = 0;
+            bool reported = false;
             while (true)
             {
                 if (TryDequeue(out value))
                     return value;
 
-                Monitor.Wait(mutex);
+                if (count > 30 && !reported)
+                {
+                    Report.DumpDeadlockReport();
+                    reported = true;
+                }
+
+                if (count > 120)
+                {
+                    reported = false;
+                    count = 0;
+                }
+
+                Monitor.Wait(mutex, 1000);
+                count += 1;
             }
         }
     }
