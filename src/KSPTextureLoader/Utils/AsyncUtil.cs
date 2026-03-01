@@ -26,7 +26,7 @@ internal static class AsyncUtil
 
     public static Task<T> LaunchMainThreadTask<T>(Func<Task<T>> func)
     {
-        var tcs = new TaskCompletionSource<T>();
+        var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         TextureLoader.Context.Submit(
             state =>
@@ -36,17 +36,20 @@ internal static class AsyncUtil
                     var func = (Func<Task<T>>)state;
                     var task = func();
 
-                    task.ContinueWith(task =>
-                    {
-                        try
+                    task.ContinueWith(
+                        task =>
                         {
-                            tcs.SetResult(task.Result);
-                        }
-                        catch (Exception e)
-                        {
-                            tcs.TrySetException(e);
-                        }
-                    });
+                            try
+                            {
+                                tcs.SetResult(task.Result);
+                            }
+                            catch (Exception e)
+                            {
+                                tcs.TrySetException(e);
+                            }
+                        },
+                        TaskScheduler.FromCurrentSynchronizationContext()
+                    );
                 }
                 catch (Exception e)
                 {

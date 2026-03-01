@@ -25,7 +25,9 @@ internal sealed class AsyncConditionVariable(AsyncLock asyncLock)
 
         lock (waiters)
         {
-            var tcs = new TaskCompletionSource<Empty>();
+            var tcs = new TaskCompletionSource<Empty>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
             waiters.Enqueue(tcs);
             guard.Lock.UnlockUnchecked();
             return tcs.Task;

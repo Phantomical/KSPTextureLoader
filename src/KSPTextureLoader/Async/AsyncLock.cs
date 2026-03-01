@@ -31,7 +31,9 @@ internal sealed class AsyncLock
                 return new(CtorFunc(this));
             }
 
-            var tcs = new TaskCompletionSource<LockGuard>();
+            var tcs = new TaskCompletionSource<LockGuard>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
             waiters.Enqueue(tcs);
             return new(tcs.Task);
         }
