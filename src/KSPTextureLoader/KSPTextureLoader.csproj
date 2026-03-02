@@ -49,6 +49,12 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="../KSPTextureLoader.Analyzers/KSPTextureLoader.Analyzers.csproj"
+                          OutputItemType="Analyzer"
+                          ReferenceOutputAssembly="false" />
+    </ItemGroup>
+
+    <ItemGroup>
         <Publicize Include="Assembly-CSharp:KSP.UI.Screens.DebugToolbar.DebugScreenSpawner.screen" />
         <Publicize Include="Assembly-CSharp:KSP.UI.Screens.DebugToolbar.DebugScreenSpawner.debugScreens" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Object.m_CachedPtr" />

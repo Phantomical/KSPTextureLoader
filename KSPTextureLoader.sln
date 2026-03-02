@@ -9,6 +9,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KSPTextureLoader", "src\KSP
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KSPTextureLoaderTests", "src\KSPTextureLoaderTests\KSPTextureLoaderTests.csproj", "{F3A3BD72-94D0-4184-A1C7-11C031CB5E0E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KSPTextureLoader.Analyzers", "src\KSPTextureLoader.Analyzers\KSPTextureLoader.Analyzers.csproj", "{0B8199AC-3125-44A8-A6AA-9BF7F62202B5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KSPTextureLoader.Analyzers.Tests", "src\KSPTextureLoader.Analyzers.Tests\KSPTextureLoader.Analyzers.Tests.csproj", "{48B81212-F605-49E9-8D2A-C34D6F2F31C4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -43,6 +47,30 @@ Global
 		{F3A3BD72-94D0-4184-A1C7-11C031CB5E0E}.Release|x64.Build.0 = Release|Any CPU
 		{F3A3BD72-94D0-4184-A1C7-11C031CB5E0E}.Release|x86.ActiveCfg = Release|Any CPU
 		{F3A3BD72-94D0-4184-A1C7-11C031CB5E0E}.Release|x86.Build.0 = Release|Any CPU
+		{0B8199AC-3125-44A8-A6AA-9BF7F62202B5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0B8199AC-3125-44A8-A6AA-9BF7F62202B5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0B8199AC-3125-44A8-A6AA-9BF7F62202B5}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0B8199AC-3125-44A8-A6AA-9BF7F62202B5}.Debug|x64.Build.0 = Debug|Any CPU
+		{0B8199AC-3125-44A8-A6AA-9BF7F62202B5}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0B8199AC-3125-44A8-A6AA-9BF7F62202B5}.Debug|x86.Build.0 = Debug|Any CPU
+		{0B8199AC-3125-44A8-A6AA-9BF7F62202B5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0B8199AC-3125-44A8-A6AA-9BF7F62202B5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0B8199AC-3125-44A8-A6AA-9BF7F62202B5}.Release|x64.ActiveCfg = Release|Any CPU
+		{0B8199AC-3125-44A8-A6AA-9BF7F62202B5}.Release|x64.Build.0 = Release|Any CPU
+		{0B8199AC-3125-44A8-A6AA-9BF7F62202B5}.Release|x86.ActiveCfg = Release|Any CPU
+		{0B8199AC-3125-44A8-A6AA-9BF7F62202B5}.Release|x86.Build.0 = Release|Any CPU
+		{48B81212-F605-49E9-8D2A-C34D6F2F31C4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{48B81212-F605-49E9-8D2A-C34D6F2F31C4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{48B81212-F605-49E9-8D2A-C34D6F2F31C4}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{48B81212-F605-49E9-8D2A-C34D6F2F31C4}.Debug|x64.Build.0 = Debug|Any CPU
+		{48B81212-F605-49E9-8D2A-C34D6F2F31C4}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{48B81212-F605-49E9-8D2A-C34D6F2F31C4}.Debug|x86.Build.0 = Debug|Any CPU
+		{48B81212-F605-49E9-8D2A-C34D6F2F31C4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{48B81212-F605-49E9-8D2A-C34D6F2F31C4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{48B81212-F605-49E9-8D2A-C34D6F2F31C4}.Release|x64.ActiveCfg = Release|Any CPU
+		{48B81212-F605-49E9-8D2A-C34D6F2F31C4}.Release|x64.Build.0 = Release|Any CPU
+		{48B81212-F605-49E9-8D2A-C34D6F2F31C4}.Release|x86.ActiveCfg = Release|Any CPU
+		{48B81212-F605-49E9-8D2A-C34D6F2F31C4}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -50,6 +78,8 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{BD381523-5761-8720-4F34-80C99D5C11E1} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{F3A3BD72-94D0-4184-A1C7-11C031CB5E0E} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{0B8199AC-3125-44A8-A6AA-9BF7F62202B5} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{48B81212-F605-49E9-8D2A-C34D6F2F31C4} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {D9B233F0-AFF7-419E-A4EE-04E26A75F140}

@@ -31,6 +31,9 @@
         <ProjectReference Include="../KSPTextureLoader/KSPTextureLoader.csproj">
             <Private>false</Private>
         </ProjectReference>
+        <ProjectReference Include="../KSPTextureLoader.Analyzers/KSPTextureLoader.Analyzers.csproj"
+                          OutputItemType="Analyzer"
+                          ReferenceOutputAssembly="false" />
     </ItemGroup>
 
     <PropertyGroup>
