@@ -12,6 +12,7 @@ internal class TexturePreviewPopup : MonoBehaviour
 {
     static GameObject _prefab;
 
+    bool owned = true;
     TextureHandle handle;
     Texture texture;
     string exception;
@@ -143,7 +144,7 @@ internal class TexturePreviewPopup : MonoBehaviour
         DebugUIManager.CreateScrollbar(scrollViewGo.transform, scrollRect);
     }
 
-    public static TexturePreviewPopup Create(TextureHandle handle)
+    static TexturePreviewPopup Create(string title)
     {
         if (_prefab == null)
         {
@@ -160,10 +161,7 @@ internal class TexturePreviewPopup : MonoBehaviour
         }
 
         var go = GameObject.Instantiate(_prefab, canvas.transform, false);
-        go.name = $"TexturePreviewPopup({handle.Path})";
-
-        var popup = go.GetComponent<TexturePreviewPopup>();
-        popup.handle = handle.Acquire();
+        go.name = $"TexturePreviewPopup({title})";
 
         // Set title
         var titleText = go.transform.Find("VerticalLayout/TitleBar/TitleText");
@@ -171,7 +169,12 @@ internal class TexturePreviewPopup : MonoBehaviour
         {
             var tmp = titleText.GetComponent<TextMeshProUGUI>();
             if (tmp != null)
-                tmp.text = handle.Path;
+            {
+                if (string.IsNullOrEmpty(title))
+                    tmp.text = "<unnamed>";
+                else
+                    tmp.text = title;
+            }
         }
 
         // Wire close button
@@ -182,9 +185,26 @@ internal class TexturePreviewPopup : MonoBehaviour
             closeButton.onClick.RemoveAllListeners();
             closeButton.onClick.AddListener(() => Destroy(go));
         }
+        var popup = go.GetComponent<TexturePreviewPopup>();
 
         go.SetActive(true);
 
+        return popup;
+    }
+
+    public static TexturePreviewPopup Create(Texture texture, bool owned = true)
+    {
+        var popup = Create(texture.name);
+        popup.texture = texture;
+        popup.owned = owned;
+        return popup;
+    }
+
+    public static TexturePreviewPopup Create(TextureHandle handle)
+    {
+        var popup = Create(handle.Path);
+        popup.handle = handle.Acquire();
+        popup.owned = true;
         return popup;
     }
 
@@ -228,7 +248,14 @@ internal class TexturePreviewPopup : MonoBehaviour
 
     void OnDestroy()
     {
-        handle?.Dispose();
+        if (owned)
+        {
+            if (handle is not null)
+                handle.Dispose();
+            else if (texture is not null)
+                Texture.Destroy(texture);
+        }
+
         handle = null;
         texture = null;
     }

@@ -1,4 +1,5 @@
 using KSP.UI.Screens.DebugToolbar;
+using KSPTextureLoader.UI.Screens.CPUTextures;
 using KSPTextureLoader.UI.Screens.LoadTexture;
 using KSPTextureLoader.UI.Screens.Main;
 using KSPTextureLoader.UI.Screens.Textures;
@@ -37,6 +38,17 @@ internal class DebugMenuScreen : MonoBehaviour
         );
         texturesScreen.GetComponent<TexturesScreenContent>().BuildUI();
         AddDebugScreen("KSPTextureLoader", "KSPTextureLoader_Textures", "Textures", texturesScreen);
+
+        var cpuTexturesScreen = DebugUIManager.CreateScreenPrefab<CPUTexturesScreenContent>(
+            "KSPTextureLoader_CPUTexturesScreen"
+        );
+        cpuTexturesScreen.GetComponent<CPUTexturesScreenContent>().BuildUI();
+        AddDebugScreen(
+            "KSPTextureLoader",
+            "KSPTextureLoader_CPUTextures",
+            "CPU Textures",
+            cpuTexturesScreen
+        );
 
         var loadTextureScreen = DebugUIManager.CreateScreenPrefab<LoadTextureScreenContent>(
             "KSPTextureLoader_LoadTextureScreen"
