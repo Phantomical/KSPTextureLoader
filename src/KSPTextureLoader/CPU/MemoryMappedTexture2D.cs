@@ -6,11 +6,8 @@ namespace KSPTextureLoader.CPU;
 
 internal static class MemoryMappedTexture2D
 {
-    internal readonly struct Factory(
-        MemoryMappedFile mmf,
-        MemoryMappedViewAccessor accessor,
-        TextureFormat format
-    ) : CPUTexture2D.ICPUTexture2DFactory
+    internal readonly struct Factory(MemoryMappedFile mmf, MemoryMappedViewAccessor accessor)
+        : CPUTexture2D.ICPUTexture2DFactory
     {
         public CPUTexture2D CreateTexture2D<T>(T texture)
             where T : ICPUTexture2D
@@ -18,7 +15,7 @@ internal static class MemoryMappedTexture2D
             return new MemoryMappedTexture2D<T>(mmf, accessor, texture);
         }
 
-        public CPUTexture2D CreateFallback()
+        public CPUTexture2D CreateFallback(TextureFormat format)
         {
             accessor?.SafeMemoryMappedViewHandle.ReleasePointer();
             accessor?.Dispose();

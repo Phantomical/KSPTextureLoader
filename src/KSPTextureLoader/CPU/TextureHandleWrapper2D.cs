@@ -45,7 +45,7 @@ internal sealed class TextureHandleWrapper2D(TextureHandle<Texture2D> handle)
             return new TextureHandleWrapper2D<T>(texture, handle);
         }
 
-        public CPUTexture2D CreateFallback()
+        public CPUTexture2D CreateFallback(TextureFormat format)
         {
             return new TextureHandleWrapper2D(handle);
         }

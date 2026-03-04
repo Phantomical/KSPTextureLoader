@@ -183,7 +183,7 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
         public CPUTexture2D CreateTexture2D<T>(T texture)
             where T : ICPUTexture2D;
 
-        public CPUTexture2D CreateFallback();
+        public CPUTexture2D CreateFallback(TextureFormat format);
     }
 
     /// <summary>
@@ -283,7 +283,7 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
         if (accessor is null)
             throw new ArgumentNullException(nameof(accessor));
 
-        var factory = new CPU.MemoryMappedTexture2D.Factory(mmf, accessor, format);
+        var factory = new CPU.MemoryMappedTexture2D.Factory(mmf, accessor);
         return Create(factory, data, width, height, mipCount, format);
     }
 
@@ -350,7 +350,7 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             TextureFormat.BC5 => factory.CreateTexture2D<BC5>(new(data, width, height, mipCount)),
             TextureFormat.BC7 => factory.CreateTexture2D<BC7>(new(data, width, height, mipCount)),
             TextureFormat.BC6H => factory.CreateTexture2D<BC6H>(new(data, width, height, mipCount)),
-            _ => factory.CreateFallback(),
+            _ => factory.CreateFallback(format),
         };
     }
 

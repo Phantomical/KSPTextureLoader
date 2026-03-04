@@ -60,7 +60,7 @@ internal class UnityTexture2D : CPUTexture2D
             return new UnityTexture2D<T>(texture, unity, owned);
         }
 
-        public CPUTexture2D CreateFallback()
+        public CPUTexture2D CreateFallback(TextureFormat format)
         {
             return new UnityTexture2D(unity, owned);
         }
