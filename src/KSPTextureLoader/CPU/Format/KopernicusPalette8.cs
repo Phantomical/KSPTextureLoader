@@ -27,6 +27,24 @@ partial class CPUTexture2D
 
         readonly LargeNativeArray<byte> data;
 
+        public unsafe NativeArray<Color32> Palette
+        {
+            get
+            {
+                if (data.Length < PaletteBytes)
+                    throw new InvalidOperationException(
+                        "referenced data is too small to contain a palette"
+                    );
+
+                var palette = (Color32*)data.GetUnsafePtr();
+                return NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<Color32>(
+                    palette,
+                    PaletteEntries,
+                    Allocator.Invalid
+                );
+            }
+        }
+
         internal KopernicusPalette8(LargeNativeArray<byte> data, int width, int height)
         {
             this.data = data;
