@@ -166,6 +166,10 @@ public class CPUTextureHandle : CustomYieldInstruction, IDisposable, ISetExcepti
             TextureLoader.cpuTextures.Remove(key);
         }
 
+        if (texture is null)
+            return;
+
+        texture.Dispose();
         texture = null;
     }
 
