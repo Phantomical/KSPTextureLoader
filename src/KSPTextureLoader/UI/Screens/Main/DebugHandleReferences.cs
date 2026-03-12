@@ -267,7 +267,29 @@ internal class DebugHandleReferences
         return name;
     }
 
+    static readonly Dictionary<Type, bool> SkipCache = [];
+
+    // None of these types could contain a texture handle, and they can potentially
+    // be very expensive to walk.
+    static readonly HashSet<Type> SkipSet =
+    [
+        typeof(ConfigNode),
+        typeof(UrlDir),
+        typeof(TMPro.TMP_FontAsset),
+        typeof(TMPro.TMP_Glyph),
+    ];
+
     static bool ShouldSkipType(Type type)
+    {
+        if (SkipCache.TryGetValue(type, out var skip))
+            return skip;
+
+        skip = ShouldSkipTypeImpl(type);
+        SkipCache.Add(type, skip);
+        return skip;
+    }
+
+    static bool ShouldSkipTypeImpl(Type type)
     {
         // Definite leaf types that cannot contain a TextureHandle
         if (type.IsPrimitive || type == typeof(string) || type.IsEnum || type.IsPointer)
@@ -292,6 +314,9 @@ internal class DebugHandleReferences
         // These get walked from their respective GameObjects, no need to walk references
         // to them.
         if (typeof(Component).IsAssignableFrom(type))
+            return true;
+
+        if (SkipSet.Contains(type))
             return true;
 
         return false;
