@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+## v1.0.28
+### Added
+* Added a debug UI to view loaded CPU textures, similar to the one for regular
+  textures.
+* CPU textures now track their own name.
+
+### Fixed
+* Fixed a memory leak where native texture resources were not being properly
+  cleaned up when the handle was destroyed.
+* CPUTexture2D will now properly clean up after itself if leaked.
+* Fixed an issue where calling `CompileToTexture` on a CPU texture would return
+  a texture without any associated GPU texture.
+* Fixed an issue where the "Load Texture" debug screen would leak any texture
+  handles it loaded.
+
 ## v1.0.27
 ### Fixed
 * Fixed a hang when loading biome maps using certain kopernicus palette formats.
