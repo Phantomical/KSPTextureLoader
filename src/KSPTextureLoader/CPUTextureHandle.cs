@@ -169,6 +169,9 @@ public class CPUTextureHandle : CustomYieldInstruction, IDisposable, ISetExcepti
         if (texture is null)
             return;
 
+        if (Config.Instance.DebugMode >= DebugLevel.Debug)
+            Debug.Log($"[KSPTextureLoader] Unloading CPU texture {Path}");
+
         texture.Dispose();
         texture = null;
     }
