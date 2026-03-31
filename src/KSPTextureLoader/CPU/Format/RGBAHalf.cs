@@ -22,7 +22,7 @@ partial class CPUTexture2D
 
         readonly LargeNativeArray<Half> data;
 
-        public RGBAHalf(LargeNativeArray<byte> data, int width, int height, int mipCount)
+        internal RGBAHalf(LargeNativeArray<byte> data, int width, int height, int mipCount)
         {
             this.data = data.Reinterpret<Half>();
             this.Width = width;

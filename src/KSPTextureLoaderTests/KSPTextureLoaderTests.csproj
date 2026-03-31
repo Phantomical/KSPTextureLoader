@@ -43,6 +43,7 @@
 
     <ItemGroup>
         <Publicize Include="Assembly-CSharp" />
+        <Publicize Include="KSPTextureLoader" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Cubemap.Internal_Create" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.CubemapArray.Internal_Create" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Texture2D.Internal_Create" />

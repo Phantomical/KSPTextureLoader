@@ -24,7 +24,7 @@ partial class CPUTexture2D
 
         readonly LargeNativeArray<Block> data;
 
-        public unsafe BC5(LargeNativeArray<byte> data, int width, int height, int mipCount)
+        internal unsafe BC5(LargeNativeArray<byte> data, int width, int height, int mipCount)
         {
             this.data = data.Reinterpret<Block>();
             this.Width = width;

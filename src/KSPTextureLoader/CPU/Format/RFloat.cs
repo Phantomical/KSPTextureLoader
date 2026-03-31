@@ -19,7 +19,7 @@ partial class CPUTexture2D
 
         readonly LargeNativeArray<float> data;
 
-        public RFloat(LargeNativeArray<byte> data, int width, int height, int mipCount)
+        internal RFloat(LargeNativeArray<byte> data, int width, int height, int mipCount)
         {
             this.data = data.Reinterpret<float>();
             this.Width = width;

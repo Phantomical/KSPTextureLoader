@@ -33,7 +33,7 @@ partial class CPUTexture2D
 
         readonly LargeNativeArray<Color24> data;
 
-        public unsafe RGB24(LargeNativeArray<byte> data, int width, int height, int mipCount)
+        internal unsafe RGB24(LargeNativeArray<byte> data, int width, int height, int mipCount)
         {
             if (sizeof(Color24) != 3)
                 throw new Exception("sizeof(Color24) was not 3");

@@ -22,7 +22,7 @@ partial class CPUTexture2D
 
         readonly LargeNativeArray<byte> data;
 
-        public R8(LargeNativeArray<byte> data, int width, int height, int mipCount)
+        internal R8(LargeNativeArray<byte> data, int width, int height, int mipCount)
         {
             this.data = data;
             this.Width = width;

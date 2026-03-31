@@ -27,7 +27,7 @@ partial class CPUTexture2D
 
         readonly LargeNativeArray<byte> data;
 
-        public KopernicusPalette4(LargeNativeArray<byte> data, int width, int height)
+        internal KopernicusPalette4(LargeNativeArray<byte> data, int width, int height)
         {
             this.data = data;
             this.Width = width;

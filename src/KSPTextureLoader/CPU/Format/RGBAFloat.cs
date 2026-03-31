@@ -20,7 +20,7 @@ partial class CPUTexture2D
 
         readonly LargeNativeArray<Color> data;
 
-        public RGBAFloat(LargeNativeArray<byte> data, int width, int height, int mipCount)
+        internal RGBAFloat(LargeNativeArray<byte> data, int width, int height, int mipCount)
         {
             this.data = data.Reinterpret<Color>();
             this.Width = width;

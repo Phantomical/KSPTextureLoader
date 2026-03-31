@@ -21,7 +21,7 @@ partial class CPUTexture2D
 
         readonly LargeNativeArray<byte> data;
 
-        public ARGB32(LargeNativeArray<byte> data, int width, int height, int mipCount)
+        internal ARGB32(LargeNativeArray<byte> data, int width, int height, int mipCount)
         {
             this.data = data;
             this.Width = width;

@@ -19,7 +19,7 @@ partial class CPUTexture2D
 
         readonly LargeNativeArray<ushort> data;
 
-        public RGB565(LargeNativeArray<byte> data, int width, int height, int mipCount)
+        internal RGB565(LargeNativeArray<byte> data, int width, int height, int mipCount)
         {
             this.data = data.Reinterpret<ushort>();
             this.Width = width;

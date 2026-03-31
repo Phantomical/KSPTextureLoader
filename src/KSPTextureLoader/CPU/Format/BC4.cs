@@ -23,7 +23,7 @@ partial class CPUTexture2D
 
         readonly LargeNativeArray<Block> data;
 
-        public unsafe BC4(LargeNativeArray<byte> data, int width, int height, int mipCount)
+        internal unsafe BC4(LargeNativeArray<byte> data, int width, int height, int mipCount)
         {
             this.data = data.Reinterpret<Block>();
             this.Width = width;

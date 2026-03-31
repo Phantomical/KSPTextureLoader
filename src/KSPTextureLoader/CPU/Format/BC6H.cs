@@ -25,7 +25,7 @@ partial class CPUTexture2D
         readonly LargeNativeArray<Block> data;
         readonly bool signed;
 
-        public unsafe BC6H(
+        internal unsafe BC6H(
             LargeNativeArray<byte> data,
             int width,
             int height,
@@ -46,8 +46,14 @@ partial class CPUTexture2D
                 );
         }
 
-        public BC6H(NativeArray<byte> data, int width, int height, int mipCount)
-            : this((LargeNativeArray<byte>)data, width, height, mipCount) { }
+        public BC6H(
+            NativeArray<byte> data,
+            int width,
+            int height,
+            int mipCount,
+            bool signed = false
+        )
+            : this((LargeNativeArray<byte>)data, width, height, mipCount, signed) { }
 
         public Color GetPixel(int x, int y, int mipLevel = 0)
         {

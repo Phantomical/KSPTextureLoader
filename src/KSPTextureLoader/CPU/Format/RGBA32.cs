@@ -20,7 +20,7 @@ partial class CPUTexture2D
 
         readonly LargeNativeArray<Color32> data;
 
-        public RGBA32(LargeNativeArray<byte> data, int width, int height, int mipCount)
+        internal RGBA32(LargeNativeArray<byte> data, int width, int height, int mipCount)
         {
             this.data = data.Reinterpret<Color32>();
             this.Width = width;
