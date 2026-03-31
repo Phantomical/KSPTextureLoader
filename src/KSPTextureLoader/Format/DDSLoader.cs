@@ -606,21 +606,68 @@ internal static class DDSLoader
 
         var buffer = await dataTask;
 
-        long offset = 0;
-        for (int face = 0; face < 6; ++face)
+        if (buffer.Length <= int.MaxValue)
         {
-            for (int mip = 0; mip < mipCount; ++mip)
+            long offset = 0;
+            for (int face = 0; face < 6; ++face)
             {
-                int mipSize = Get2DMipMapSize(width, height, mip, format);
+                for (int mip = 0; mip < mipCount; ++mip)
+                {
+                    int mipSize = Get2DMipMapSize(width, height, mip, format);
 
-                if (offset + mipSize > buffer.Length)
+                    if (offset + mipSize > buffer.Length)
+                        throw new Exception(
+                            "Invalid DDS file: not enough data for specified texture size"
+                        );
+
+                    var mipData = buffer.GetSubArray(offset, mipSize).AsNativeArray();
+                    cubemap.SetPixelData(mipData, mip, (CubemapFace)face);
+                    offset += mipSize;
+                }
+            }
+        }
+        else
+        {
+            // Alternate path for textures larger than 2^32. SetPixelData does its
+            // bound-checks using ints and it will throw spurious errors if you
+            // try to set data that has an offset > int.MaxValue.
+            //
+            // This shows up with 16k cubemaps, which are pretty niche but are used
+            // by Sol.
+            //
+            // This case is a workaround to the issue. Graphics.CopyTexture will
+            // copy the cpu half of the texture regardless of support, so we can
+            // use it to copy the parts we need as we go.
+
+            var staging = TextureUtils.CreateUninitializedTexture2D(
+                width,
+                height,
+                mipCount,
+                format
+            );
+            using var guard = new TextureDisposeGuard(staging);
+
+            if (options.Hint != TextureLoadHint.Synchronous)
+            {
+                // This will wait until the texture has been uploaded by the graphics
+                // and so it won't make a copy if we call SetPixelData.
+                await AsyncUtil.RunOnGraphicsThread(() => { });
+            }
+
+            var sdata = staging.GetRawTextureData<byte>();
+            int mipChainSize = GetFaceMipChainSize(width, height, mipCount, format);
+            long offset = 0;
+
+            for (int face = 0; face < 6; ++face)
+            {
+                if (offset + mipChainSize > buffer.Length)
                     throw new Exception(
                         "Invalid DDS file: not enough data for specified texture size"
                     );
 
-                var mipData = buffer.GetSubArray(offset, mipSize).AsNativeArray();
-                cubemap.SetPixelData(mipData, mip, (CubemapFace)face);
-                offset += mipSize;
+                sdata.CopyFrom(buffer.GetSubArray(offset, mipChainSize).AsNativeArray());
+                Graphics.CopyTexture(staging, 0, cubemap, face);
+                offset += mipChainSize;
             }
         }
 
