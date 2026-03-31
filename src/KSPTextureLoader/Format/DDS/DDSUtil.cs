@@ -311,7 +311,11 @@ internal static class DDSUtil
         var bwidth = (int)GraphicsFormatUtility.GetBlockWidth(format);
         var bsize = (int)GraphicsFormatUtility.GetBlockSize(format);
 
-        return ((width / bwidth) * (height / bheight) >> (mip * 2)) * bsize;
+        var mipWidth = Math.Max(1, width >> mip);
+        var mipHeight = Math.Max(1, height >> mip);
+        var blocksX = Math.Max(1, (mipWidth + bwidth - 1) / bwidth);
+        var blocksY = Math.Max(1, (mipHeight + bheight - 1) / bheight);
+        return blocksX * blocksY * bsize;
     }
 
     internal static int Get3DMipMapSize(
@@ -326,6 +330,11 @@ internal static class DDSUtil
         var bwidth = (int)GraphicsFormatUtility.GetBlockWidth(format);
         var bsize = (int)GraphicsFormatUtility.GetBlockSize(format);
 
-        return ((width / bwidth) * (height / bheight) * depth >> (mip * 3)) * bsize;
+        var mipWidth = Math.Max(1, width >> mip);
+        var mipHeight = Math.Max(1, height >> mip);
+        var mipDepth = Math.Max(1, depth >> mip);
+        var blocksX = Math.Max(1, (mipWidth + bwidth - 1) / bwidth);
+        var blocksY = Math.Max(1, (mipHeight + bheight - 1) / bheight);
+        return blocksX * blocksY * mipDepth * bsize;
     }
 }
