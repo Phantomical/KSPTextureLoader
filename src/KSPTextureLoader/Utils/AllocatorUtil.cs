@@ -54,6 +54,19 @@ internal static class AllocatorUtil
         return CreateNativeArrayHGlobal<T>(length, options);
     }
 
+    internal static async ValueTask<LargeNativeArray<T>> CreateNativeArrayHGlobalAsync<T>(
+        long length,
+        NativeArrayOptions options = NativeArrayOptions.ClearMemory
+    )
+        where T : unmanaged
+    {
+        using var guard = await allocLock.Lock();
+        while (IsAboveWatermark)
+            await condvar.Wait(guard);
+
+        return CreateNativeArrayHGlobal<T>(length, options);
+    }
+
     internal static unsafe NativeArray<T> CreateNativeArrayHGlobal<T>(
         int length,
         NativeArrayOptions options = NativeArrayOptions.ClearMemory
@@ -78,6 +91,26 @@ internal static class AllocatorUtil
         return array;
     }
 
+    internal static unsafe LargeNativeArray<T> CreateNativeArrayHGlobal<T>(
+        long length,
+        NativeArrayOptions options = NativeArrayOptions.ClearMemory
+    )
+        where T : unmanaged
+    {
+        using var scope = AllocMarker.Auto();
+        var ptr = (void*)Marshal.AllocHGlobal((IntPtr)(sizeof(T) * length));
+        if (ptr is null)
+            throw new OutOfMemoryException("failed to allocate an array using AllocHGlobal");
+        Interlocked.Add(ref allocMem, length);
+
+        var array = new LargeNativeArray<T>((T*)ptr, length, HGlobal);
+
+        if (options == NativeArrayOptions.ClearMemory)
+            UnsafeUtility.MemClear(ptr, sizeof(T) * length);
+
+        return array;
+    }
+
     /// <summary>
     /// Release an array without actually deallocating its memory.
     /// </summary>
@@ -90,6 +123,24 @@ internal static class AllocatorUtil
         where T : unmanaged
     {
         if (array.m_AllocatorLabel != HGlobal)
+            return;
+
+        Interlocked.Add(ref allocMem, -array.Length);
+        condvar.Notify();
+    }
+
+    /// <summary>
+    /// Release an array without actually deallocating its memory.
+    /// </summary>
+    ///
+    /// <remarks>
+    /// Use this when the allocation is transferred from a temporary is converted
+    /// from a temporary allocation to a permanent one.
+    /// </remarks>
+    internal static void Release<T>(LargeNativeArray<T> array)
+        where T : unmanaged
+    {
+        if (array.Allocator != HGlobal)
             return;
 
         Interlocked.Add(ref allocMem, -array.Length);
@@ -131,6 +182,44 @@ internal static class AllocatorUtil
         where T : unmanaged
     {
         new DisposeJob<T>(array).Schedule(dependsOn);
+        array = default;
+    }
+
+    struct LargeDisposeJob<T>(LargeNativeArray<T> array) : IJob
+        where T : unmanaged
+    {
+        public LargeNativeArray<T> array = array;
+
+        public void Execute()
+        {
+            array.DisposeExt();
+        }
+    }
+
+    internal static void DisposeExt<T>(this ref LargeNativeArray<T> array)
+        where T : unmanaged
+    {
+        if (array.Allocator == HGlobal)
+        {
+            unsafe
+            {
+                using var scope = FreeMarker.Auto();
+                Marshal.FreeHGlobal((IntPtr)array.GetUnsafePtr());
+                Interlocked.Add(ref allocMem, -array.Length);
+            }
+
+            condvar.Notify();
+        }
+        else
+            array.Dispose();
+
+        array = default;
+    }
+
+    internal static void DisposeExt<T>(this ref LargeNativeArray<T> array, JobHandle dependsOn)
+        where T : unmanaged
+    {
+        new LargeDisposeJob<T>(array).Schedule(dependsOn);
         array = default;
     }
 

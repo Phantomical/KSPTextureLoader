@@ -1,5 +1,6 @@
 using System;
 using KSPTextureLoader.Burst;
+using KSPTextureLoader.Utils;
 using Unity.Burst;
 using Unity.Collections;
 using UnityEngine;
@@ -18,9 +19,9 @@ partial class CPUTexture2D
         public int MipCount { get; }
         public TextureFormat Format => TextureFormat.BGRA32;
 
-        readonly NativeArray<byte> data;
+        readonly LargeNativeArray<byte> data;
 
-        public BGRA32(NativeArray<byte> data, int width, int height, int mipCount)
+        internal BGRA32(LargeNativeArray<byte> data, int width, int height, int mipCount)
         {
             this.data = data;
             this.Width = width;
@@ -33,6 +34,9 @@ partial class CPUTexture2D
                     $"data size did not match expected texture size (expected {expected}, but got {data.Length} instead)"
                 );
         }
+
+        public BGRA32(NativeArray<byte> data, int width, int height, int mipCount)
+            : this((LargeNativeArray<byte>)data, width, height, mipCount) { }
 
         public Color32 GetPixel32(int x, int y, int mipLevel = 0)
         {
@@ -58,7 +62,7 @@ partial class CPUTexture2D
         public NativeArray<T> GetRawTextureData<T>()
             where T : unmanaged
         {
-            return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(byte));
+            return data.Reinterpret<T>().AsNativeArray();
         }
 
         public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp)

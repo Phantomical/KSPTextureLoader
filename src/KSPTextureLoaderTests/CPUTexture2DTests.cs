@@ -1,6 +1,7 @@
 using System;
 using KSP.Testing;
 using KSPTextureLoader;
+using KSPTextureLoader.Utils;
 using Unity.Collections;
 using UnityEngine;
 
@@ -69,7 +70,7 @@ public class CPUTexture2DTests : KSPTextureLoaderTestBase
     /// </summary>
     protected void TestFormatGetPixels<T>(
         TextureFormat fmt,
-        Func<NativeArray<byte>, int, int, int, T> factory,
+        Func<LargeNativeArray<byte>, int, int, int, T> factory,
         string name
     )
         where T : ICPUTexture2D, IGetPixels
@@ -77,7 +78,7 @@ public class CPUTexture2DTests : KSPTextureLoaderTestBase
         var (tex, _) = MakeTestTexture(fmt);
         try
         {
-            var rawData = tex.GetRawTextureData<byte>();
+            var rawData = LargeNativeArray<byte>.FromNativeArray(tex.GetRawTextureData<byte>());
             var cpuTex = factory(rawData, tex.width, tex.height, tex.mipmapCount);
             var pixels = cpuTex.GetPixels();
 
@@ -108,7 +109,7 @@ public class CPUTexture2DTests : KSPTextureLoaderTestBase
     /// </summary>
     protected void TestFormatGetPixels32<T>(
         TextureFormat fmt,
-        Func<NativeArray<byte>, int, int, int, T> factory,
+        Func<LargeNativeArray<byte>, int, int, int, T> factory,
         string name
     )
         where T : ICPUTexture2D, IGetPixels
@@ -116,7 +117,7 @@ public class CPUTexture2DTests : KSPTextureLoaderTestBase
         var (tex, _) = MakeTestTexture(fmt);
         try
         {
-            var rawData = tex.GetRawTextureData<byte>();
+            var rawData = LargeNativeArray<byte>.FromNativeArray(tex.GetRawTextureData<byte>());
             var cpuTex = factory(rawData, tex.width, tex.height, tex.mipmapCount);
             var pixels = cpuTex.GetPixels32();
 
@@ -148,7 +149,7 @@ public class CPUTexture2DTests : KSPTextureLoaderTestBase
     /// </summary>
     protected void TestFormatGetPixel<T>(
         TextureFormat fmt,
-        Func<NativeArray<byte>, int, int, int, T> factory,
+        Func<LargeNativeArray<byte>, int, int, int, T> factory,
         string name,
         bool checkR,
         bool checkG,
@@ -161,7 +162,7 @@ public class CPUTexture2DTests : KSPTextureLoaderTestBase
         var (tex, pixels) = MakeTestTexture(fmt);
         try
         {
-            var rawData = tex.GetRawTextureData<byte>();
+            var rawData = LargeNativeArray<byte>.FromNativeArray(tex.GetRawTextureData<byte>());
             var cpuTex = factory(rawData, tex.width, tex.height, tex.mipmapCount);
 
             for (int y = 0; y < H; y++)

@@ -1,6 +1,7 @@
 using System;
 using KSPTextureLoader.Burst;
 using KSPTextureLoader.Jobs;
+using KSPTextureLoader.Utils;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
@@ -24,9 +25,9 @@ partial class CPUTexture2D
         public int MipCount => 1;
         public TextureFormat Format => default;
 
-        readonly NativeArray<byte> data;
+        readonly LargeNativeArray<byte> data;
 
-        public KopernicusPalette8(NativeArray<byte> data, int width, int height)
+        internal KopernicusPalette8(LargeNativeArray<byte> data, int width, int height)
         {
             this.data = data;
             this.Width = width;
@@ -38,6 +39,9 @@ partial class CPUTexture2D
                     $"data size did not match expected texture size (expected {expected}, but got {data.Length} instead)"
                 );
         }
+
+        public KopernicusPalette8(NativeArray<byte> data, int width, int height)
+            : this((LargeNativeArray<byte>)data, width, height) { }
 
         public unsafe Color32 GetPixel32(int x, int y, int mipLevel = 0)
         {
@@ -57,7 +61,7 @@ partial class CPUTexture2D
         public NativeArray<T> GetRawTextureData<T>()
             where T : unmanaged
         {
-            return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(byte));
+            return data.Reinterpret<T>().AsNativeArray();
         }
 
         public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp)
@@ -92,7 +96,7 @@ partial class CPUTexture2D
                 allocator,
                 NativeArrayOptions.UninitializedMemory
             );
-            new DecodeKopernicusPalette8bitJob { data = this.data, colors = result }
+            new DecodeKopernicusPalette8bitJob { data = this.data.AsNativeArray(), colors = result }
                 .ScheduleBatch(pixelCount, 4096)
                 .Complete();
             return result;

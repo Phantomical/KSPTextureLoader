@@ -1,6 +1,7 @@
 using System;
 using KSP.Testing;
 using KSPTextureLoader;
+using KSPTextureLoader.Utils;
 using UnityEngine;
 
 namespace KSPTextureLoaderTests;
@@ -51,7 +52,12 @@ public class DXT1Tests : CPUTexture2DTests
         try
         {
             var rawData = tex.GetRawTextureData<byte>();
-            var cpu = new CPUTexture2D.DXT1(rawData, 4, 4, 1);
+            var cpu = new CPUTexture2D.DXT1(
+                LargeNativeArray<byte>.FromNativeArray(rawData),
+                4,
+                4,
+                1
+            );
 
             for (int y = 0; y < 4; y++)
             for (int x = 0; x < 4; x++)
@@ -94,7 +100,12 @@ public class DXT1Tests : CPUTexture2DTests
         try
         {
             var rawData = tex.GetRawTextureData<byte>();
-            var cpu = new CPUTexture2D.DXT1(rawData, 4, 4, 1);
+            var cpu = new CPUTexture2D.DXT1(
+                LargeNativeArray<byte>.FromNativeArray(rawData),
+                4,
+                4,
+                1
+            );
 
             for (int y = 0; y < 4; y++)
             for (int x = 0; x < 4; x++)
@@ -136,7 +147,12 @@ public class DXT1Tests : CPUTexture2DTests
         try
         {
             var rawData = tex.GetRawTextureData<byte>();
-            var cpu = new CPUTexture2D.DXT1(rawData, 4, 4, 1);
+            var cpu = new CPUTexture2D.DXT1(
+                LargeNativeArray<byte>.FromNativeArray(rawData),
+                4,
+                4,
+                1
+            );
 
             for (int y = 0; y < 4; y++)
             for (int x = 0; x < 4; x++)
@@ -192,7 +208,12 @@ public class DXT1Tests : CPUTexture2DTests
         try
         {
             var rawData = tex.GetRawTextureData<byte>();
-            var cpu = new CPUTexture2D.DXT1(rawData, 4, 4, 1);
+            var cpu = new CPUTexture2D.DXT1(
+                LargeNativeArray<byte>.FromNativeArray(rawData),
+                4,
+                4,
+                1
+            );
 
             for (int y = 0; y < 4; y++)
             for (int x = 0; x < 4; x++)
@@ -267,7 +288,12 @@ public class DXT1Tests : CPUTexture2DTests
         try
         {
             var nativeData = tex.GetRawTextureData<byte>();
-            var cpu = new CPUTexture2D.DXT1(nativeData, 8, 8, 1);
+            var cpu = new CPUTexture2D.DXT1(
+                LargeNativeArray<byte>.FromNativeArray(nativeData),
+                8,
+                8,
+                1
+            );
 
             for (int y = 0; y < 8; y++)
             for (int x = 0; x < 8; x++)
@@ -340,7 +366,12 @@ public class DXT1Tests : CPUTexture2DTests
         try
         {
             var nativeData = tex.GetRawTextureData<byte>();
-            var cpu = new CPUTexture2D.DXT1(nativeData, 8, 8, 1);
+            var cpu = new CPUTexture2D.DXT1(
+                LargeNativeArray<byte>.FromNativeArray(nativeData),
+                8,
+                8,
+                1
+            );
             var pixels = cpu.GetPixels();
 
             if (pixels.Length != 64)
@@ -417,7 +448,12 @@ public class DXT1Tests : CPUTexture2DTests
         try
         {
             var nativeData = tex.GetRawTextureData<byte>();
-            var cpu = new CPUTexture2D.DXT1(nativeData, 8, 8, 1);
+            var cpu = new CPUTexture2D.DXT1(
+                LargeNativeArray<byte>.FromNativeArray(nativeData),
+                8,
+                8,
+                1
+            );
             var pixels = cpu.GetPixels32();
 
             if (pixels.Length != 64)

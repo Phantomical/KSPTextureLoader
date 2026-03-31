@@ -1,6 +1,7 @@
 using System;
 using KSP.Testing;
 using KSPTextureLoader;
+using KSPTextureLoader.Utils;
 using Unity.Collections;
 using UnityEngine;
 
@@ -74,7 +75,11 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
     {
         // 4x4 = 1024 palette + 16 index bytes = 1040
         using var data = new NativeArray<byte>(1040, Allocator.Temp);
-        var tex = new CPUTexture2D.KopernicusPalette8(data, 4, 4);
+        var tex = new CPUTexture2D.KopernicusPalette8(
+            LargeNativeArray<byte>.FromNativeArray(data),
+            4,
+            4
+        );
         if (tex.Width != 4)
             throw new Exception($"Width: expected 4, got {tex.Width}");
         if (tex.Height != 4)
@@ -96,7 +101,7 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
         bool threw = false;
         try
         {
-            new CPUTexture2D.KopernicusPalette8(data, 4, 4);
+            new CPUTexture2D.KopernicusPalette8(LargeNativeArray<byte>.FromNativeArray(data), 4, 4);
         }
         catch (Exception)
         {
@@ -117,7 +122,7 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
         bool threw = false;
         try
         {
-            new CPUTexture2D.KopernicusPalette8(data, 4, 4);
+            new CPUTexture2D.KopernicusPalette8(LargeNativeArray<byte>.FromNativeArray(data), 4, 4);
         }
         catch (Exception)
         {
@@ -142,7 +147,11 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
 
         var raw = BuildPalette8Data(palette, indices, 4, 4);
         using var data = new NativeArray<byte>(raw, Allocator.Temp);
-        var tex = new CPUTexture2D.KopernicusPalette8(data, 4, 4);
+        var tex = new CPUTexture2D.KopernicusPalette8(
+            LargeNativeArray<byte>.FromNativeArray(data),
+            4,
+            4
+        );
 
         var expected = palette[solidIndex];
         for (int y = 0; y < 4; y++)
@@ -166,7 +175,11 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
 
         var raw = BuildPalette8Data(palette, indices, w, h);
         using var data = new NativeArray<byte>(raw, Allocator.Temp);
-        var tex = new CPUTexture2D.KopernicusPalette8(data, w, h);
+        var tex = new CPUTexture2D.KopernicusPalette8(
+            LargeNativeArray<byte>.FromNativeArray(data),
+            w,
+            h
+        );
 
         for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++)
@@ -191,7 +204,11 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
 
         var raw = BuildPalette8Data(palette, indices, 4, 4);
         using var data = new NativeArray<byte>(raw, Allocator.Temp);
-        var tex = new CPUTexture2D.KopernicusPalette8(data, 4, 4);
+        var tex = new CPUTexture2D.KopernicusPalette8(
+            LargeNativeArray<byte>.FromNativeArray(data),
+            4,
+            4
+        );
 
         for (int y = 0; y < 4; y++)
         for (int x = 0; x < 4; x++)
@@ -215,7 +232,11 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
 
         var raw = BuildPalette8Data(palette, indices, 4, 4);
         using var data = new NativeArray<byte>(raw, Allocator.Temp);
-        var tex = new CPUTexture2D.KopernicusPalette8(data, 4, 4);
+        var tex = new CPUTexture2D.KopernicusPalette8(
+            LargeNativeArray<byte>.FromNativeArray(data),
+            4,
+            4
+        );
 
         // Negative coords clamp to 0
         assertColor32Equals("ClampNeg", tex.GetPixel32(-1, -1), tex.GetPixel32(0, 0), 0);
@@ -241,7 +262,11 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
 
         var raw = BuildPalette8Data(palette, indices, 4, 4);
         using var data = new NativeArray<byte>(raw, Allocator.Temp);
-        var tex = new CPUTexture2D.KopernicusPalette8(data, 4, 4);
+        var tex = new CPUTexture2D.KopernicusPalette8(
+            LargeNativeArray<byte>.FromNativeArray(data),
+            4,
+            4
+        );
 
         for (int y = 0; y < 4; y++)
         for (int x = 0; x < 4; x++)
@@ -267,7 +292,11 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
 
         var raw = BuildPalette8Data(palette, indices, 4, 4);
         using var data = new NativeArray<byte>(raw, Allocator.Temp);
-        var tex = new CPUTexture2D.KopernicusPalette8(data, 4, 4);
+        var tex = new CPUTexture2D.KopernicusPalette8(
+            LargeNativeArray<byte>.FromNativeArray(data),
+            4,
+            4
+        );
 
         var result = tex.GetRawTextureData<byte>();
         if (result.Length != raw.Length)
@@ -294,7 +323,11 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
 
         var raw = BuildPalette8Data(palette, indices, 4, 4);
         using var data = new NativeArray<byte>(raw, Allocator.Temp);
-        var tex = new CPUTexture2D.KopernicusPalette8(data, 4, 4);
+        var tex = new CPUTexture2D.KopernicusPalette8(
+            LargeNativeArray<byte>.FromNativeArray(data),
+            4,
+            4
+        );
 
         for (int y = 0; y < 4; y++)
         for (int x = 0; x < 4; x++)
@@ -325,7 +358,11 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
 
         var raw = BuildPalette8Data(palette, indices, 4, 4);
         using var data = new NativeArray<byte>(raw, Allocator.Temp);
-        var tex = new CPUTexture2D.KopernicusPalette8(data, 4, 4);
+        var tex = new CPUTexture2D.KopernicusPalette8(
+            LargeNativeArray<byte>.FromNativeArray(data),
+            4,
+            4
+        );
 
         for (int y = 0; y < 4; y++)
         for (int x = 0; x < 4; x++)
@@ -352,7 +389,11 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
 
         var raw = BuildPalette8Data(palette, indices, w, h);
         using var data = new NativeArray<byte>(raw, Allocator.Temp);
-        var tex = new CPUTexture2D.KopernicusPalette8(data, w, h);
+        var tex = new CPUTexture2D.KopernicusPalette8(
+            LargeNativeArray<byte>.FromNativeArray(data),
+            w,
+            h
+        );
 
         for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++)
@@ -378,7 +419,11 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
 
         var raw = BuildPalette8Data(palette, indices, w, h);
         using var data = new NativeArray<byte>(raw, Allocator.Temp);
-        var tex = new CPUTexture2D.KopernicusPalette8(data, w, h);
+        var tex = new CPUTexture2D.KopernicusPalette8(
+            LargeNativeArray<byte>.FromNativeArray(data),
+            w,
+            h
+        );
 
         for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++)
@@ -406,7 +451,11 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
 
         var raw = BuildPalette8Data(palette, indices, 4, 4);
         using var data = new NativeArray<byte>(raw, Allocator.Temp);
-        var tex = new CPUTexture2D.KopernicusPalette8(data, 4, 4);
+        var tex = new CPUTexture2D.KopernicusPalette8(
+            LargeNativeArray<byte>.FromNativeArray(data),
+            4,
+            4
+        );
 
         for (int y = 0; y < 4; y++)
         for (int x = 0; x < 4; x++)
@@ -433,7 +482,11 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
 
         var raw = BuildPalette8Data(palette, indices, 4, 4);
         using var data = new NativeArray<byte>(raw, Allocator.Temp);
-        var tex = new CPUTexture2D.KopernicusPalette8(data, 4, 4);
+        var tex = new CPUTexture2D.KopernicusPalette8(
+            LargeNativeArray<byte>.FromNativeArray(data),
+            4,
+            4
+        );
 
         for (int y = 0; y < 4; y++)
         for (int x = 0; x < 4; x++)
@@ -457,7 +510,11 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
 
         var raw = BuildPalette8Data(palette, indices, 4, 4);
         using var data = new NativeArray<byte>(raw, Allocator.Temp);
-        var tex = new CPUTexture2D.KopernicusPalette8(data, 4, 4);
+        var tex = new CPUTexture2D.KopernicusPalette8(
+            LargeNativeArray<byte>.FromNativeArray(data),
+            4,
+            4
+        );
 
         for (int y = 0; y < 4; y++)
         for (int x = 0; x < 4; x++)
@@ -479,15 +536,15 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
     {
         // 8x4 = 1024 + 32 = 1056
         using var data1 = new NativeArray<byte>(1056, Allocator.Temp);
-        new CPUTexture2D.KopernicusPalette8(data1, 8, 4);
+        new CPUTexture2D.KopernicusPalette8(LargeNativeArray<byte>.FromNativeArray(data1), 8, 4);
 
         // 1x1 = 1024 + 1 = 1025
         using var data2 = new NativeArray<byte>(1025, Allocator.Temp);
-        new CPUTexture2D.KopernicusPalette8(data2, 1, 1);
+        new CPUTexture2D.KopernicusPalette8(LargeNativeArray<byte>.FromNativeArray(data2), 1, 1);
 
         // 16x16 = 1024 + 256 = 1280
         using var data3 = new NativeArray<byte>(1280, Allocator.Temp);
-        new CPUTexture2D.KopernicusPalette8(data3, 16, 16);
+        new CPUTexture2D.KopernicusPalette8(LargeNativeArray<byte>.FromNativeArray(data3), 16, 16);
     }
 
     // ================================================================
@@ -506,7 +563,11 @@ public class KopernicusPalette8Tests : CPUTexture2DTests
 
         var raw = BuildPalette8Data(palette, indices, w, h);
         using var data = new NativeArray<byte>(raw, Allocator.Temp);
-        var tex = new CPUTexture2D.KopernicusPalette8(data, w, h);
+        var tex = new CPUTexture2D.KopernicusPalette8(
+            LargeNativeArray<byte>.FromNativeArray(data),
+            w,
+            h
+        );
 
         for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++)

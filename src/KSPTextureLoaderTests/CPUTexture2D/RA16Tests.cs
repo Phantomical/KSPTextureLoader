@@ -1,6 +1,7 @@
 using System;
 using KSP.Testing;
 using KSPTextureLoader;
+using KSPTextureLoader.Utils;
 using Unity.Collections;
 using UnityEngine;
 
@@ -34,7 +35,7 @@ public class RA16Tests : KSPTextureLoaderTestBase
     public void TestRA16GetPixels()
     {
         var data = MakeRA16Data();
-        var cpuTex = new CPUTexture2D.RA16(data, W, H, 1);
+        var cpuTex = new CPUTexture2D.RA16(LargeNativeArray<byte>.FromNativeArray(data), W, H, 1);
         var pixels = cpuTex.GetPixels();
 
         if (pixels.Length != W * H)
@@ -55,7 +56,7 @@ public class RA16Tests : KSPTextureLoaderTestBase
     public void TestRA16GetPixels32()
     {
         var data = MakeRA16Data();
-        var cpuTex = new CPUTexture2D.RA16(data, W, H, 1);
+        var cpuTex = new CPUTexture2D.RA16(LargeNativeArray<byte>.FromNativeArray(data), W, H, 1);
         var pixels = cpuTex.GetPixels32();
 
         if (pixels.Length != W * H)

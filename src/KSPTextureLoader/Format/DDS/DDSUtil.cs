@@ -318,6 +318,34 @@ internal static class DDSUtil
         return blocksX * blocksY * bsize;
     }
 
+    internal static int GetFaceMipChainSize(
+        int width,
+        int height,
+        int mipCount,
+        GraphicsFormat format
+    )
+    {
+        var bheight = (int)GraphicsFormatUtility.GetBlockHeight(format);
+        var bwidth = (int)GraphicsFormatUtility.GetBlockWidth(format);
+        var bsize = (int)GraphicsFormatUtility.GetBlockSize(format);
+
+        int w = width;
+        int h = height;
+        int size = 0;
+
+        for (int mip = 0; mip < mipCount; ++mip)
+        {
+            int blocksX = Math.Max(1, (w + bwidth - 1) / bwidth);
+            int blocksY = Math.Max(1, (h + bheight - 1) / bheight);
+
+            size += blocksX * blocksY * bsize;
+            w >>= 1;
+            h >>= 1;
+        }
+
+        return size;
+    }
+
     internal static int Get3DMipMapSize(
         int width,
         int height,

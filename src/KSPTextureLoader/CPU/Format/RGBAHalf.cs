@@ -20,11 +20,11 @@ partial class CPUTexture2D
         public int MipCount { get; }
         public TextureFormat Format => TextureFormat.RGBAHalf;
 
-        readonly NativeArray<Half> data;
+        readonly LargeNativeArray<Half> data;
 
-        public RGBAHalf(NativeArray<byte> data, int width, int height, int mipCount)
+        internal RGBAHalf(LargeNativeArray<byte> data, int width, int height, int mipCount)
         {
-            this.data = data.Reinterpret<Half>(sizeof(byte));
+            this.data = data.Reinterpret<Half>();
             this.Width = width;
             this.Height = height;
             this.MipCount = mipCount;
@@ -35,6 +35,9 @@ partial class CPUTexture2D
                     $"data size did not match expected texture size (expected {expected}, but got {this.data.Length} instead)"
                 );
         }
+
+        public RGBAHalf(NativeArray<byte> data, int width, int height, int mipCount)
+            : this((LargeNativeArray<byte>)data, width, height, mipCount) { }
 
         public Color GetPixel(int x, int y, int mipLevel = 0)
         {
@@ -57,10 +60,10 @@ partial class CPUTexture2D
         public Color GetPixelBilinear(float u, float v, int mipLevel = 0) =>
             CPUTexture2D.GetPixelBilinear(in this, u, v, mipLevel);
 
-        public unsafe NativeArray<T> GetRawTextureData<T>()
+        public NativeArray<T> GetRawTextureData<T>()
             where T : unmanaged
         {
-            return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(Half));
+            return data.Reinterpret<T>().AsNativeArray();
         }
 
         [StructLayout(LayoutKind.Sequential)]

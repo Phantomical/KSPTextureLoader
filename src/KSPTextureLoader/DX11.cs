@@ -60,7 +60,7 @@ internal static class DX11
         TextureHandleImpl handle,
         TextureLoadOptions options,
         TextureMetadata metadata,
-        Task<NativeArray<byte>> dataTask
+        Task<LargeNativeArray<byte>> dataTask
     )
         where T : Texture
     {
@@ -136,7 +136,7 @@ internal static class DX11
                 var data = await dataTask;
                 if (rawdata.Length != data.Length)
                     throw new Exception("loaded file data did not match texture data length");
-                rawdata.CopyFrom(data);
+                rawdata.CopyFrom(data.AsNativeArray());
             });
 
             dguard.AddDependency(copy);
@@ -184,7 +184,7 @@ internal static class DX11
         handle.SetTexture<T>(texture, options);
     }
 
-    static unsafe DataBox[] FillInitData(TextureMetadata metadata, NativeArray<byte> buffer)
+    static unsafe DataBox[] FillInitData(TextureMetadata metadata, LargeNativeArray<byte> buffer)
     {
         int w = metadata.width;
         int h = metadata.height;
@@ -194,8 +194,8 @@ internal static class DX11
         var blockHeight = (int)GraphicsFormatUtility.GetBlockHeight(metadata.format);
         var blockSize = (int)GraphicsFormatUtility.GetBlockSize(metadata.format);
 
-        var data = (byte*)buffer.GetUnsafePtr();
-        var offset = 0;
+        var data = buffer.GetUnsafePtr();
+        long offset = 0;
 
         for (int m = 0; m < metadata.mipCount; ++m)
         {

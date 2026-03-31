@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using KSPTextureLoader.Burst;
+using KSPTextureLoader.Utils;
 using Unity.Burst;
 using Unity.Collections;
 using UnityEngine;
@@ -17,11 +18,11 @@ partial class CPUTexture2D
         public int MipCount { get; }
         public TextureFormat Format => TextureFormat.RGBA32;
 
-        readonly NativeArray<Color32> data;
+        readonly LargeNativeArray<Color32> data;
 
-        public unsafe RGBA32(NativeArray<byte> data, int width, int height, int mipCount)
+        internal RGBA32(LargeNativeArray<byte> data, int width, int height, int mipCount)
         {
-            this.data = data.Reinterpret<Color32>(sizeof(byte));
+            this.data = data.Reinterpret<Color32>();
             this.Width = width;
             this.Height = height;
             this.MipCount = mipCount;
@@ -32,6 +33,9 @@ partial class CPUTexture2D
                     $"data size did not match expected texture size (expected {expected}, but got {this.data.Length} instead)"
                 );
         }
+
+        public RGBA32(NativeArray<byte> data, int width, int height, int mipCount)
+            : this((LargeNativeArray<byte>)data, width, height, mipCount) { }
 
         public Color32 GetPixel32(int x, int y, int mipLevel = 0)
         {
@@ -48,10 +52,10 @@ partial class CPUTexture2D
         public Color GetPixelBilinear(float u, float v, int mipLevel = 0) =>
             CPUTexture2D.GetPixelBilinear(in this, u, v, mipLevel);
 
-        public unsafe NativeArray<T> GetRawTextureData<T>()
+        public NativeArray<T> GetRawTextureData<T>()
             where T : unmanaged
         {
-            return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(Color32));
+            return data.Reinterpret<T>().AsNativeArray();
         }
 
         public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp)
