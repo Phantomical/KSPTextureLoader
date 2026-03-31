@@ -241,7 +241,7 @@ internal static class TextureUtils
 
         flags |= InternalTextureCreationFlags.DontInitializePixels;
         if (mipCount != 1)
-            flags |= InternalTextureCreationFlags.DontInitializePixels;
+            flags |= InternalTextureCreationFlags.MipChain;
 
         Cubemap.Internal_Create(
             tex,
