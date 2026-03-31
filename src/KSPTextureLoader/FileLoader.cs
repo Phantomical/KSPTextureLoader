@@ -17,13 +17,13 @@ internal static class FileLoader
     {
         public string path;
         public long offset;
-        public int length;
+        public long length;
     }
 
-    internal static Task<NativeArray<byte>> ReadFileContentsAsync(FileReadInfo info) =>
+    internal static Task<LargeNativeArray<byte>> ReadFileContentsAsync(FileReadInfo info) =>
         ReadFileContentsAsync(Task.FromResult(info));
 
-    internal static Task<NativeArray<byte>> ReadFileContentsAsync(Task<FileReadInfo> info)
+    internal static Task<LargeNativeArray<byte>> ReadFileContentsAsync(Task<FileReadInfo> info)
     {
         if (Config.Instance.UseAsyncReadManager)
             return ReadFileContentsUnity(info).Unwrap();
@@ -49,15 +49,19 @@ internal static class FileLoader
         });
     }
 
-    static unsafe void ReadFileContentsManaged(string path, long fileOffset, NativeArray<byte> data)
+    static unsafe void ReadFileContentsManaged(
+        string path,
+        long fileOffset,
+        LargeNativeArray<byte> data
+    )
     {
         using var scope = ReadFileContentsMarker.Auto();
 
         using var reader = File.OpenRead(path);
-        var ptr = (byte*)data.GetUnsafePtr();
+        var ptr = data.GetUnsafePtr();
 
-        int offset = 0;
-        int length = data.Length;
+        long offset = 0;
+        long length = data.Length;
         var buffer = new byte[64 * 1024];
 
         // Seek doesn't appear to reliably actually set the stream to the right
@@ -67,8 +71,8 @@ internal static class FileLoader
         // used for this job are fairly small.
         while (offset < fileOffset)
         {
-            var remaining = (int)fileOffset - offset;
-            int count = reader.Read(buffer, 0, Math.Min(remaining, buffer.Length));
+            var remaining = fileOffset - offset;
+            int count = reader.Read(buffer, 0, (int)Math.Min(remaining, buffer.Length));
             offset += count;
 
             if (count == 0)
@@ -90,7 +94,9 @@ internal static class FileLoader
         }
     }
 
-    static async Task<Task<NativeArray<byte>>> ReadFileContentsUnity(Task<FileReadInfo> infoTask)
+    static async Task<Task<LargeNativeArray<byte>>> ReadFileContentsUnity(
+        Task<FileReadInfo> infoTask
+    )
     {
         var info = await infoTask;
         var data = await AllocatorUtil.CreateNativeArrayHGlobalAsync<byte>(

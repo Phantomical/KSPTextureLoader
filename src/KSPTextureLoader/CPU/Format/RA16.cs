@@ -1,5 +1,6 @@
 using System;
 using KSPTextureLoader.Burst;
+using KSPTextureLoader.Utils;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
@@ -23,9 +24,9 @@ partial class CPUTexture2D
         public int MipCount { get; }
         public TextureFormat Format => default;
 
-        readonly NativeArray<byte> data;
+        readonly LargeNativeArray<byte> data;
 
-        public RA16(NativeArray<byte> data, int width, int height, int mipCount)
+        public RA16(LargeNativeArray<byte> data, int width, int height, int mipCount)
         {
             this.data = data;
             this.Width = width;
@@ -38,6 +39,9 @@ partial class CPUTexture2D
                     $"data size did not match expected texture size (expected {expected}, but got {data.Length} instead)"
                 );
         }
+
+        public RA16(NativeArray<byte> data, int width, int height, int mipCount)
+            : this((LargeNativeArray<byte>)data, width, height, mipCount) { }
 
         public Color32 GetPixel32(int x, int y, int mipLevel = 0)
         {
@@ -58,7 +62,7 @@ partial class CPUTexture2D
         public NativeArray<T> GetRawTextureData<T>()
             where T : unmanaged
         {
-            return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(byte));
+            return data.Reinterpret<T>().AsNativeArray();
         }
 
         public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp)
@@ -97,7 +101,7 @@ partial class CPUTexture2D
                 NativeArrayOptions.UninitializedMemory
             );
             var job = new GetPixels32Job { data = GetRawTextureData<ushort>(), pixels = pixels };
-            var handle = job.ScheduleBatch(data.Length / 2, 4096);
+            var handle = job.ScheduleBatch((int)(data.Length / 2), 4096);
             JobHandle.ScheduleBatchedJobs();
 
             var texdata = texture.GetRawTextureData<Color32>();

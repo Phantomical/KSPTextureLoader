@@ -63,7 +63,7 @@ internal static class PNGLoader
         var readInfo = new FileLoader.FileReadInfo
         {
             path = diskPath,
-            length = (int)length,
+            length = length,
             offset = 0,
         };
         var task = FileLoader

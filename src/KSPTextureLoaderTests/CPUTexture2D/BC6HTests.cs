@@ -1,6 +1,7 @@
 using System;
 using KSP.Testing;
 using KSPTextureLoader;
+using KSPTextureLoader.Utils;
 using Unity.Collections;
 using UnityEngine;
 
@@ -169,7 +170,16 @@ public class BC6HTests : CPUTexture2DTests
     )
     {
         var native = new NativeArray<byte>(blockData, Allocator.Temp);
-        return (new CPUTexture2D.BC6H(native, width, height, mipCount, signed), native);
+        return (
+            new CPUTexture2D.BC6H(
+                LargeNativeArray<byte>.FromNativeArray(native),
+                width,
+                height,
+                mipCount,
+                signed
+            ),
+            native
+        );
     }
 
     void AssertPixelHDR(
@@ -1774,7 +1784,12 @@ public class BC6HTests : CPUTexture2DTests
         var nativeCopy = new NativeArray<byte>(blockData, Allocator.Temp);
         try
         {
-            var bc6h = new CPUTexture2D.BC6H(nativeCopy, 16, 16, 1);
+            var bc6h = new CPUTexture2D.BC6H(
+                LargeNativeArray<byte>.FromNativeArray(nativeCopy),
+                16,
+                16,
+                1
+            );
             for (int y = 0; y < 16; y++)
             for (int x = 0; x < 16; x++)
             {

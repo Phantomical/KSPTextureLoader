@@ -219,7 +219,7 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
 
         var cpu = Create(
             factory,
-            texture.GetRawTextureData<byte>(),
+            LargeNativeArray<byte>.FromNativeArray(texture.GetRawTextureData<byte>()),
             texture.width,
             texture.height,
             texture.mipmapCount,
@@ -246,7 +246,7 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
 
             var cpu = Create(
                 factory,
-                texture.GetRawTextureData<byte>(),
+                LargeNativeArray<byte>.FromNativeArray(texture.GetRawTextureData<byte>()),
                 texture.width,
                 texture.height,
                 texture.mipmapCount,
@@ -281,7 +281,14 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
     )
     {
         var factory = new MemoryTexture2D.Factory(data.GetUnsafePtr(), data.m_AllocatorLabel);
-        return Create(factory, data, width, height, mipCount, format);
+        return Create(
+            factory,
+            LargeNativeArray<byte>.FromNativeArray(data),
+            width,
+            height,
+            mipCount,
+            format
+        );
     }
 
     /// <summary>
@@ -312,12 +319,19 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             throw new ArgumentNullException(nameof(accessor));
 
         var factory = new CPU.MemoryMappedTexture2D.Factory(mmf, accessor);
-        return Create(factory, data, width, height, mipCount, format);
+        return Create(
+            factory,
+            LargeNativeArray<byte>.FromNativeArray(data),
+            width,
+            height,
+            mipCount,
+            format
+        );
     }
 
     static CPUTexture2D Create<F>(
         F factory,
-        NativeArray<byte> data,
+        LargeNativeArray<byte> data,
         int width,
         int height,
         int mipCount,

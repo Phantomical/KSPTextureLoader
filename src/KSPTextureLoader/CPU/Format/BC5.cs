@@ -22,11 +22,11 @@ partial class CPUTexture2D
         public int MipCount { get; }
         public TextureFormat Format => TextureFormat.BC5;
 
-        readonly NativeArray<Block> data;
+        readonly LargeNativeArray<Block> data;
 
-        public unsafe BC5(NativeArray<byte> data, int width, int height, int mipCount)
+        public unsafe BC5(LargeNativeArray<byte> data, int width, int height, int mipCount)
         {
-            this.data = data.Reinterpret<Block>(sizeof(byte));
+            this.data = data.Reinterpret<Block>();
             this.Width = width;
             this.Height = height;
             this.MipCount = mipCount;
@@ -37,6 +37,9 @@ partial class CPUTexture2D
                     $"data size did not match expected texture size (expected {expected}, but got {data.Length} instead)"
                 );
         }
+
+        public BC5(NativeArray<byte> data, int width, int height, int mipCount)
+            : this((LargeNativeArray<byte>)data, width, height, mipCount) { }
 
         public Color GetPixel(int x, int y, int mipLevel = 0)
         {
@@ -52,10 +55,10 @@ partial class CPUTexture2D
         public Color GetPixelBilinear(float u, float v, int mipLevel = 0) =>
             CPUTexture2D.GetPixelBilinear(in this, u, v, mipLevel);
 
-        public unsafe NativeArray<T> GetRawTextureData<T>()
+        public NativeArray<T> GetRawTextureData<T>()
             where T : unmanaged
         {
-            return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(Block));
+            return data.Reinterpret<T>().AsNativeArray();
         }
 
         public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp)

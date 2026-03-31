@@ -1,6 +1,7 @@
 using System;
 using KSP.Testing;
 using KSPTextureLoader;
+using KSPTextureLoader.Utils;
 using Unity.Collections;
 using UnityEngine;
 
@@ -66,7 +67,15 @@ public class BC4Tests : CPUTexture2DTests
     )
     {
         var native = new NativeArray<byte>(blockData, Allocator.Temp);
-        return (new CPUTexture2D.BC4(native, width, height, mipCount), native);
+        return (
+            new CPUTexture2D.BC4(
+                LargeNativeArray<byte>.FromNativeArray(native),
+                width,
+                height,
+                mipCount
+            ),
+            native
+        );
     }
 
     /// <summary>

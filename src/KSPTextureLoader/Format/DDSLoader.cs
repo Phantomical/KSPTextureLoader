@@ -63,10 +63,6 @@ internal static class DDSLoader
             throw new Exception("Invalid DDS file: invalid pixel format size");
 
         long remainingLength = fileLength - fileOffset;
-        if (remainingLength > int.MaxValue)
-            throw new Exception(
-                "DDS file is too large to load. Only files < 2GB in size are supported"
-            );
 
         return new()
         {
@@ -86,7 +82,7 @@ internal static class DDSLoader
     #region ReadTextureMetadata
     internal struct TextureMetadata
     {
-        public Task<NativeArray<byte>> data;
+        public Task<LargeNativeArray<byte>> data;
         public GraphicsFormat format;
         public int width;
         public int height;
@@ -98,7 +94,7 @@ internal static class DDSLoader
 
     internal static Task<TextureMetadata> GetTextureMetadata<T>(
         Task<FileInfo> infoTask,
-        Task<NativeArray<byte>> dataTask,
+        Task<LargeNativeArray<byte>> dataTask,
         TextureLoadOptions options
     )
         where T : Texture
@@ -209,7 +205,9 @@ internal static class DDSLoader
                             UnsafeUtility.SizeOf<Color32>() * width * height,
                             NativeArrayOptions.UninitializedMemory
                         );
-                        dguard.data = Task.FromResult(colors);
+                        dguard.data = Task.FromResult(
+                            LargeNativeArray<byte>.FromNativeArray(colors)
+                        );
 
                         var fileDataTask = dataTask;
                         var task = AsyncUtil
@@ -228,7 +226,7 @@ internal static class DDSLoader
 
                                 var job = new DecodeKopernicusPalette4bitJob
                                 {
-                                    data = buffer,
+                                    data = buffer.AsNativeArray(),
                                     colors = colors.Slice().SliceConvert<Color32>(),
                                 };
                                 var handle = job.ScheduleBatch(width * height / 2, 4096);
@@ -244,7 +242,7 @@ internal static class DDSLoader
                             try
                             {
                                 await task;
-                                return colors;
+                                return LargeNativeArray<byte>.FromNativeArray(colors);
                             }
                             catch
                             {
@@ -282,7 +280,7 @@ internal static class DDSLoader
 
                                 var job = new DecodeKopernicusPalette8bitJob
                                 {
-                                    data = buffer,
+                                    data = buffer.AsNativeArray(),
                                     colors = colors.Slice().SliceConvert<Color32>(),
                                 };
                                 var handle = job.ScheduleBatch(width * height / 2, 4096);
@@ -298,7 +296,7 @@ internal static class DDSLoader
                             try
                             {
                                 await task;
-                                return colors;
+                                return LargeNativeArray<byte>.FromNativeArray(colors);
                             }
                             catch
                             {
@@ -366,9 +364,9 @@ internal static class DDSLoader
         });
     }
 
-    internal class TaskArrayDisposeGuard(Task<NativeArray<byte>> data) : IDisposable
+    internal class TaskArrayDisposeGuard(Task<LargeNativeArray<byte>> data) : IDisposable
     {
-        public Task<NativeArray<byte>> data = data;
+        public Task<LargeNativeArray<byte>> data = data;
 
         public void AddDependency(Task task)
         {
@@ -418,7 +416,7 @@ internal static class DDSLoader
                 {
                     path = diskPath,
                     offset = info.dataOffset,
-                    length = (int)info.fileLength,
+                    length = info.fileLength,
                 };
             })
         );
@@ -471,7 +469,7 @@ internal static class DDSLoader
         TextureHandleImpl handle,
         TextureLoadOptions options,
         TextureMetadata metadata,
-        Task<NativeArray<byte>> dataTask
+        Task<LargeNativeArray<byte>> dataTask
     )
         where T : Texture
     {
@@ -498,7 +496,7 @@ internal static class DDSLoader
             var data = await dataTask;
 
             using var scope = LoadTextureDataMarker.Auto();
-            texture.LoadRawTextureData(data);
+            texture.LoadRawTextureData(data.AsNativeArray());
         }
         else
         {
@@ -518,7 +516,7 @@ internal static class DDSLoader
                         $"input and output lengths do not match (input {data.Length}, output {texdata.Length})"
                     );
 
-                texdata.CopyFrom(data);
+                texdata.CopyFrom(data.AsNativeArray());
             });
         }
 
@@ -532,7 +530,7 @@ internal static class DDSLoader
         TextureHandleImpl handle,
         TextureLoadOptions options,
         TextureMetadata metadata,
-        Task<NativeArray<byte>> dataTask
+        Task<LargeNativeArray<byte>> dataTask
     )
         where T : Texture
     {
@@ -559,7 +557,7 @@ internal static class DDSLoader
         var height = metadata.height;
         var format = metadata.format;
 
-        int offset = 0;
+        long offset = 0;
         for (int element = 0; element < arraySize; ++element)
         {
             for (int mip = 0; mip < mipCount; ++mip)
@@ -571,7 +569,8 @@ internal static class DDSLoader
                         "Invalid DDS file: not enough data for specified texture size"
                     );
 
-                tex2dArray.SetPixelData(buffer, mip, element, offset);
+                var mipData = buffer.GetSubArray(offset, mipSize).AsNativeArray();
+                tex2dArray.SetPixelData(mipData, mip, element);
                 offset += mipSize;
             }
         }
@@ -585,7 +584,7 @@ internal static class DDSLoader
         TextureHandleImpl handle,
         TextureLoadOptions options,
         TextureMetadata metadata,
-        Task<NativeArray<byte>> dataTask
+        Task<LargeNativeArray<byte>> dataTask
     )
         where T : Texture
     {
@@ -607,7 +606,7 @@ internal static class DDSLoader
 
         var buffer = await dataTask;
 
-        int offset = 0;
+        long offset = 0;
         for (int face = 0; face < 6; ++face)
         {
             for (int mip = 0; mip < mipCount; ++mip)
@@ -619,7 +618,8 @@ internal static class DDSLoader
                         "Invalid DDS file: not enough data for specified texture size"
                     );
 
-                cubemap.SetPixelData(buffer, mip, (CubemapFace)face, offset);
+                var mipData = buffer.GetSubArray(offset, mipSize).AsNativeArray();
+                cubemap.SetPixelData(mipData, mip, (CubemapFace)face);
                 offset += mipSize;
             }
         }
@@ -633,7 +633,7 @@ internal static class DDSLoader
         TextureHandleImpl handle,
         TextureLoadOptions options,
         TextureMetadata metadata,
-        Task<NativeArray<byte>> dataTask
+        Task<LargeNativeArray<byte>> dataTask
     )
         where T : Texture
     {
@@ -660,7 +660,7 @@ internal static class DDSLoader
 
         var buffer = await dataTask;
 
-        int offset = 0;
+        long offset = 0;
         for (int element = 0; element < arraySize; ++element)
         {
             int face = element % 6;
@@ -673,7 +673,8 @@ internal static class DDSLoader
                         "Invalid DDS file: not enough data for specified texture size"
                     );
 
-                cubeArray.SetPixelData(buffer, mip, (CubemapFace)face, element, offset);
+                var mipData = buffer.GetSubArray(offset, mipSize).AsNativeArray();
+                cubeArray.SetPixelData(mipData, mip, (CubemapFace)face, element);
                 offset += mipSize;
             }
         }
@@ -686,7 +687,7 @@ internal static class DDSLoader
         TextureHandleImpl handle,
         TextureLoadOptions options,
         TextureMetadata metadata,
-        Task<NativeArray<byte>> dataTask
+        Task<LargeNativeArray<byte>> dataTask
     )
         where T : Texture
     {
@@ -715,7 +716,7 @@ internal static class DDSLoader
 
         var buffer = await dataTask;
 
-        int offset = 0;
+        long offset = 0;
         for (int mip = 0; mip < mipCount; ++mip)
         {
             var mipSize = Get3DMipMapSize(width, height, depth, mip, format);
@@ -723,7 +724,8 @@ internal static class DDSLoader
             if (offset + mipSize > buffer.Length)
                 throw new Exception("Invalid DDS file: not enough data for specified texture size");
 
-            tex3d.SetPixelData(buffer, mip, offset);
+            var mipData = buffer.GetSubArray(offset, mipSize).AsNativeArray();
+            tex3d.SetPixelData(mipData, mip);
             offset += mipSize;
         }
 
@@ -758,10 +760,8 @@ internal static class DDSLoader
             var info = ReadFileHeader(br, mmap.fileLength);
 
             var length = info.fileLength;
-            if (length > int.MaxValue)
-                throw new Exception("DDS file data was larger than 2GB");
 
-            var mmapData = mmap.GetNativeArray(info.dataOffset, (int)length);
+            var mmapData = mmap.GetLargeNativeArray(info.dataOffset, length);
             var dataTask = Task.FromResult(mmapData);
             var infoTask = Task.FromResult(info);
             var metadata = await GetTextureMetadata<UnityEngine.Texture2D>(
@@ -778,12 +778,19 @@ internal static class DDSLoader
 
             var format = GraphicsFormatUtility.GetTextureFormat(metadata.format);
 
-            if (data == mmapData)
+            var dataNative = data.AsNativeArray();
+            bool isSame;
+            unsafe
+            {
+                isSame = data.GetUnsafePtr() == mmapData.GetUnsafePtr();
+            }
+
+            if (isSame)
             {
                 var texture = CPUTexture2D.Create(
                     mmap.file,
                     mmap.accessor,
-                    data,
+                    dataNative,
                     metadata.width,
                     metadata.height,
                     metadata.mipCount,
@@ -795,7 +802,7 @@ internal static class DDSLoader
             else
             {
                 return CPUTexture2D.Create(
-                    data,
+                    dataNative,
                     metadata.width,
                     metadata.height,
                     metadata.mipCount,
@@ -829,6 +836,9 @@ internal static class DDSLoader
                 length,
                 Allocator.Invalid
             );
+
+        public readonly LargeNativeArray<byte> GetLargeNativeArray(long offset, long length) =>
+            new(pointer + offset, length, Allocator.Invalid);
     }
 
     static unsafe MmapInfo MapFile(string diskPath)

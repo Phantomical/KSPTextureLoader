@@ -2,6 +2,7 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using KSPTextureLoader.Burst;
+using KSPTextureLoader.Utils;
 using Smooth.Delegates;
 using Unity.Burst;
 using Unity.Collections;
@@ -30,14 +31,14 @@ partial class CPUTexture2D
         public int MipCount { get; }
         public TextureFormat Format => TextureFormat.RGB24;
 
-        readonly NativeArray<Color24> data;
+        readonly LargeNativeArray<Color24> data;
 
-        public unsafe RGB24(NativeArray<byte> data, int width, int height, int mipCount)
+        public unsafe RGB24(LargeNativeArray<byte> data, int width, int height, int mipCount)
         {
             if (sizeof(Color24) != 3)
                 throw new Exception("sizeof(Color24) was not 3");
 
-            this.data = data.Reinterpret<Color24>(sizeof(byte));
+            this.data = data.Reinterpret<Color24>();
             this.Width = width;
             this.Height = height;
             this.MipCount = mipCount;
@@ -48,6 +49,9 @@ partial class CPUTexture2D
                     $"data size did not match expected texture size (expected {expected}, but got {data.Length} instead)"
                 );
         }
+
+        public RGB24(NativeArray<byte> data, int width, int height, int mipCount)
+            : this((LargeNativeArray<byte>)data, width, height, mipCount) { }
 
         public Color32 GetPixel32(int x, int y, int mipLevel = 0)
         {
@@ -64,10 +68,10 @@ partial class CPUTexture2D
         public Color GetPixelBilinear(float u, float v, int mipLevel = 0) =>
             CPUTexture2D.GetPixelBilinear(in this, u, v, mipLevel);
 
-        public unsafe NativeArray<T> GetRawTextureData<T>()
+        public NativeArray<T> GetRawTextureData<T>()
             where T : unmanaged
         {
-            return GetNonOwningNativeArray(data).Reinterpret<T>(sizeof(Color24));
+            return data.Reinterpret<T>().AsNativeArray();
         }
 
         public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp)

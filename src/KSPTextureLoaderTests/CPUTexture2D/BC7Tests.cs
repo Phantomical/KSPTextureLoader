@@ -1,6 +1,7 @@
 using System;
 using KSP.Testing;
 using KSPTextureLoader;
+using KSPTextureLoader.Utils;
 using Unity.Collections;
 using UnityEngine;
 
@@ -84,7 +85,15 @@ public class BC7Tests : CPUTexture2DTests
     )
     {
         var native = new NativeArray<byte>(blockData, Allocator.Temp);
-        return (new CPUTexture2D.BC7(native, width, height, mipCount), native);
+        return (
+            new CPUTexture2D.BC7(
+                LargeNativeArray<byte>.FromNativeArray(native),
+                width,
+                height,
+                mipCount
+            ),
+            native
+        );
     }
 
     void BC7_AssertPixel(
@@ -1484,7 +1493,12 @@ public class BC7Tests : CPUTexture2DTests
         var nativeCopy = new NativeArray<byte>(blockData, Allocator.Temp);
         try
         {
-            var bc7 = new CPUTexture2D.BC7(nativeCopy, 16, 16, 1);
+            var bc7 = new CPUTexture2D.BC7(
+                LargeNativeArray<byte>.FromNativeArray(nativeCopy),
+                16,
+                16,
+                1
+            );
 
             for (int y = 0; y < 16; y++)
             for (int x = 0; x < 16; x++)
@@ -1704,7 +1718,12 @@ public class BC7Tests : CPUTexture2DTests
         var nativeCopy = new NativeArray<byte>(blockData, Allocator.Temp);
         try
         {
-            var bc7 = new CPUTexture2D.BC7(nativeCopy, 8, 8, 1);
+            var bc7 = new CPUTexture2D.BC7(
+                LargeNativeArray<byte>.FromNativeArray(nativeCopy),
+                8,
+                8,
+                1
+            );
 
             for (int y = 0; y < 8; y++)
             for (int x = 0; x < 8; x++)
