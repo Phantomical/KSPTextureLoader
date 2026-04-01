@@ -29,6 +29,26 @@ internal static class DX11
     static uint LastUpdateCount = uint.MaxValue;
     static Direct3D11.Texture2D Dx11Texture;
 
+    static Direct3D11.Device GetDevice()
+    {
+        if (ReferenceTexture == null)
+        {
+            ReferenceTexture = new UnityEngine.Texture2D(1, 1);
+            LastUpdateCount = uint.MaxValue;
+        }
+
+        var updateCount = ReferenceTexture.updateCount;
+        if (LastUpdateCount != updateCount)
+        {
+            using var nativePtrScope = GetNativeTexturePtr.Auto();
+
+            LastUpdateCount = updateCount;
+            Dx11Texture = new Direct3D11.Texture2D(ReferenceTexture.GetNativeTexturePtr());
+        }
+
+        return Dx11Texture.Device;
+    }
+
     internal static bool SupportsAsyncUpload(int width, int height, GraphicsFormat format)
     {
         if (!Config.Instance.AllowNativeUploads)
@@ -71,24 +91,9 @@ internal static class DX11
                 "DX11.UploadTexture2D called with a graphics format not natively supported by DX11"
             );
 
-        if (ReferenceTexture == null)
-        {
-            ReferenceTexture = new UnityEngine.Texture2D(1, 1);
-            LastUpdateCount = uint.MaxValue;
-        }
-
-        var updateCount = ReferenceTexture.updateCount;
-        if (LastUpdateCount != updateCount)
-        {
-            using var nativePtrScope = GetNativeTexturePtr.Auto();
-
-            LastUpdateCount = updateCount;
-            Dx11Texture = new Direct3D11.Texture2D(ReferenceTexture.GetNativeTexturePtr());
-        }
+        var device = GetDevice();
 
         bool readable = TextureLoader.Texture2DShouldBeReadable<T>(options);
-        var reftex = Dx11Texture;
-        var device = reftex.Device;
 
         var task = Task.Run(async () =>
         {
@@ -182,6 +187,124 @@ internal static class DX11
             TextureUtils.MarkExternalTextureAsUnreadable(texture);
 
         handle.SetTexture<T>(texture, options);
+    }
+
+    internal static async Task UploadTextureCubemapAsync<T>(
+        TextureHandleImpl handle,
+        TextureLoadOptions options,
+        TextureMetadata metadata,
+        Task<LargeNativeArray<byte>> dataTask
+    )
+        where T : Texture
+    {
+        using var dguard = new TaskArrayDisposeGuard(dataTask);
+
+        if (GetDxgiFormat(metadata.format) is not DXGIFormat dx11format)
+            throw new NotSupportedException(
+                "DX11.UploadTextureCubemap called with a graphics format not natively supported by DX11"
+            );
+
+        var device = GetDevice();
+
+        var task = Task.Run(async () =>
+        {
+            var buffer = await dataTask;
+
+            using var scope = CreateDX11Texture.Auto();
+
+            var desc = new Texture2DDescription
+            {
+                Width = metadata.width,
+                Height = metadata.height,
+                MipLevels = metadata.mipCount,
+                ArraySize = 6,
+                Format = dx11format,
+                SampleDescription = new(1, 0),
+                Usage = ResourceUsage.Default,
+                BindFlags = BindFlags.ShaderResource,
+                OptionFlags = ResourceOptionFlags.TextureCube,
+            };
+
+            var boxes = FillCubemapInitData(metadata, buffer);
+            return new Direct3D11.Texture2D(device, desc, boxes);
+        });
+
+        using var texguard = new Dx11AsyncTextureGuard(task);
+        dguard.AddDependency(task);
+        dguard.Dispose();
+
+        var dx11texture = await task;
+        var cubemap = TextureUtils.CreateExternalCubemap(
+            metadata.width,
+            metadata.mipCount,
+            metadata.format,
+            dx11texture.NativePointer
+        );
+        texguard.task = null;
+        handle.externalResource = dx11texture;
+
+        switch (Texture.anisotropicFiltering)
+        {
+            case AnisotropicFiltering.ForceEnable:
+            case AnisotropicFiltering.Enable:
+                cubemap.anisoLevel = 9;
+                break;
+        }
+
+        TextureUtils.MarkExternalTextureAsUnreadable(cubemap);
+        handle.SetTexture<T>(cubemap, options);
+    }
+
+    static unsafe DataBox[] FillCubemapInitData(
+        TextureMetadata metadata,
+        LargeNativeArray<byte> buffer
+    )
+    {
+        int w = metadata.width;
+        int h = metadata.height;
+        int mipCount = metadata.mipCount;
+        var boxes = new DataBox[6 * mipCount];
+
+        var blockWidth = (int)GraphicsFormatUtility.GetBlockWidth(metadata.format);
+        var blockHeight = (int)GraphicsFormatUtility.GetBlockHeight(metadata.format);
+        var blockSize = (int)GraphicsFormatUtility.GetBlockSize(metadata.format);
+
+        var data = buffer.GetUnsafePtr();
+        long offset = 0;
+
+        for (int face = 0; face < 6; ++face)
+        {
+            int mw = w;
+            int mh = h;
+
+            for (int m = 0; m < mipCount; ++m)
+            {
+                var rowbytes = DivCeil(mw, blockWidth) * blockSize;
+                var allbytes = DivCeil(mh, blockHeight) * rowbytes;
+
+                boxes[face * mipCount + m] = new DataBox(
+                    (IntPtr)(data + offset),
+                    rowbytes,
+                    allbytes
+                );
+                offset += allbytes;
+
+                if (offset > buffer.Length)
+                    throw new IndexOutOfRangeException(
+                        "image buffer was too small for specified image dimensions and mipmaps"
+                    );
+
+                mw >>= 1;
+                mh >>= 1;
+
+                if (mw < 1)
+                    mw = 1;
+                if (mh < 1)
+                    mh = 1;
+            }
+        }
+
+        return boxes;
     }
 
     static unsafe DataBox[] FillInitData(TextureMetadata metadata, LargeNativeArray<byte> buffer)

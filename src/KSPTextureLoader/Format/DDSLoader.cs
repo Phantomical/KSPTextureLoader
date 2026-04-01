@@ -447,6 +447,7 @@ internal static class DDSLoader
                 if (typeof(T) == typeof(CubemapArray))
                     goto case DDSTextureType.CubemapArray;
 
+                dguard.data = null;
                 await LoadTextureCubemap<T>(handle, options, metadata, dataTask);
                 break;
 
@@ -588,11 +589,19 @@ internal static class DDSLoader
     )
         where T : Texture
     {
+        using var dguard = new TaskArrayDisposeGuard(dataTask);
         var arraySize = metadata.arraySize;
         var mipCount = metadata.mipCount;
         var width = metadata.width;
         var height = metadata.height;
         var format = metadata.format;
+
+        if (options.Unreadable && DX11.SupportsAsyncUpload(width, height, format))
+        {
+            dguard.data = null;
+            await DX11.UploadTextureCubemapAsync<T>(handle, options, metadata, dataTask);
+            return;
+        }
 
         var cubemap = TextureUtils.CreateUninitializedCubemap(width, mipCount, format);
         using var texGuard = new TextureCleanupGuard(cubemap);

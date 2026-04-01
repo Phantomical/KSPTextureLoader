@@ -314,6 +314,33 @@ internal static class TextureUtils
 
         return tex;
     }
+
+    internal static Cubemap CreateExternalCubemap(
+        int extent,
+        int mipCount,
+        GraphicsFormat format,
+        IntPtr nativePtr,
+        InternalTextureCreationFlags flags = InternalTextureCreationFlags.None
+    )
+    {
+        var tex = (Cubemap)FormatterServices.GetUninitializedObject(typeof(Cubemap));
+        if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
+            return tex;
+
+        if (mipCount != 1)
+            flags |= InternalTextureCreationFlags.MipChain;
+
+        Cubemap.Internal_Create(
+            tex,
+            extent,
+            mipCount,
+            format,
+            (TextureCreationFlags)flags,
+            nativePtr
+        );
+
+        return tex;
+    }
     #endregion
 
     #region CloneTexture
@@ -505,7 +532,7 @@ internal static class TextureUtils
     }
     #endregion
 
-    internal static void MarkExternalTextureAsUnreadable(Texture2D tex)
+    internal static void MarkExternalTextureAsUnreadable(Texture tex)
     {
         if (!tex.isReadable)
             return;
@@ -522,12 +549,28 @@ internal static class TextureUtils
                 goto default;
 
             default:
-                // This works but results in a warning being emitted from the
-                // render thread.
-                //
-                // Pretty much all users of DX11 should be on Win64, so the
-                // special case above should avoid that warning in most cases.
-                tex.Apply(false, true);
+                if (tex is Texture2D tex2d)
+                {
+                    // This works but results in a warning being emitted from the
+                    // render thread.
+                    //
+                    // Pretty much all users of DX11 should be on Win64, so the
+                    // special case above should avoid that warning in most cases.
+                    tex2d.Apply(false, true);
+                }
+                else
+                {
+                    // Attempting to apply an external Cubemap texture will cause
+                    // a segfault since unity doesn't guard against the texture
+                    // being null.
+                    //
+                    // Luckily we should never hit this path since the branch
+                    // above should take care of it.
+                    Debug.LogWarning(
+                        $"{tex.GetType().Name} cannot be marked as unreadable. Will be left as readable."
+                    );
+                }
+
                 break;
         }
     }
@@ -553,7 +596,7 @@ internal static class TextureUtils
                 if (IntPtr.Size != sizeof(ulong))
                     goto default;
 
-                return DetectBuildInfoForPlatform<DebugWin64Texture2D, ReleaseWin64Texture2D>();
+                return DetectBuildInfoForPlatform<DebugWin64Texture, ReleaseWin64Texture>();
 
             default:
                 return Build.Unknown;
@@ -604,20 +647,20 @@ internal static class TextureUtils
         }
     }
 
-    static bool TryMarkExternalTextureAsUnreadableWin64(Texture2D tex)
+    static bool TryMarkExternalTextureAsUnreadableWin64(Texture tex)
     {
         if (Application.unityVersion != "2019.4.18f1")
             return false;
 
         return BuildInfo switch
         {
-            Build.Debug => TryMarkExternalTextureAsUnreadable<DebugWin64Texture2D>(tex),
-            Build.Release => TryMarkExternalTextureAsUnreadable<ReleaseWin64Texture2D>(tex),
+            Build.Debug => TryMarkExternalTextureAsUnreadable<DebugWin64Texture>(tex),
+            Build.Release => TryMarkExternalTextureAsUnreadable<ReleaseWin64Texture>(tex),
             _ => false,
         };
     }
 
-    static unsafe bool TryMarkExternalTextureAsUnreadable<T>(Texture2D tex)
+    static unsafe bool TryMarkExternalTextureAsUnreadable<T>(Texture tex)
         where T : unmanaged, ITexture2DInternals
     {
         var wintex = (T*)tex.m_CachedPtr;

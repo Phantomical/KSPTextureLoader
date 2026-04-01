@@ -8,14 +8,14 @@ interface ITexture2DInternals
 }
 
 [StructLayout(LayoutKind.Explicit)]
-internal struct DebugWin64Texture2D : ITexture2DInternals
+internal struct DebugWin64Texture : ITexture2DInternals
 {
     [field: FieldOffset(0x125)]
     public byte m_IsReadable { get; set; }
 }
 
 [StructLayout(LayoutKind.Explicit)]
-internal struct ReleaseWin64Texture2D : ITexture2DInternals
+internal struct ReleaseWin64Texture : ITexture2DInternals
 {
     [field: FieldOffset(0x105)]
     public byte m_IsReadable { get; set; }
