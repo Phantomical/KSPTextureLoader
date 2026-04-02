@@ -129,14 +129,24 @@ internal class TexturePreviewPopup : MonoBehaviour
         int rows = CrossLayout.GetLength(0);
         int cols = CrossLayout.GetLength(1);
 
-        var gridGo = new GameObject("CubemapGrid", typeof(RectTransform));
-        gridGo.transform.SetParent(contentArea, false);
-        gridGo.SetActive(false);
-        popup.cubemapGrid = gridGo;
+        // Outer container participates in the content area's layout group.
+        // The inner grid uses AspectRatioFitter.FitInParent to maintain 4:3,
+        // avoiding conflicts between the layout group and the fitter.
+        var containerGo = new GameObject("CubemapGrid", typeof(RectTransform));
+        containerGo.transform.SetParent(contentArea, false);
+        containerGo.SetActive(false);
+        popup.cubemapGrid = containerGo;
 
-        var gridLayoutElem = gridGo.AddComponent<LayoutElement>();
-        gridLayoutElem.flexibleWidth = 1f;
-        gridLayoutElem.flexibleHeight = 1f;
+        var containerLayout = containerGo.AddComponent<LayoutElement>();
+        containerLayout.flexibleWidth = 1f;
+        containerLayout.flexibleHeight = 1f;
+
+        var gridGo = new GameObject("CubemapGridInner", typeof(RectTransform));
+        gridGo.transform.SetParent(containerGo.transform, false);
+
+        var gridFitter = gridGo.AddComponent<AspectRatioFitter>();
+        gridFitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+        gridFitter.aspectRatio = (float)cols / rows;
 
         var gridVlg = gridGo.AddComponent<VerticalLayoutGroup>();
         gridVlg.childControlWidth = true;
