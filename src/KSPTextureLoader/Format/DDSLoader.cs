@@ -797,12 +797,18 @@ internal static class DDSLoader
             var mmapData = mmap.GetLargeNativeArray(info.dataOffset, length);
             var dataTask = Task.FromResult(mmapData);
             var infoTask = Task.FromResult(info);
-            var metadata = await GetTextureMetadata<UnityEngine.Texture2D>(
-                infoTask,
-                dataTask,
-                options
-            );
-            var data = await metadata.data;
+
+            TextureMetadata metadata;
+            LargeNativeArray<byte> data;
+            using (new ScopeSuspendGuard(scope))
+            {
+                metadata = await GetTextureMetadata<UnityEngine.Texture2D>(
+                    infoTask,
+                    dataTask,
+                    options
+                );
+                data = await metadata.data;
+            }
 
             if (metadata.type != DDSTextureType.Texture2D)
                 throw new NotImplementedException(

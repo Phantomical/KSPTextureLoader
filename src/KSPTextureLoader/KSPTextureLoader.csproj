@@ -69,6 +69,9 @@
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.UnitySynchronizationContext" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.UnitySynchronizationContext+WorkRequest" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.UnitySynchronizationContext.m_AsyncWorkQueue" />
+        <Publicize Include="UnityEngine.CoreModule:Unity.Profiling.ProfilerMarker+AutoScope.m_Ptr" />
+        <Publicize Include="UnityEngine.CoreModule:Unity.Profiling.ProfilerMarker.Internal_Begin" />
+        <Publicize Include="UnityEngine.CoreModule:Unity.Profiling.ProfilerMarker.Internal_End" />
     </ItemGroup>
 
     <!--
