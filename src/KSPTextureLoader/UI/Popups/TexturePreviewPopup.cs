@@ -5,9 +5,37 @@ using KSP.UI.Screens.DebugToolbar;
 using KSPTextureLoader.UI;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace KSPTextureLoader;
+
+/// <summary>
+/// Layout element that reports a preferred height derived from its own width and a
+/// configured aspect ratio. This feeds into <see cref="ContentSizeFitter"/> so a
+/// scrollable grid can compute its total content height.
+/// </summary>
+internal class AspectPreferredHeight : UIBehaviour, ILayoutElement
+{
+    public float aspectRatio = 1f;
+
+    public void CalculateLayoutInputHorizontal() { }
+
+    public void CalculateLayoutInputVertical() { }
+
+    public float minWidth => -1f;
+    public float preferredWidth => -1f;
+    public float flexibleWidth => -1f;
+    public float minHeight => -1f;
+    public float preferredHeight => ((RectTransform)transform).rect.width / aspectRatio;
+    public float flexibleHeight => -1f;
+    public int layoutPriority => 1;
+
+    protected override void OnRectTransformDimensionsChange()
+    {
+        LayoutRebuilder.MarkLayoutForRebuild((RectTransform)transform.parent);
+    }
+}
 
 internal class TexturePreviewPopup : MonoBehaviour
 {
@@ -413,26 +441,54 @@ internal class TexturePreviewPopup : MonoBehaviour
         // Build the grid dynamically in the content area (same parent as textureContainer)
         var contentArea = textureContainer.transform.parent;
 
-        var containerGo = new GameObject("ArrayGrid", typeof(RectTransform));
-        containerGo.transform.SetParent(contentArea, false);
+        // ScrollView root — participates in the content area's layout group
+        var scrollViewGo = new GameObject("ArrayScrollView", typeof(RectTransform));
+        scrollViewGo.transform.SetParent(contentArea, false);
 
-        var containerLayout = containerGo.AddComponent<LayoutElement>();
-        containerLayout.flexibleWidth = 1f;
-        containerLayout.flexibleHeight = 1f;
+        var scrollViewLayout = scrollViewGo.AddComponent<LayoutElement>();
+        scrollViewLayout.flexibleWidth = 1f;
+        scrollViewLayout.flexibleHeight = 1f;
 
-        var gridGo = new GameObject("ArrayGridInner", typeof(RectTransform));
-        gridGo.transform.SetParent(containerGo.transform, false);
+        // Viewport with mask
+        var viewportGo = new GameObject("Viewport", typeof(RectTransform));
+        viewportGo.transform.SetParent(scrollViewGo.transform, false);
+        var viewportRect = viewportGo.GetComponent<RectTransform>();
+        viewportRect.anchorMin = Vector2.zero;
+        viewportRect.anchorMax = Vector2.one;
+        viewportRect.offsetMin = Vector2.zero;
+        viewportRect.offsetMax = Vector2.zero;
+        viewportGo.AddComponent<RectMask2D>();
 
-        var gridFitter = gridGo.AddComponent<AspectRatioFitter>();
-        gridFitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
-        gridFitter.aspectRatio = (float)ArrayGridCols / rows * aspect;
+        // Scrollable content — sized by its children
+        var gridGo = new GameObject("Content", typeof(RectTransform));
+        gridGo.transform.SetParent(viewportGo.transform, false);
+        var gridRect = gridGo.GetComponent<RectTransform>();
+        gridRect.anchorMin = new Vector2(0f, 1f);
+        gridRect.anchorMax = Vector2.one;
+        gridRect.pivot = new Vector2(0.5f, 1f);
+        gridRect.offsetMin = Vector2.zero;
+        gridRect.offsetMax = Vector2.zero;
 
         var gridVlg = gridGo.AddComponent<VerticalLayoutGroup>();
         gridVlg.childControlWidth = true;
-        gridVlg.childControlHeight = true;
+        gridVlg.childControlHeight = false;
         gridVlg.childForceExpandWidth = true;
-        gridVlg.childForceExpandHeight = true;
+        gridVlg.childForceExpandHeight = false;
         gridVlg.spacing = 2f;
+
+        var gridFitter = gridGo.AddComponent<ContentSizeFitter>();
+        gridFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        // ScrollRect
+        var scrollRect = scrollViewGo.AddComponent<ScrollRect>();
+        scrollRect.viewport = viewportRect;
+        scrollRect.content = gridRect;
+        scrollRect.horizontal = false;
+        scrollRect.vertical = true;
+        scrollRect.movementType = ScrollRect.MovementType.Clamped;
+
+        // Scrollbar
+        DebugUIManager.CreateScrollbar(scrollViewGo.transform, scrollRect);
 
         sliceTextures = new Texture2D[depth];
 
@@ -449,9 +505,12 @@ internal class TexturePreviewPopup : MonoBehaviour
             rowHlg.childForceExpandHeight = true;
             rowHlg.spacing = 2f;
 
-            var rowLayout = rowGo.AddComponent<LayoutElement>();
-            rowLayout.flexibleWidth = 1f;
-            rowLayout.flexibleHeight = 1f;
+            var rowFitter = rowGo.AddComponent<AspectRatioFitter>();
+            rowFitter.aspectMode = AspectRatioFitter.AspectMode.WidthControlsHeight;
+            rowFitter.aspectRatio = ArrayGridCols * aspect;
+
+            var rowAspect = rowGo.AddComponent<AspectPreferredHeight>();
+            rowAspect.aspectRatio = ArrayGridCols * aspect;
 
             for (int col = 0; col < ArrayGridCols; col++)
             {
@@ -469,9 +528,9 @@ internal class TexturePreviewPopup : MonoBehaviour
 
                     var sliceImage = imgGo.AddComponent<RawImage>();
 
-                    var fitter = imgGo.AddComponent<AspectRatioFitter>();
-                    fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
-                    fitter.aspectRatio = aspect;
+                    var imgFitter = imgGo.AddComponent<AspectRatioFitter>();
+                    imgFitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+                    imgFitter.aspectRatio = aspect;
 
                     var sliceTex = TextureUtils.ExtractArraySlice(array, sliceIndex);
                     sliceTextures[sliceIndex] = sliceTex;
