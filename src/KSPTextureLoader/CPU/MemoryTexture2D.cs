@@ -47,6 +47,7 @@ internal sealed unsafe class MemoryTexture2D<TTexture> : CPUTexture2D<TTexture>
         : base(texture)
     {
         this.data = data;
+        this.allocator = allocator;
     }
 
     ~MemoryTexture2D()

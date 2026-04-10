@@ -206,7 +206,7 @@ internal static class TextureUtils
         InternalTextureCreationFlags flags = InternalTextureCreationFlags.None
     )
     {
-        var tex = (Texture3D)FormatterServices.GetUninitializedObject(typeof(Texture2D));
+        var tex = (Texture3D)FormatterServices.GetUninitializedObject(typeof(Texture3D));
         if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
             return tex;
 
@@ -263,7 +263,7 @@ internal static class TextureUtils
         InternalTextureCreationFlags flags = InternalTextureCreationFlags.None
     )
     {
-        var tex = (CubemapArray)FormatterServices.GetUninitializedObject(typeof(Cubemap));
+        var tex = (CubemapArray)FormatterServices.GetUninitializedObject(typeof(CubemapArray));
 
         if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
             return tex;

@@ -114,8 +114,8 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             int i = 0;
             for (int y = 0; y < p.height; ++y)
             {
-                for (int x = 0; x < p.height; ++x)
-                    pixels[i] = GetPixel(x, y, mipLevel);
+                for (int x = 0; x < p.width; ++x)
+                    pixels[i++] = GetPixel(x, y, mipLevel);
             }
 
             return pixels;
@@ -145,8 +145,8 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             int i = 0;
             for (int y = 0; y < p.height; ++y)
             {
-                for (int x = 0; x < p.height; ++x)
-                    pixels[i] = GetPixel32(x, y, mipLevel);
+                for (int x = 0; x < p.width; ++x)
+                    pixels[i++] = GetPixel32(x, y, mipLevel);
             }
 
             return pixels;
@@ -441,10 +441,10 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             offset = 0,
         };
 
-        if (mip > tex.MipCount)
+        if (mip >= tex.MipCount)
             ThrowMipCountOutOfRange(in tex, mip);
 
-        while (mip > 0)
+        while (mip-- > 0)
         {
             p.offset += p.width * p.height;
             p.width = Math.Max(p.width >> 1, 1);

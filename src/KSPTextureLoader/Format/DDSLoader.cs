@@ -728,7 +728,7 @@ internal static class DDSLoader
         var mipCount = metadata.mipCount;
         var width = metadata.width;
         var height = metadata.height;
-        var depth = metadata.arraySize;
+        var depth = metadata.depth;
         var format = metadata.format;
 
         var tex3d = TextureUtils.CreateUninitializedTexture3D(
