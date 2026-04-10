@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using KSPTextureLoader.Utils;
 using SharpDX;
@@ -117,7 +118,20 @@ internal static class DX11
             return new Direct3D11.Texture2D(device, desc, boxes);
         });
 
+        var srvTask = Task.Run(async () =>
+        {
+            var texture = await task;
+            var desc = new ShaderResourceViewDescription
+            {
+                Format = dx11format,
+                Dimension = SharpDX.Direct3D.ShaderResourceViewDimension.Texture2D,
+                Texture2D = new() { MostDetailedMip = 0, MipLevels = -1 },
+            };
+            return new ShaderResourceView(device, texture, desc);
+        });
+
         using var texguard = new AsyncDisposeGuard<Direct3D11.Texture2D>(task);
+        using var srvguard = new AsyncDisposeGuard<ShaderResourceView>(srvTask);
         dguard.AddDependency(task);
 
         UnityEngine.Texture2D texture = null;
@@ -148,26 +162,28 @@ internal static class DX11
             dguard.Dispose();
 
             var dx11texture = await task;
-            texture.UpdateExternalTexture(dx11texture.NativePointer);
-            texguard.task = null;
-            handle.externalResource = dx11texture;
+            var dx11srv = await srvTask;
 
+            // With UpdateExternalTexture Unity's DeleteTexture will also delete
+            // the texture reference. We need to manually add an additional
+            // reference to compensate for this.
+            Marshal.AddRef(dx11texture.NativePointer);
+
+            texture.UpdateExternalTexture(dx11srv.NativePointer);
             uguard.Clear();
             await copy;
         }
         else
         {
             dguard.Dispose();
-            var dx11texture = await task;
+            var dx11srv = await srvTask;
             texture = TextureUtils.CreateExternalTexture2D(
                 metadata.width,
                 metadata.height,
                 metadata.mipCount,
                 metadata.format,
-                dx11texture.NativePointer
+                dx11srv.NativePointer
             );
-            texguard.task = null;
-            handle.externalResource = dx11texture;
         }
 
         // Unity doesn't configure anisotropic filtering for external textures
@@ -247,16 +263,12 @@ internal static class DX11
         dguard.Dispose();
 
         var dx11srv = await srvTask;
-        var dx11texture = await task;
         var cubemap = TextureUtils.CreateExternalCubemap(
             metadata.width,
             metadata.mipCount,
             metadata.format,
             dx11srv.NativePointer
         );
-        texguard.task = null;
-        srvguard.task = null;
-        handle.externalResource = new SRVResource { srv = dx11srv, texture = dx11texture };
 
         switch (Texture.anisotropicFiltering)
         {
@@ -460,45 +472,22 @@ internal static class DX11
         };
     }
 
-    class Dx11TextureGuard(Direct3D11.Texture2D texture = null) : IDisposable
-    {
-        public Direct3D11.Texture2D texture = texture;
-
-        public void Dispose()
-        {
-            texture?.Dispose();
-        }
-    }
-
     class AsyncDisposeGuard<T>(Task<T> task = null) : IDisposable
         where T : IDisposable
     {
         public Task<T> task = task;
 
-        public void Dispose()
-        {
-            Task.Run(async () =>
-            {
-                try
-                {
-                    (await task).Dispose();
-                }
-                catch { }
-            });
-        }
-    }
-
-    class SRVResource : IDisposable
-    {
-        public IDisposable texture;
-        public IDisposable srv;
+        public void Clear() => task = null;
 
         public void Dispose()
         {
-            Task.Run(() =>
+            if (task == null)
+                return;
+
+            AsyncUtil.LaunchMainThreadTask(async () =>
             {
-                using var texture = this.texture;
-                using var srv = this.srv;
+                var value = await task;
+                await AsyncUtil.RunOnGraphicsThread(value.Dispose);
             });
         }
     }
