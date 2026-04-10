@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.0.32
+### Added
+* The debug UI can now preview array textures.
+
+### Fixed
+* Fixed a couple of bugs in array texture loading.
+* Fixed a crash due native texture objects being freed twice.
+
 ## v1.0.31
 ### Fixed
 * Fixed an issue where DDS cubemaps were being loaded incorrectly.
