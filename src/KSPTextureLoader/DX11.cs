@@ -170,8 +170,8 @@ internal static class DX11
             Marshal.AddRef(dx11texture.NativePointer);
 
             texture.UpdateExternalTexture(dx11srv.NativePointer);
-            uguard.Clear();
             await copy;
+            uguard.Clear();
         }
         else
         {
