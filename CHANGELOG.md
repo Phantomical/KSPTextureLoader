@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.0.33
+### Fixed
+* Fixed a potential memory leak when loading native DX11 textures.
+
 ## v1.0.32
 ### Added
 * The debug UI can now preview array textures.
