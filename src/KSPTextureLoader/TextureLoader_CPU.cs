@@ -2,11 +2,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Threading.Tasks;
-using KSPTextureLoader.Async;
 using KSPTextureLoader.Format;
 using KSPTextureLoader.Utils;
-using Unity.Jobs;
 using Unity.Profiling;
 using UnityEngine;
 
