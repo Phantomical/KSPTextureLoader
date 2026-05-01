@@ -31,6 +31,9 @@ public partial class TextureLoader
     private TextureHandle<T> LoadTextureImpl<T>(string path, TextureLoadOptions options)
         where T : Texture
     {
+        if (path is null)
+            throw new ArgumentNullException(nameof(path), "path argument was null");
+
         TextureHandleImpl GetApplicableExistingHandle(string key)
         {
             if (!textures.TryGetValue(key, out var weakHandle))

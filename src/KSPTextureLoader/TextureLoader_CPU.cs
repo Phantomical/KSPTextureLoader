@@ -20,6 +20,9 @@ public partial class TextureLoader
 
     private CPUTextureHandle LoadCPUTextureImpl(string path, TextureLoadOptions options)
     {
+        if (path is null)
+            throw new ArgumentNullException(nameof(path), "path argument was null");
+
         var key = CanonicalizeResourcePath(path);
         if (
             cpuTextures.TryGetValue(key, out var weak)
