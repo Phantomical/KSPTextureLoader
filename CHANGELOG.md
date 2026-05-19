@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.0.34
+### Fixed
+* The KSP-AVC version file now has the right download URL.
+* Internal errors now emit the actual error, instead of an `AggregateException`.
+* Improved the error message if the texture path is null.
+* Improved the error message if the loaded texture does not have the right shape.
+
 ## v1.0.33
 ### Fixed
 * Fixed a potential memory leak when loading native DX11 textures.
