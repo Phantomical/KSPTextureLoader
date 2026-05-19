@@ -148,7 +148,7 @@ public partial class TextureLoader
 
             try
             {
-                handle.SetTexture(task.Result);
+                handle.SetTexture(task.GetResultUnwrapped());
                 yield break;
             }
             catch (NotSupportedException e)

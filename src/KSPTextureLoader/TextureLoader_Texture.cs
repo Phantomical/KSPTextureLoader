@@ -225,7 +225,7 @@ public partial class TextureLoader
             using (handle.WithCompleteHandler(new TaskCompleteHandler(task)))
                 yield return new WaitUntilTask(task);
 
-            task.GetAwaiter().GetResult();
+            task.GetResultUnwrapped();
             if (!handle.IsComplete)
                 throw new Exception("internal error: task completed but has not set a texture");
         }

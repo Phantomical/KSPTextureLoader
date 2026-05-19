@@ -84,7 +84,7 @@ internal static class PNGLoader
         using (handle.WithCompleteHandler(new TaskCompleteHandler(task)))
             yield return new WaitUntilTask(task);
 
-        var array = task.Result;
+        var array = task.GetResultUnwrapped();
         texture = new Texture2D(1, 1);
         using (LoadImageMarker.Auto())
             texture.LoadImage(array, unreadable);
