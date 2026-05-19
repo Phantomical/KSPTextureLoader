@@ -336,7 +336,7 @@ public partial class TextureLoader
 
         if (src is not T tex)
             throw new Exception(
-                $"Cannot convert a texture of type {src.GetType().Name} to a texture of type {typeof(T).Name}"
+                $"Expected a texture of type {typeof(T).Name} but got a texture of type {src.GetType().Name}"
             );
 
         texGuard.texture = null;
