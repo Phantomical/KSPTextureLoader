@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.0.35
+### Changed
+* Textures loaded from asset bundles can now be unloaded while those asset
+  bundles are still loaded.
+* Asset bundles are now kept loaded while there are textures loaded from them.
+
+### Fixed
+* Removed some allocations from the texture load path.
+
 ## v1.0.34
 ### Fixed
 * The KSP-AVC version file now has the right download URL.
