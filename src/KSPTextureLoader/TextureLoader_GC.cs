@@ -41,8 +41,8 @@ partial class TextureLoader
     {
         using var scope = DestroyUnusedTexturesMarker.Auto();
 
-        UnloadAllAssetBundles();
         DestroyTexturesImmediate();
+        UnloadAllAssetBundles();
     }
 
     void UnloadAllAssetBundles()

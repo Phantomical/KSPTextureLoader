@@ -22,9 +22,16 @@ internal class TextureCleanupGuard(Texture texture, AssetBundleHandle bundle = n
             return;
 
         if (bundle is not null)
-            bundle.AddLeakedTexture(texture);
+        {
+            // Destroying textures loaded from an asset bundle means that we can
+            // never load them again without reloading the whole asset bundle.
+            // Resources.UnloadAsset avoids that issue.
+            Resources.UnloadAsset(texture);
+        }
         else
+        {
             Texture.Destroy(texture);
+        }
 
         texture = null;
         bundle = null;

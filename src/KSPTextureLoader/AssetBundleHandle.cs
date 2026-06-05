@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Runtime.ExceptionServices;
 using Unity.Profiling;
 using UnityEngine;
@@ -23,8 +22,6 @@ public class AssetBundleHandle
     private ExceptionDispatchInfo exception;
     internal ICompleteHandler completeHandler;
     internal IEnumerator coroutine;
-    private List<TextureHandleImpl> loadedTextures;
-    private List<Texture> leakedTextures;
 
     /// <summary>
     /// The path that this asset bundle was loaded from within GameData.
@@ -94,30 +91,14 @@ public class AssetBundleHandle
 
     internal void DestroyNoRemove()
     {
-        if (bundle is not null)
-        {
-            if (Config.Instance.DebugMode >= DebugLevel.Debug)
-                Debug.Log($"[KSPTextureLoader] Unloading asset bundle {Path}");
+        if (bundle is null)
+            return;
 
-            bundle.Unload(false);
-            bundle = null;
-        }
+        if (Config.Instance.DebugMode >= DebugLevel.Debug)
+            Debug.Log($"[KSPTextureLoader] Unloading asset bundle {Path}");
 
-        if (loadedTextures is not null)
-        {
-            foreach (var handle in loadedTextures)
-                handle.Dispose();
-
-            loadedTextures = null;
-        }
-
-        if (leakedTextures is not null)
-        {
-            foreach (var texture in leakedTextures)
-                Texture.Destroy(texture);
-
-            leakedTextures = null;
-        }
+        bundle.Unload(false);
+        bundle = null;
     }
 
     public void WaitUntilComplete()
@@ -144,30 +125,6 @@ public class AssetBundleHandle
             if (!coroutine.MoveNext())
                 break;
         }
-    }
-
-    internal void AddLoadedTexture(TextureHandleImpl handle)
-    {
-        if (IsError)
-        {
-            handle.Dispose();
-            return;
-        }
-
-        loadedTextures ??= [];
-        loadedTextures.Add(handle);
-    }
-
-    internal void AddLeakedTexture(Texture texture)
-    {
-        if (IsError)
-        {
-            Texture.Destroy(texture);
-            return;
-        }
-
-        leakedTextures ??= [];
-        leakedTextures.Add(texture);
     }
 
     internal void SetBundle(AssetBundle bundle)

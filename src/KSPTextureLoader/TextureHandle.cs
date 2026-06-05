@@ -26,9 +26,16 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
     private readonly bool isExternal;
     internal int RefCount { get; private set; } = 1;
     internal string Path { get; private set; }
-    internal string AssetBundle { get; private set; }
+    internal string AssetBundle => bundle?.Path;
 
     private Texture texture;
+
+    // The asset bundle that owns <see cref="texture"/>, or null if the texture
+    // is not a persistent asset loaded directly from a bundle. When set, this
+    // handle keeps the bundle alive and unloads the texture via
+    // Resources.UnloadAsset so that the bundle remains reloadable.
+    private AssetBundleHandle bundle;
+
     private ExceptionDispatchInfo exception;
     internal ICompleteHandler completeHandler;
     internal IEnumerator coroutine;
@@ -252,10 +259,24 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
 
         uint size = texture.isReadable ? TextureUtils.GetTextureSizeInMemory(texture) : 0;
 
-        if (immediate)
+        if (bundle is not null)
+        {
+            // This texture is a persistent asset owned by an asset bundle. Unload
+            // it rather than destroying it so the bundle stays reloadable, then
+            // release our reference so the bundle can be unloaded once the last of
+            // its textures is gone.
+            Resources.UnloadAsset(texture);
+            bundle.Dispose();
+            bundle = null;
+        }
+        else if (immediate)
+        {
             Texture.DestroyImmediate(texture);
+        }
         else
+        {
             Texture.Destroy(texture);
+        }
 
         texture = null;
         GC.SuppressFinalize(this);
@@ -366,10 +387,14 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         where T : Texture
     {
         tex.name = Path;
-        tex = TextureLoader.ConvertForHandle<T>(tex, ref options, setOptions);
+        var original = tex;
+        texture = TextureLoader.ConvertForHandle<T>(tex, ref options, setOptions);
 
-        texture = tex;
-        AssetBundle = setOptions.AssetBundle?.Path;
+        // If we didn't convert the texture then keep the reference to its source
+        // asset bundle.
+        if (ReferenceEquals(texture, original))
+            bundle = setOptions.AssetBundle?.Acquire();
+
         coroutine = null;
         completeHandler = null;
 

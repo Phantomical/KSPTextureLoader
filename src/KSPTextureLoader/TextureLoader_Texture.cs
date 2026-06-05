@@ -180,7 +180,6 @@ public partial class TextureLoader
                     continue;
                 }
 
-                abHandle.AddLoadedTexture(handle.Acquire());
                 handle.SetTexture<T>(
                     asset,
                     options,
