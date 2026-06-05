@@ -10,7 +10,7 @@ namespace KSPTextureLoader;
 public partial class TextureLoader
 {
     internal static readonly Dictionary<string, AssetBundleHandle> assetBundles = new(
-        StringComparer.InvariantCultureIgnoreCase
+        StringComparer.OrdinalIgnoreCase
     );
 
     AssetBundleHandle LoadAssetBundleImpl(string path, bool sync)

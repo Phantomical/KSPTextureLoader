@@ -225,13 +225,11 @@ internal class Config : IConfigNode
                     .TrimEnd('\\', '/');
                 return bundle;
             })
-            .OrderBy(bundle => bundle.prefix, StringComparer.InvariantCultureIgnoreCase)
+            .OrderBy(bundle => bundle.prefix, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         var paths = new string[sorted.Count];
-        var prefixMap = new Dictionary<string, PrefixEntry>(
-            StringComparer.InvariantCultureIgnoreCase
-        );
+        var prefixMap = new Dictionary<string, PrefixEntry>(StringComparer.OrdinalIgnoreCase);
 
         string current = null;
         int start = -1;
@@ -240,7 +238,7 @@ internal class Config : IConfigNode
             var ibundle = sorted[i];
             paths[i] = ibundle.bundle;
 
-            if (string.Equals(current, ibundle.prefix, StringComparison.InvariantCultureIgnoreCase))
+            if (string.Equals(current, ibundle.prefix, StringComparison.OrdinalIgnoreCase))
                 continue;
 
             if (current is not null)
