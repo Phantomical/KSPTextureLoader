@@ -14,6 +14,9 @@ public partial class TextureLoader : MonoBehaviour
     internal static int LastSceneSwitchFrame { get; private set; } = -1;
     internal static bool PendingSceneSwitch => LastSceneSwitchFrame == Time.frameCount;
 
+    // Is the application currently shutting down? Used to suppress the message.
+    private bool isQuitting = false;
+
     private static readonly Type[] SupportedTextureTypes =
     [
         typeof(Texture),
@@ -42,11 +45,22 @@ public partial class TextureLoader : MonoBehaviour
         GameEvents.onGameSceneLoadRequested.Add(OnGameSceneLoadRequested);
     }
 
+    void OnApplicationQuit()
+    {
+        // Unity calls OnApplicationQuit before OnDestroy during shutdown. Tearing
+        // down the TextureLoader is expected in that case, so suppress the error.
+        isQuitting = true;
+    }
+
     void OnDestroy()
     {
-        Debug.LogError(
-            $"[KSPTextureLoader] TextureLoader was destroyed! This should never happen."
-        );
+        if (!isQuitting)
+        {
+            Debug.LogError(
+                $"[KSPTextureLoader] TextureLoader was destroyed! This should never happen."
+            );
+        }
+
         Instance = null;
 
         GameEvents.onGameSceneLoadRequested.Remove(OnGameSceneLoadRequested);
