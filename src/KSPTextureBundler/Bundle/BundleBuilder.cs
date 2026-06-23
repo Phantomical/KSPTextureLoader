@@ -45,8 +45,9 @@ internal static class BundleBuilder
         public int Written;
         public readonly List<SkippedTexture> Skipped = [];
 
-        /// <summary>The bundle's actual identity (m_Name / m_AssetBundleName): the
-        /// requested name with the CAB hash appended for uniqueness.</summary>
+        /// <summary>The bundle's actual identity (m_Name / m_AssetBundleName): an
+        /// explicitly requested name verbatim, or the auto-derived name with the CAB
+        /// hash appended for uniqueness.</summary>
         public string Identity = "";
     }
 
@@ -55,7 +56,8 @@ internal static class BundleBuilder
         IReadOnlyList<TextureInput> inputs,
         string assetBundleName,
         string outputPath,
-        bool streamingMipmaps = false
+        bool streamingMipmaps = false,
+        bool appendCabHash = true
     )
     {
         // The seed must be loaded from a path; write it to a temp file first.
@@ -69,7 +71,8 @@ internal static class BundleBuilder
                 inputs,
                 assetBundleName,
                 outputPath,
-                streamingMipmaps
+                streamingMipmaps,
+                appendCabHash
             );
         }
         finally
@@ -91,7 +94,8 @@ internal static class BundleBuilder
         IReadOnlyList<SourceTexture> textures,
         string assetBundleName,
         string outputPath,
-        bool streamingMipmaps = false
+        bool streamingMipmaps = false,
+        bool appendCabHash = true
     )
     {
         var inputs = textures
@@ -103,7 +107,14 @@ internal static class BundleBuilder
                 Decode = () => ((SourceTexture?)t, (SkippedTexture?)null),
             })
             .ToList();
-        return Build(seedBundle, inputs, assetBundleName, outputPath, streamingMipmaps);
+        return Build(
+            seedBundle,
+            inputs,
+            assetBundleName,
+            outputPath,
+            streamingMipmaps,
+            appendCabHash
+        );
     }
 
     static BuildResult BuildFromSeedFile(
@@ -111,7 +122,8 @@ internal static class BundleBuilder
         IReadOnlyList<TextureInput> inputs,
         string assetBundleName,
         string outputPath,
-        bool streamingMipmaps
+        bool streamingMipmaps,
+        bool appendCabHash
     )
     {
         var result = new BuildResult();
@@ -119,11 +131,14 @@ internal static class BundleBuilder
         string resSName = cab + ".resS";
         string streamPath = $"archive:/{cab}/{resSName}";
 
-        // The bundle's identity (m_Name / m_AssetBundleName) always carries the CAB
-        // hash so two bundles built with the same --name never collide in Unity's
-        // runtime bundle registry. The CAB stays derived from the base name only, so
-        // appending it here introduces no circularity and does not move the resS.
-        string identity = $"{assetBundleName}_{cab.Substring("CAB-".Length)}";
+        // When no explicit name was given, the bundle's identity (m_Name /
+        // m_AssetBundleName) carries the CAB hash so two auto-named bundles never
+        // collide in Unity's runtime bundle registry. An explicitly requested name is
+        // used verbatim. The CAB stays derived from the base name only, so appending
+        // it here introduces no circularity and does not move the resS.
+        string identity = appendCabHash
+            ? $"{assetBundleName}_{cab.Substring("CAB-".Length)}"
+            : assetBundleName;
         result.Identity = identity;
 
         var am = new AssetsManager();

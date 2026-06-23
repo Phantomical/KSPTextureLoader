@@ -25,6 +25,10 @@ internal static class Commands
         bool mipmapStreaming
     )
     {
+        // When the caller supplies an explicit --name, that name is used verbatim as
+        // the bundle identity. Otherwise we fall back to the output file name and
+        // append the CAB hash so auto-named bundles never collide in Unity's registry.
+        bool appendCabHash = name is null;
         name ??= Path.GetFileNameWithoutExtension(output);
         byte[] seed = seedPath is not null ? File.ReadAllBytes(seedPath) : LoadEmbeddedSeed();
 
@@ -59,7 +63,14 @@ internal static class Commands
             })
             .ToList();
 
-        var build = BundleBuilder.Build(seed, jobInputs, name, output, mipmapStreaming);
+        var build = BundleBuilder.Build(
+            seed,
+            jobInputs,
+            name,
+            output,
+            mipmapStreaming,
+            appendCabHash
+        );
 
         foreach (var s in build.Skipped)
             Console.WriteLine($"skip  {Rel(s.SourcePath)}: {s.Reason} ({s.Detail})");
@@ -204,10 +215,13 @@ internal static class Commands
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Write every Texture2D in <paramref name="bundlePath"/> out as a DDS file
-    /// under <paramref name="outDir"/>. By default the AssetBundle container paths
-    /// are recreated as a directory tree (the inverse of <c>build --prefix</c>);
-    /// <paramref name="flat"/> writes each texture as <c>&lt;name&gt;.dds</c> instead.
+    /// Write every Texture2D in <paramref name="bundlePath"/> out under
+    /// <paramref name="outDir"/>. A texture whose container key ends in <c>.png</c>
+    /// (i.e. a PNG packed by <c>build</c>) is written back as a PNG; every other
+    /// texture is written as a DDS, its extension swapped to <c>.dds</c>. By default
+    /// the AssetBundle container paths are recreated as a directory tree (the inverse
+    /// of <c>build --prefix</c>); <paramref name="flat"/> writes each texture as
+    /// <c>&lt;name&gt;.&lt;ext&gt;</c> instead.
     /// </summary>
     public static int Extract(string bundlePath, string outDir, bool flat)
     {
@@ -259,7 +273,17 @@ internal static class Commands
             long off = b["m_StreamData"]["offset"].AsUInt;
 
             var format = (UnityTextureFormat)fmt;
-            if (!DdsWriter.CanWrite(format))
+
+            // The container key keeps the source file's extension, so a bundle built
+            // from a PNG round-trips back to a PNG. Anything else is written as DDS,
+            // its extension swapped to .dds.
+            pathIdToKey.TryGetValue(info.PathId, out var key);
+            bool wantPng =
+                key is not null
+                && key.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+                && PngWriter.CanWrite(format);
+
+            if (!wantPng && !DdsWriter.CanWrite(format))
             {
                 Console.WriteLine($"skip  {name}: texture format {fmt} cannot be written as DDS");
                 skipped++;
@@ -290,23 +314,28 @@ internal static class Commands
                 continue;
             }
 
+            string ext = wantPng ? ".png" : ".dds";
+
             string rel;
-            if (!flat && pathIdToKey.TryGetValue(info.PathId, out var key))
-                rel = Path.ChangeExtension(key, ".dds");
+            if (!flat && key is not null)
+                rel = Path.ChangeExtension(key, ext);
             else
-                rel = Sanitize(name) + ".dds";
+                rel = Sanitize(name) + ext;
 
             string outPath = Path.GetFullPath(
                 Path.Combine(outDir, rel.Replace('/', Path.DirectorySeparatorChar))
             );
             // Guard against odd container keys escaping the output directory.
             if (!outPath.StartsWith(Path.GetFullPath(outDir), StringComparison.OrdinalIgnoreCase))
-                outPath = Path.Combine(Path.GetFullPath(outDir), Sanitize(name) + ".dds");
+                outPath = Path.Combine(Path.GetFullPath(outDir), Sanitize(name) + ext);
             if (!usedPaths.Add(outPath))
                 outPath = MakeUnique(outPath, usedPaths);
 
             Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
-            File.WriteAllBytes(outPath, DdsWriter.Write(format, w, h, mips, pixels));
+            byte[] outBytes = wantPng
+                ? PngWriter.Write(format, w, h, pixels)
+                : DdsWriter.Write(format, w, h, mips, pixels);
+            File.WriteAllBytes(outPath, outBytes);
             written++;
         }
 

@@ -22,12 +22,12 @@ internal static class Program
     {
         var output = new Option<string>("--output", "-o")
         {
-            Description = "Output .bundle path.",
+            Description = "Path that the output bundle will be written to.",
             Required = true,
         };
         var name = new Option<string?>("--name", "-n")
         {
-            Description = "AssetBundle name (default: output file name without extension).",
+            Description = "Override the internal name of the asset bundle",
         };
         var seed = new Option<string?>("--seed")
         {
@@ -39,7 +39,7 @@ internal static class Program
         };
         var mipmapStreaming = new Option<bool>("--mipmap-streaming")
         {
-            Description = "Enable Unity mipmap streaming (m_StreamingMipmaps) on every texture.",
+            Description = "Enabled mipmap streaming on bundled textures.",
         };
         var inputs = new Argument<string[]>("inputs")
         {
@@ -77,9 +77,7 @@ internal static class Program
         };
         var flat = new Option<bool>("--flat")
         {
-            Description =
-                "Write every texture as <name>.dds in the output directory instead of "
-                + "recreating the container path tree.",
+            Description = "Write textures directly to the output directory",
         };
 
         var cmd = new Command("extract", "Extract a bundle's textures as DDS files.");
