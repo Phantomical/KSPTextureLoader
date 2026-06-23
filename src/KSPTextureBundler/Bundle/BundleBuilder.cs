@@ -1,3 +1,4 @@
+using System.Reflection;
 using AssetsTools.NET;
 using AssetsTools.NET.Extra;
 using KSPTextureBundler.Textures;
@@ -14,7 +15,15 @@ namespace KSPTextureBundler.Bundle;
 internal static class BundleBuilder
 {
     const int Texture2DClassId = 28;
+    const int CubemapClassId = 89;
+    const int Texture3DClassId = 117;
+    const int Texture2DArrayClassId = 187;
+    const int CubemapArrayClassId = 188;
     const int AssetBundleClassId = 142;
+
+    // UnityEngine.Rendering.TextureDimension values written to m_TextureDimension.
+    const int TextureDimensionTex2D = 2;
+    const int TextureDimensionCube = 4;
 
     /// <summary>The AssetBundle object is conventionally path id 1; textures follow.</summary>
     const long AssetBundlePathId = 1;
@@ -128,6 +137,17 @@ internal static class BundleBuilder
         if (!afile.Metadata.TypeTreeEnabled)
             throw new InvalidOperationException("seed bundle has no type trees");
 
+        // The seed only carries the Texture2D and AssetBundle type trees. To emit the
+        // other texture objects (Cubemap, Texture3D, Texture2DArray, CubemapArray) we
+        // synthesise their type trees from the embedded class-data package, matched to
+        // the seed file's exact Unity version. AssetFileInfo.Create then registers a
+        // class's type tree into the file metadata on first use.
+        using (var tpk = OpenEmbeddedClassPackage())
+        {
+            am.LoadClassPackage(tpk);
+            am.LoadClassDatabaseFromPackage(afile.Metadata.UnityVersion);
+        }
+
         // Start from a clean object table, keeping the type-tree metadata.
         foreach (var info in afile.Metadata.AssetInfos.ToList())
             afile.Metadata.RemoveAssetInfo(info);
@@ -166,10 +186,20 @@ internal static class BundleBuilder
                     resS.Write(tex.Data, 0, tex.Data.Length);
 
                     long pathId = nextPathId++;
-                    var texField = am.CreateValueBaseField(afileInst, Texture2DClassId);
-                    PopulateTexture(texField, tex, offset, size, streamPath, streamingMipmaps);
+                    int classId = ClassIdFor(tex.Kind);
 
-                    var info = AssetFileInfo.Create(afile, pathId, Texture2DClassId);
+                    // Create the asset info first: for a class not yet in the seed's
+                    // type list this pulls and registers its type tree from the class
+                    // database, which CreateValueBaseField then reads.
+                    var info = AssetFileInfo.Create(afile, pathId, classId, am.ClassDatabase);
+                    if (info is null)
+                        throw new InvalidOperationException(
+                            $"no type tree available for class {classId} ({tex.Kind})"
+                        );
+
+                    var texField = am.CreateValueBaseField(afileInst, classId);
+                    PopulateForKind(texField, tex, offset, size, streamPath, streamingMipmaps);
+
                     info.SetNewData(texField);
                     afile.Metadata.AddAssetInfo(info);
 
@@ -222,13 +252,77 @@ internal static class BundleBuilder
         }
     }
 
-    static void PopulateTexture(
+    static int ClassIdFor(TextureKind kind) =>
+        kind switch
+        {
+            TextureKind.Cubemap => CubemapClassId,
+            TextureKind.Texture3D => Texture3DClassId,
+            TextureKind.Texture2DArray => Texture2DArrayClassId,
+            TextureKind.CubemapArray => CubemapArrayClassId,
+            _ => Texture2DClassId,
+        };
+
+    /// <summary>Dispatch to the right field layout for the texture's object kind.</summary>
+    static void PopulateForKind(
         AssetTypeValueField tex,
         SourceTexture src,
         long streamOffset,
         long streamSize,
         string streamPath,
         bool streamingMipmaps
+    )
+    {
+        switch (src.Kind)
+        {
+            // Cubemap shares Texture2D's field layout exactly (plus a trailing,
+            // left-empty m_SourceTextures), differing only in image count and the
+            // texture dimension.
+            case TextureKind.Cubemap:
+                PopulateTexture(
+                    tex,
+                    src,
+                    streamOffset,
+                    streamSize,
+                    streamPath,
+                    streamingMipmaps,
+                    imageCount: 6,
+                    dimension: TextureDimensionCube
+                );
+                break;
+
+            // Texture3D, Texture2DArray and CubemapArray use the "modern" texture
+            // layout (m_Format is a GraphicsFormat, m_Depth / m_CubemapCount, etc.).
+            case TextureKind.Texture3D:
+            case TextureKind.Texture2DArray:
+            case TextureKind.CubemapArray:
+                PopulateModernTexture(tex, src, streamOffset, streamSize, streamPath);
+                break;
+
+            default:
+                PopulateTexture(
+                    tex,
+                    src,
+                    streamOffset,
+                    streamSize,
+                    streamPath,
+                    streamingMipmaps,
+                    imageCount: 1,
+                    dimension: TextureDimensionTex2D
+                );
+                break;
+        }
+    }
+
+    /// <summary>Populate a classic Texture2D / Cubemap object (m_TextureFormat layout).</summary>
+    static void PopulateTexture(
+        AssetTypeValueField tex,
+        SourceTexture src,
+        long streamOffset,
+        long streamSize,
+        string streamPath,
+        bool streamingMipmaps,
+        int imageCount,
+        int dimension
     )
     {
         tex["m_Name"].AsString = src.Name;
@@ -242,23 +336,79 @@ internal static class BundleBuilder
         SetBool(tex, "m_IsReadable", false);
         SetBool(tex, "m_StreamingMipmaps", streamingMipmaps);
         Set(tex, "m_StreamingMipmapsPriority", 0);
-        Set(tex, "m_ImageCount", 1);
-        Set(tex, "m_TextureDimension", 2); // Tex2D
+        Set(tex, "m_ImageCount", imageCount);
+        Set(tex, "m_TextureDimension", dimension);
 
-        var ts = tex["m_TextureSettings"];
-        if (!ts.IsDummy)
-        {
-            Set(ts, "m_FilterMode", 1); // bilinear
-            Set(ts, "m_Aniso", 1);
-            SetFloat(ts, "m_MipBias", 0f);
-            Set(ts, "m_WrapU", 0); // repeat
-            Set(ts, "m_WrapV", 0);
-            Set(ts, "m_WrapW", 0);
-        }
+        ApplyTextureSettings(tex);
 
         Set(tex, "m_LightmapFormat", 0);
         Set(tex, "m_ColorSpace", src.ColorSpace);
 
+        ApplyStreamData(tex, streamOffset, streamSize, streamPath);
+    }
+
+    /// <summary>
+    /// Populate a Texture3D / Texture2DArray / CubemapArray object. These newer types
+    /// serialize their format in <c>m_Format</c> as a <c>GraphicsFormat</c> (not the
+    /// classic <c>m_TextureFormat</c>), and carry a slice/layer count plus an explicit
+    /// <c>m_DataSize</c> rather than <c>m_CompleteImageSize</c>/<c>m_ImageCount</c>.
+    /// </summary>
+    static void PopulateModernTexture(
+        AssetTypeValueField tex,
+        SourceTexture src,
+        long streamOffset,
+        long streamSize,
+        string streamPath
+    )
+    {
+        tex["m_Name"].AsString = src.Name;
+        Set(tex, "m_ForcedFallbackFormat", 4); // ARGB32
+        SetBool(tex, "m_DownscaleFallback", false);
+        Set(tex, "m_ColorSpace", src.ColorSpace);
+        Set(tex, "m_Format", TextureFormatInfo.ToGraphicsFormat(src.Format, src.ColorSpace));
+        tex["m_Width"].AsInt = src.Width;
+
+        if (src.Kind == TextureKind.CubemapArray)
+        {
+            // CubemapArray faces are square (no m_Height) and it counts cubemaps.
+            Set(tex, "m_CubemapCount", src.Layers);
+        }
+        else
+        {
+            tex["m_Height"].AsInt = src.Height;
+            // m_Depth is the array layer count (Texture2DArray) or depth (Texture3D).
+            Set(tex, "m_Depth", src.Layers);
+        }
+
+        Set(tex, "m_MipCount", src.MipCount);
+        SetUInt(tex, "m_DataSize", checked((uint)streamSize));
+
+        ApplyTextureSettings(tex);
+        SetBool(tex, "m_IsReadable", false);
+
+        ApplyStreamData(tex, streamOffset, streamSize, streamPath);
+    }
+
+    static void ApplyTextureSettings(AssetTypeValueField tex)
+    {
+        var ts = tex["m_TextureSettings"];
+        if (ts.IsDummy)
+            return;
+        Set(ts, "m_FilterMode", 1); // bilinear
+        Set(ts, "m_Aniso", 1);
+        SetFloat(ts, "m_MipBias", 0f);
+        Set(ts, "m_WrapU", 0); // repeat
+        Set(ts, "m_WrapV", 0);
+        Set(ts, "m_WrapW", 0);
+    }
+
+    static void ApplyStreamData(
+        AssetTypeValueField tex,
+        long streamOffset,
+        long streamSize,
+        string streamPath
+    )
+    {
         // No inline pixels: the bytes live in the resS instead.
         tex["image data"].AsByteArray = [];
 
@@ -266,6 +416,16 @@ internal static class BundleBuilder
         sd["offset"].AsUInt = checked((uint)streamOffset);
         sd["size"].AsUInt = checked((uint)streamSize);
         sd["path"].AsString = streamPath;
+    }
+
+    static Stream OpenEmbeddedClassPackage()
+    {
+        var asm = Assembly.GetExecutingAssembly();
+        string? resource = asm.GetManifestResourceNames()
+            .FirstOrDefault(n => n.EndsWith("classdata.tpk", StringComparison.OrdinalIgnoreCase));
+        if (resource is null)
+            throw new InvalidOperationException("embedded classdata.tpk not found");
+        return asm.GetManifestResourceStream(resource)!;
     }
 
     static void PopulateAssetBundle(
@@ -358,6 +518,13 @@ internal static class BundleBuilder
         var f = parent[field];
         if (!f.IsDummy)
             f.AsBool = value;
+    }
+
+    static void SetUInt(AssetTypeValueField parent, string field, uint value)
+    {
+        var f = parent[field];
+        if (!f.IsDummy)
+            f.AsUInt = value;
     }
 
     static void SetFloat(AssetTypeValueField parent, string field, float value)

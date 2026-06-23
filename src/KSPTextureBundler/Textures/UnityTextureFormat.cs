@@ -104,4 +104,70 @@ internal static class TextureFormatInfo
         }
         return total;
     }
+
+    /// <summary>
+    /// Total size of a volume (3D) mip chain: each mip level holds a full slice
+    /// stack, and the depth halves alongside width/height down the chain.
+    /// </summary>
+    public static long VolumeMipChainSize(
+        UnityTextureFormat f,
+        int width,
+        int height,
+        int depth,
+        int mipCount
+    )
+    {
+        long total = 0;
+        int w = width,
+            h = height,
+            d = depth;
+        for (int i = 0; i < mipCount; i++)
+        {
+            total += MipSize(f, w, h) * d;
+            w = Math.Max(1, w >> 1);
+            h = Math.Max(1, h >> 1);
+            d = Math.Max(1, d >> 1);
+        }
+        return total;
+    }
+
+    /// <summary>
+    /// Map a classic <see cref="UnityTextureFormat"/> to the integer value of Unity's
+    /// <c>GraphicsFormat</c> enum, honouring <paramref name="colorSpace"/> (1 = sRGB,
+    /// 0 = linear) for the formats that have both variants. The "modern" texture
+    /// objects (Texture3D, Texture2DArray, CubemapArray) serialize their format in a
+    /// <c>m_Format</c> field that holds a <c>GraphicsFormat</c>, not a
+    /// <c>TextureFormat</c>; Texture2D and Cubemap keep the classic
+    /// <c>m_TextureFormat</c>. Values verified against UnityEngine 2019.4's enum.
+    /// </summary>
+    public static int ToGraphicsFormat(UnityTextureFormat f, int colorSpace)
+    {
+        bool srgb = colorSpace == 1;
+        return f switch
+        {
+            UnityTextureFormat.R8 => srgb ? 1 : 5, // R8_SRGB : R8_UNorm
+            UnityTextureFormat.Alpha8 => 5, // R8_UNorm (no dedicated A8 GraphicsFormat)
+            UnityTextureFormat.RGB24 => srgb ? 3 : 7, // R8G8B8_SRGB : R8G8B8_UNorm
+            UnityTextureFormat.RGBA32 or UnityTextureFormat.ARGB32 => srgb ? 4 : 8, // R8G8B8A8_*
+            UnityTextureFormat.BGRA32 => srgb ? 57 : 59, // B8G8R8A8_SRGB : B8G8R8A8_UNorm
+            UnityTextureFormat.RG16 => 6, // R8G8_UNorm
+            UnityTextureFormat.R16 => 21, // R16_UNorm
+            UnityTextureFormat.RGB565 => 68, // R5G6B5_UNormPack16
+            UnityTextureFormat.RGBA4444 => 66, // R4G4B4A4_UNormPack16
+            UnityTextureFormat.RHalf => 45, // R16_SFloat
+            UnityTextureFormat.RGHalf => 46, // R16G16_SFloat
+            UnityTextureFormat.RGBAHalf => 48, // R16G16B16A16_SFloat
+            UnityTextureFormat.RFloat => 49, // R32_SFloat
+            UnityTextureFormat.RGFloat => 50, // R32G32_SFloat
+            UnityTextureFormat.RGBAFloat => 52, // R32G32B32A32_SFloat
+            UnityTextureFormat.RGB9e5Float => 73, // E5B9G9R9_UFloatPack32
+            UnityTextureFormat.DXT1 => srgb ? 96 : 97, // RGBA_DXT1_SRGB : RGBA_DXT1_UNorm
+            UnityTextureFormat.DXT5 => srgb ? 100 : 101, // RGBA_DXT5_SRGB : RGBA_DXT5_UNorm
+            UnityTextureFormat.BC4 => 102, // R_BC4_UNorm
+            UnityTextureFormat.BC5 => 104, // RG_BC5_UNorm
+            UnityTextureFormat.BC6H => 106, // RGB_BC6H_UFloat
+            UnityTextureFormat.BC7 => srgb ? 108 : 109, // RGBA_BC7_SRGB : RGBA_BC7_UNorm
+            _ => 0, // None
+        };
+    }
 }

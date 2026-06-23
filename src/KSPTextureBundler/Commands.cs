@@ -619,6 +619,32 @@ internal static class Commands
                         + $"mips={b["m_MipCount"].AsInt} streamSize={size} streamPath='{spath}'"
                 );
             }
+            foreach (
+                var (classId, label) in new[]
+                {
+                    (89, "CUBE"),
+                    (117, "TEX3D"),
+                    (187, "TEX2DARR"),
+                    (188, "CUBEARR"),
+                }
+            )
+            {
+                foreach (var info in afile.GetAssetsOfType((AssetClassID)classId))
+                {
+                    var b = am.GetBaseField(afileInst, info);
+                    int Opt(string field) => b[field].IsDummy ? -1 : b[field].AsInt;
+                    int fmt = b["m_TextureFormat"].IsDummy
+                        ? Opt("m_Format")
+                        : b["m_TextureFormat"].AsInt;
+                    Console.WriteLine(
+                        $"  {label} pathId={info.PathId} name='{b["m_Name"].AsString}' "
+                            + $"{Opt("m_Width")}x{Opt("m_Height")} depth={Opt("m_Depth")} "
+                            + $"cubes={Opt("m_CubemapCount")} fmt={fmt} mips={Opt("m_MipCount")} "
+                            + $"streamSize={b["m_StreamData"]["size"].AsUInt}"
+                    );
+                }
+            }
+
             foreach (var info in afile.GetAssetsOfType(AssetClassID.AssetBundle))
             {
                 var b = am.GetBaseField(afileInst, info);

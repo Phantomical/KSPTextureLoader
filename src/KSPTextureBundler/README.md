@@ -12,15 +12,28 @@ It is **not** loaded into KSP. It targets modern .NET (net10.0) and uses
 - A UnityFS bundle (serialized file format 17, Unity 2019.4.18f1) packed with
   **LZ4 high-compression** (`AssetBundleCompressionType.LZ4`, which AssetsTools.NET
   encodes with `LZ4HC` — the same compression Unity's own pipeline uses).
-- One streamed `Texture2D` per input file. Pixel data lives in an external `.resS`
-  resource; the `Texture2D.m_StreamData` points at it via
+- One streamed texture object per input file. A plain DDS becomes a `Texture2D`;
+  a DDS that declares a cubemap, array, or volume becomes the matching Unity object
+  (`Cubemap`, `Texture2DArray`, `Texture3D`, or `CubemapArray`). Pixel data lives in
+  an external `.resS` resource; the object's `m_StreamData` points at it via
   `archive:/CAB-<hash>/CAB-<hash>.resS` — the exact convention the loader resolves.
+  The type-tree schemas for the non-`Texture2D` objects (which the seed bundle does
+  not carry) are synthesized from an embedded AssetsTools.NET class-data package
+  (`classdata/classdata.tpk`), pinned to the seed's Unity version.
 - An `AssetBundle` object whose `m_Container` maps each texture's addressable name
   to its object, so textures resolve both by container path and by name.
 
 DDS pixel data (block-compressed or uncompressed) is copied **verbatim** — the DDS
-mip-chain layout already matches Unity's streamed layout. PNGs are decoded to
-`RGBA32`.
+mip-chain layout already matches Unity's streamed layout, including the face order
+of cubemaps (`+X,-X,+Y,-Y,+Z,-Z`) and the slice order of arrays and volumes. PNGs
+are decoded to `RGBA32`.
+
+The texture kind is detected from the DDS header: a `DDSCAPS2_CUBEMAP` (or DX10
+`TEXTURECUBE`) surface with all six faces becomes a `Cubemap` (a DX10 cube array
+becomes a `CubemapArray`); a DX10 `arraySize > 1` becomes a `Texture2DArray`; a
+volume (`DDSD_DEPTH` / DX10 `TEXTURE3D`) becomes a `Texture3D`. The newer object
+types serialize their format as a Unity `GraphicsFormat` rather than the classic
+`TextureFormat`; `Texture2D` and `Cubemap` keep `m_TextureFormat`.
 
 ## Usage
 
@@ -65,7 +78,8 @@ limit); it is written through a temp file so it is never fully buffered in memor
 KSPTextureBundler extract -o <out-dir> <bundle>
 ```
 
-Writes every `Texture2D` in the bundle out as a DDS file. By default it recreates
+Writes every `Texture2D` in the bundle out as a DDS file (the cubemap, array and
+volume object types are not round-tripped by `extract`). By default it recreates
 the container path tree (the inverse of `build --prefix`); `--flat` writes
 each texture as `<name>.dds` directly under the output directory. Block-compressed
 and standard uncompressed formats round-trip through `build`; the packed 16-bit

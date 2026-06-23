@@ -23,6 +23,15 @@ internal static class DdsReader
     // DDS_HEADER flags
     const uint DDSD_DEPTH = 0x800000;
 
+    // DDS_HEADER.dwCaps2 flags
+    const uint DDSCAPS2_CUBEMAP = 0x200;
+    const uint DDSCAPS2_CUBEMAP_ALLFACES = 0xFC00; // all six face bits set
+    const uint DDSCAPS2_VOLUME = 0x200000;
+
+    // DDS_HEADER_DXT10 fields
+    const uint DDS_DIMENSION_TEXTURE3D = 4; // D3D10_RESOURCE_DIMENSION_TEXTURE3D
+    const uint DDS_RESOURCE_MISC_TEXTURECUBE = 0x4;
+
     static uint FourCC(char a, char b, char c, char d) =>
         (uint)a | (uint)b << 8 | (uint)c << 16 | (uint)d << 24;
 
@@ -58,9 +67,11 @@ internal static class DdsReader
         uint dwFlags = BinaryPrimitives.ReadUInt32LittleEndian(h[4..]);
         int height = (int)BinaryPrimitives.ReadUInt32LittleEndian(h[8..]);
         int width = (int)BinaryPrimitives.ReadUInt32LittleEndian(h[12..]);
+        int depth = (int)BinaryPrimitives.ReadUInt32LittleEndian(h[20..]);
         int mipCount = (int)BinaryPrimitives.ReadUInt32LittleEndian(h[24..]);
         if (mipCount == 0)
             mipCount = 1;
+        uint caps2 = BinaryPrimitives.ReadUInt32LittleEndian(h[108..]);
 
         // DDS_PIXELFORMAT starts at offset 72 within the 124-byte header.
         var pf = h[72..];
@@ -77,12 +88,20 @@ internal static class DdsReader
         UnityTextureFormat? format;
         int colorSpace = 1; // default sRGB; refined for known linear/data formats
 
+        // DDS_HEADER_DXT10 fields (defaults describe a single non-array 2D surface).
+        uint dx10ResourceDimension = 0;
+        uint dx10MiscFlag = 0;
+        uint dx10ArraySize = 1;
+
         if (isDx10)
         {
             if (bytes.Length < 148)
                 return (null, Skip(SkipReason.Invalid, "DX10 header truncated"));
             dataOffset = 148;
             uint dxgi = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(128, 4));
+            dx10ResourceDimension = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(132, 4));
+            dx10MiscFlag = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(136, 4));
+            dx10ArraySize = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(140, 4));
             (format, colorSpace) = MapDxgi(dxgi);
             if (format is null)
                 return (
@@ -144,11 +163,54 @@ internal static class DdsReader
         if (width <= 0 || height <= 0)
             return (null, Skip(SkipReason.Invalid, $"invalid dimensions {width}x{height}"));
 
-        // 3D textures and cubemaps are out of scope for the streamed CPU path.
-        if ((dwFlags & DDSD_DEPTH) != 0)
-            return (null, Skip(SkipReason.UnsupportedFormat, "volume (3D) textures not supported"));
+        // Classify the surface topology: a plain 2D texture, a cubemap (6 faces), a
+        // 2D/cube array (DX10 arraySize), or a volume (3D). DDS stores every face and
+        // array slice as a full mip chain in the same order Unity expects, so the
+        // payload is still copied verbatim regardless of kind.
+        var kind = TextureKind.Texture2D;
+        int layers = 1; // per-kind surface count carried on SourceTexture.Layers
+        long surfaces = 1; // number of full mip chains concatenated in the payload
+        bool volume = false;
 
-        long expected = TextureFormatInfo.MipChainSize(format.Value, width, height, mipCount);
+        bool cube =
+            (caps2 & DDSCAPS2_CUBEMAP) != 0
+            || (isDx10 && (dx10MiscFlag & DDS_RESOURCE_MISC_TEXTURECUBE) != 0);
+
+        if (cube)
+        {
+            // A legacy (non-DX10) cubemap must declare all six faces to be a Unity
+            // Cubemap; partial cubemaps have no equivalent.
+            if (!isDx10 && (caps2 & DDSCAPS2_CUBEMAP_ALLFACES) != DDSCAPS2_CUBEMAP_ALLFACES)
+                return (
+                    null,
+                    Skip(SkipReason.UnsupportedFormat, "partial cubemap (missing faces)")
+                );
+
+            int cubes = isDx10 ? (int)Math.Max(1u, dx10ArraySize) : 1;
+            kind = cubes > 1 ? TextureKind.CubemapArray : TextureKind.Cubemap;
+            layers = cubes; // unused for a single Cubemap; cubemap count for an array
+            surfaces = 6L * cubes;
+        }
+        else if (
+            (dwFlags & DDSD_DEPTH) != 0
+            || (caps2 & DDSCAPS2_VOLUME) != 0
+            || (isDx10 && dx10ResourceDimension == DDS_DIMENSION_TEXTURE3D)
+        )
+        {
+            kind = TextureKind.Texture3D;
+            layers = Math.Max(1, depth);
+            volume = true;
+        }
+        else if (isDx10 && dx10ArraySize > 1)
+        {
+            kind = TextureKind.Texture2DArray;
+            layers = (int)dx10ArraySize;
+            surfaces = dx10ArraySize;
+        }
+
+        long expected = volume
+            ? TextureFormatInfo.VolumeMipChainSize(format.Value, width, height, layers, mipCount)
+            : surfaces * TextureFormatInfo.MipChainSize(format.Value, width, height, mipCount);
         long available = bytes.Length - dataOffset;
         if (available < expected)
             return (
@@ -156,7 +218,7 @@ internal static class DdsReader
                 Skip(
                     SkipReason.Invalid,
                     $"truncated pixel data: have {available} bytes, need {expected} "
-                        + $"for {width}x{height} {format} x{mipCount} mips"
+                        + $"for {kind} {width}x{height} {format} x{mipCount} mips, {layers} layer(s)"
                 )
             );
 
@@ -167,6 +229,8 @@ internal static class DdsReader
             new SourceTexture
             {
                 Name = name,
+                Kind = kind,
+                Layers = layers,
                 Width = width,
                 Height = height,
                 MipCount = mipCount,

@@ -1,6 +1,20 @@
 namespace KSPTextureBundler.Textures;
 
 /// <summary>
+/// Which Unity texture object a source maps to. Drives both the serialized class
+/// (Texture2D 28, Cubemap 89, Texture3D 117, Texture2DArray 187, CubemapArray 188)
+/// and the field layout written into the bundle.
+/// </summary>
+internal enum TextureKind
+{
+    Texture2D,
+    Cubemap,
+    Texture2DArray,
+    Texture3D,
+    CubemapArray,
+}
+
+/// <summary>
 /// A decoded source texture ready to be written into a bundle: its Unity
 /// serialized <see cref="TextureFormat"/>, dimensions, mip count and the raw
 /// mip-chain bytes exactly as they will live in the <c>.resS</c> stream.
@@ -9,6 +23,19 @@ internal sealed class SourceTexture
 {
     /// <summary>The serialized Texture2D <c>m_Name</c> (the input file name without extension).</summary>
     public required string Name { get; init; }
+
+    /// <summary>The Unity texture object kind this source maps to (default: plain 2D).</summary>
+    public TextureKind Kind { get; init; } = TextureKind.Texture2D;
+
+    /// <summary>
+    /// Per-kind surface count: array layers for <see cref="TextureKind.Texture2DArray"/>,
+    /// depth slices for <see cref="TextureKind.Texture3D"/>, and the number of
+    /// cubemaps for <see cref="TextureKind.CubemapArray"/>. Unused (1) for plain 2D
+    /// and single cubemaps. <see cref="Data"/> holds every surface's mip chain
+    /// concatenated in Unity/DDS order (cube faces +X,-X,+Y,-Y,+Z,-Z; array slices
+    /// in index order; 3D mips outer with depth slices within each mip).
+    /// </summary>
+    public int Layers { get; init; } = 1;
 
     /// <summary>
     /// The key the texture is registered under in the AssetBundle container (the

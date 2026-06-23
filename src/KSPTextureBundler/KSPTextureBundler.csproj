@@ -26,6 +26,8 @@
     <ItemGroup>
         <!-- The type-tree seed bundle the builder clones at runtime. -->
         <EmbeddedResource Include="seed/seed.bundle" />
+        <!-- Type-tree data for all default unity types. -->
+        <EmbeddedResource Include="classdata/classdata.tpk" />
     </ItemGroup>
 
     <ItemGroup>
