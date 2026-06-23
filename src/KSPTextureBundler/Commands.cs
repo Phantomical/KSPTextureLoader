@@ -21,7 +21,8 @@ internal static class Commands
         string output,
         string? name,
         string? seedPath,
-        string? prefix
+        string? prefix,
+        bool mipmapStreaming
     )
     {
         name ??= Path.GetFileNameWithoutExtension(output);
@@ -58,7 +59,7 @@ internal static class Commands
             })
             .ToList();
 
-        var build = BundleBuilder.Build(seed, jobInputs, name, output);
+        var build = BundleBuilder.Build(seed, jobInputs, name, output, mipmapStreaming);
 
         foreach (var s in build.Skipped)
             Console.WriteLine($"skip  {Rel(s.SourcePath)}: {s.Reason} ({s.Detail})");

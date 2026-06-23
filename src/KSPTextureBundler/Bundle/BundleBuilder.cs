@@ -45,7 +45,8 @@ internal static class BundleBuilder
         byte[] seedBundle,
         IReadOnlyList<TextureInput> inputs,
         string assetBundleName,
-        string outputPath
+        string outputPath,
+        bool streamingMipmaps = false
     )
     {
         // The seed must be loaded from a path; write it to a temp file first.
@@ -54,7 +55,13 @@ internal static class BundleBuilder
 
         try
         {
-            return BuildFromSeedFile(seedTmp, inputs, assetBundleName, outputPath);
+            return BuildFromSeedFile(
+                seedTmp,
+                inputs,
+                assetBundleName,
+                outputPath,
+                streamingMipmaps
+            );
         }
         finally
         {
@@ -74,7 +81,8 @@ internal static class BundleBuilder
         byte[] seedBundle,
         IReadOnlyList<SourceTexture> textures,
         string assetBundleName,
-        string outputPath
+        string outputPath,
+        bool streamingMipmaps = false
     )
     {
         var inputs = textures
@@ -86,14 +94,15 @@ internal static class BundleBuilder
                 Decode = () => ((SourceTexture?)t, (SkippedTexture?)null),
             })
             .ToList();
-        return Build(seedBundle, inputs, assetBundleName, outputPath);
+        return Build(seedBundle, inputs, assetBundleName, outputPath, streamingMipmaps);
     }
 
     static BuildResult BuildFromSeedFile(
         string seedPath,
         IReadOnlyList<TextureInput> inputs,
         string assetBundleName,
-        string outputPath
+        string outputPath,
+        bool streamingMipmaps
     )
     {
         var result = new BuildResult();
@@ -158,7 +167,7 @@ internal static class BundleBuilder
 
                     long pathId = nextPathId++;
                     var texField = am.CreateValueBaseField(afileInst, Texture2DClassId);
-                    PopulateTexture(texField, tex, offset, size, streamPath);
+                    PopulateTexture(texField, tex, offset, size, streamPath, streamingMipmaps);
 
                     var info = AssetFileInfo.Create(afile, pathId, Texture2DClassId);
                     info.SetNewData(texField);
@@ -218,7 +227,8 @@ internal static class BundleBuilder
         SourceTexture src,
         long streamOffset,
         long streamSize,
-        string streamPath
+        string streamPath,
+        bool streamingMipmaps
     )
     {
         tex["m_Name"].AsString = src.Name;
@@ -230,7 +240,7 @@ internal static class BundleBuilder
         tex["m_TextureFormat"].AsInt = (int)src.Format;
         Set(tex, "m_MipCount", src.MipCount);
         SetBool(tex, "m_IsReadable", false);
-        SetBool(tex, "m_StreamingMipmaps", false);
+        SetBool(tex, "m_StreamingMipmaps", streamingMipmaps);
         Set(tex, "m_StreamingMipmapsPriority", 0);
         Set(tex, "m_ImageCount", 1);
         Set(tex, "m_TextureDimension", 2); // Tex2D

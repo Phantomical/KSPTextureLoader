@@ -37,6 +37,10 @@ internal static class Program
         {
             Description = "A path prefix prepended to every texture path.",
         };
+        var mipmapStreaming = new Option<bool>("--mipmap-streaming")
+        {
+            Description = "Enable Unity mipmap streaming (m_StreamingMipmaps) on every texture.",
+        };
         var inputs = new Argument<string[]>("inputs")
         {
             Description = "A directory containing the texture files",
@@ -48,6 +52,7 @@ internal static class Program
         cmd.Options.Add(name);
         cmd.Options.Add(seed);
         cmd.Options.Add(prefix);
+        cmd.Options.Add(mipmapStreaming);
         cmd.Arguments.Add(inputs);
         cmd.SetAction(pr =>
             Commands.Build(
@@ -55,7 +60,8 @@ internal static class Program
                 pr.GetValue(output)!,
                 pr.GetValue(name),
                 pr.GetValue(seed),
-                pr.GetValue(prefix)
+                pr.GetValue(prefix),
+                pr.GetValue(mipmapStreaming)
             )
         );
         return cmd;

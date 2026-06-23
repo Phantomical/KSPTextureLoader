@@ -41,6 +41,7 @@ KSPTextureBundler build -o <output.bundle> [options] <inputs...>
 | `-o, --output` | Output bundle path (required). |
 | `-n, --name` | AssetBundle name (default: output file name without extension). The CAB hash is always appended to the stored identity, so names never collide. |
 | `--prefix <p>` | Path prefix prepended to every container key (e.g. the GameData mod folder). |
+| `--mipmap-streaming` | Enable Unity mipmap streaming (`m_StreamingMipmaps`) on every texture. |
 | `--seed <bundle>` | Override the embedded type-tree seed bundle. |
 
 Container keys are each file's path relative to the input directory it was found
