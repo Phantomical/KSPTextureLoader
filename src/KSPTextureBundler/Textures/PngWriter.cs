@@ -11,8 +11,7 @@ namespace KSPTextureBundler.Textures;
 /// </summary>
 internal static class PngWriter
 {
-    public static bool CanWrite(UnityTextureFormat format) =>
-        format == UnityTextureFormat.RGBA32;
+    public static bool CanWrite(UnityTextureFormat format) => format == UnityTextureFormat.RGBA32;
 
     public static byte[] Write(
         UnityTextureFormat format,

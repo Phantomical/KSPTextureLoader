@@ -45,7 +45,7 @@ Available options are:
 
 ## Supported texture formats
 This tool can bundle any of the following file formats:
-* png
+* png,
 * dds - provided the format is one supported by unity.
 
 In addition, the dds importer also supports:
