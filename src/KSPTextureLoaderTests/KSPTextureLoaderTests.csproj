@@ -10,6 +10,8 @@
         <TargetFramework>net4.8</TargetFramework>
         <!-- <DebugType>portable</DebugType> -->
         <LangVersion>13</LangVersion>
+        <!-- The asset-bundle parsing tests build EndianBinaryReader over pinned buffers. -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <NoWarn>$(NoWarn);CS0436</NoWarn>
 
         <RepoRootPath>$(MSBuildThisFileDirectory)\..\..</RepoRootPath>

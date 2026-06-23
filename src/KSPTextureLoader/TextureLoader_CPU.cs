@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using KSPTextureLoader.Format;
 using KSPTextureLoader.Utils;
 using Unity.Profiling;
@@ -106,18 +107,30 @@ public partial class TextureLoader
                     continue;
                 }
 
-                if (bundle.Contains(assetPath))
-                {
-                    using var texhandle = LoadTexture<Texture2D>(handle.Path, options);
-                    if (!texhandle.IsComplete)
-                        yield return texhandle;
+                if (!bundle.Contains(assetPath))
+                    continue;
 
-                    handle.SetTexture(
-                        CPUTexture2D.Create(texhandle.Acquire()),
-                        texhandle.AssetBundle
-                    );
+                // Run off the loader thread: the index build and pixel read go
+                // through VfsReader, which expects to be called on a background thread.
+                var task = Task.Run(() =>
+                    LoadFromAssetBundleAsync(abHandle, handle.Path, assetPath)
+                );
+                using (handle.WithCompleteHandler(new TaskCompleteHandler(task)))
+                    yield return new WaitUntil(() => task.IsCompleted);
+
+                var texture = task.GetResultUnwrapped();
+                if (texture is not null)
+                {
+                    handle.SetTexture(texture, abHandle.Path);
                     yield break;
                 }
+
+                using var texhandle = LoadTexture<Texture2D>(handle.Path, options);
+                if (!texhandle.IsComplete)
+                    yield return texhandle;
+
+                handle.SetTexture(CPUTexture2D.Create(texhandle.Acquire()), texhandle.AssetBundle);
+                yield break;
             }
         }
 
@@ -173,5 +186,41 @@ public partial class TextureLoader
         }
 
         handle.SetTexture(CPUTexture2D.Create(texHandle.Acquire()), texHandle.AssetBundle);
+    }
+
+    /// <summary>
+    /// Load the data for a CPU texture by reading its data directly from the asset bundle.
+    /// </summary>
+    /// <param name="handle"></param>
+    /// <param name="path"></param>
+    /// <param name="assetPath"></param>
+    /// <returns></returns>
+    static async Task<CPUTexture2D> LoadFromAssetBundleAsync(
+        AssetBundleHandle handle,
+        string path,
+        string assetPath
+    )
+    {
+        try
+        {
+            var index = await handle.GetIndexAsync();
+            if (!index.Contains(assetPath))
+                return null;
+
+            return await index.LoadTextureAsync(assetPath);
+        }
+        catch (Exception e)
+        {
+            if (Config.Instance.DebugMode > DebugLevel.Debug)
+                return null;
+
+            await AsyncUtil.LaunchMainThreadTask(() =>
+            {
+                Debug.Log(
+                    $"[KSPTextureLoader] Failed to directly load CPU texture {path} from asset bundle {handle.Path}: {e}"
+                );
+            });
+            return null;
+        }
     }
 }

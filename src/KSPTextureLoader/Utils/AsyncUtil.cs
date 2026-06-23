@@ -13,6 +13,8 @@ internal static class AsyncUtil
 {
     struct Empty;
 
+    static bool IsMainThread => TextureLoader.Context.IsMainThread;
+
     #region LaunchMainThreadTask
 
     public static Task LaunchMainThreadTask(Func<Task> func)
@@ -109,15 +111,33 @@ internal static class AsyncUtil
 
     public static Task WaitFor(JobHandle handle)
     {
-        if (handle.IsCompleted)
-            return Task.CompletedTask;
+        TaskCompletionSource<Empty> tcs;
+        if (IsMainThread)
+        {
+            if (handle.IsCompleted)
+                return Task.CompletedTask;
 
-        var tcs = new TaskCompletionSource<Empty>(
-            TaskCreationOptions.RunContinuationsAsynchronously
-        );
-        var job = new NotifyJob(tcs);
-        job.Schedule(handle);
-        JobHandle.ScheduleBatchedJobs();
+            tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            var job = new NotifyJob(tcs);
+            job.Schedule(handle);
+            JobHandle.ScheduleBatchedJobs();
+        }
+        else
+        {
+            tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            LaunchMainThreadTask(() =>
+            {
+                if (handle.IsCompleted)
+                {
+                    tcs.TrySetResult(default);
+                    return;
+                }
+
+                var job = new NotifyJob(tcs);
+                job.Schedule(handle);
+                JobHandle.ScheduleBatchedJobs();
+            });
+        }
 
         return tcs.Task;
     }

@@ -26,7 +26,7 @@ internal static class FileLoader
     internal static Task<LargeNativeArray<byte>> ReadFileContentsAsync(Task<FileReadInfo> info)
     {
         if (Config.Instance.UseAsyncReadManager)
-            return ReadFileContentsUnity(info).Unwrap();
+            return ReadFileContentsUnity(info);
 
         return Task.Run(async () =>
         {
@@ -83,7 +83,7 @@ internal static class FileLoader
 
         while (offset < length)
         {
-            int count = reader.Read(buffer, 0, buffer.Length);
+            int count = reader.Read(buffer, 0, (int)Math.Min(buffer.Length, length - offset));
             if (count > length - offset || count <= 0)
                 throw new Exception(
                     $"the length of the file changed while it was being read (read {offset + count} bytes but expected {length} bytes)"
@@ -94,9 +94,7 @@ internal static class FileLoader
         }
     }
 
-    static async Task<Task<LargeNativeArray<byte>>> ReadFileContentsUnity(
-        Task<FileReadInfo> infoTask
-    )
+    static async Task<LargeNativeArray<byte>> ReadFileContentsUnity(Task<FileReadInfo> infoTask)
     {
         var info = await infoTask;
         var data = await AllocatorUtil.CreateNativeArrayHGlobalAsync<byte>(
@@ -118,20 +116,13 @@ internal static class FileLoader
                 handle = AsyncReadManager.Read(info.path, &command, 1);
             }
 
-            var task = AsyncUtil.WaitFor(handle.JobHandle);
+            using var hguard = handle;
+            await AsyncUtil.WaitFor(handle.JobHandle);
 
-            // This runs on the thread pool so we don't have to wait for a main
-            // thread update before we run anything else.
-            return Task.Run(async () =>
-            {
-                using var hguard = handle;
-                await task;
+            if (handle.Status != ReadStatus.Complete)
+                throw new Exception("Failed to read texture data from file");
 
-                if (handle.Status != ReadStatus.Complete)
-                    throw new Exception("Failed to read texture data from file");
-
-                return data;
-            });
+            return data;
         }
         catch
         {

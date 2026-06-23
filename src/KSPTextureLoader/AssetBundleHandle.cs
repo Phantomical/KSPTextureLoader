@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
 using System.Runtime.ExceptionServices;
+using System.Threading.Tasks;
+using KSPTextureLoader.Format.AssetBundle;
 using Unity.Profiling;
 using UnityEngine;
 
@@ -22,6 +24,15 @@ public class AssetBundleHandle
     private ExceptionDispatchInfo exception;
     internal ICompleteHandler completeHandler;
     internal IEnumerator coroutine;
+
+    /// <summary>
+    /// A lazily-built, cached index of this bundle's texture content, used to
+    /// load CPU textures directly from the mounted bundle via <c>archive:/</c>
+    /// reads without re-parsing the bundle on every load. Access through
+    /// <see cref="GetIndexAsync"/>.
+    /// </summary>
+    internal Task<BundleIndex> bundleIndex;
+    private readonly object bundleIndexLock = new();
 
     /// <summary>
     /// The path that this asset bundle was loaded from within GameData.
@@ -133,6 +144,23 @@ public class AssetBundleHandle
         this.coroutine = null;
         this.completeHandler = null;
     }
+
+    /// <summary>
+    /// Get (building on first use) the cached <see cref="BundleIndex"/> for this
+    /// bundle. The bundle must already be loaded/mounted; the index is read
+    /// through <c>archive:/</c> virtual paths. The same task is returned to
+    /// concurrent callers so the bundle is only indexed once.
+    /// </summary>
+    internal Task<BundleIndex> GetIndexAsync()
+    {
+        lock (bundleIndexLock)
+        {
+            return bundleIndex ??= BundleIndex.BuildAsync(BundleDiskPath);
+        }
+    }
+
+    private string BundleDiskPath =>
+        System.IO.Path.Combine(KSPUtil.ApplicationRootPath, "GameData", Path);
 
     void ISetException.SetException(ExceptionDispatchInfo ex)
     {

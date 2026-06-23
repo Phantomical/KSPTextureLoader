@@ -38,6 +38,8 @@ internal class LoaderSynchronizationContext : SynchronizationContext
 
     readonly int mainThreadId = Thread.CurrentThread.ManagedThreadId;
 
+    public bool IsMainThread => Thread.CurrentThread.ManagedThreadId == mainThreadId;
+
     public override void Post(SendOrPostCallback d, object state)
     {
         if (Thread.CurrentThread.ManagedThreadId == mainThreadId)
