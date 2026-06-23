@@ -4,6 +4,7 @@ using System.Runtime.Serialization;
 using KSPTextureLoader.Internals;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
+using UnityEngine.Profiling;
 
 namespace KSPTextureLoader;
 
@@ -632,54 +633,14 @@ internal static class TextureUtils
                 if (IntPtr.Size != sizeof(ulong))
                     goto default;
 
-                return DetectBuildInfoForPlatform<DebugWin64Texture, ReleaseWin64Texture>();
+                // Unity's profiler is only supported on development/debug
+                // builds of the player, so we use it to tell which build we're
+                // running against. This determines the field offsets within
+                // Unity's native Texture2D struct.
+                return Profiler.supported ? Build.Debug : Build.Release;
 
             default:
                 return Build.Unknown;
-        }
-    }
-
-    static Build DetectBuildInfoForPlatform<TDebug, TRelease>()
-        where TDebug : unmanaged, ITexture2DInternals
-        where TRelease : unmanaged, ITexture2DInternals
-    {
-        var texture = new Texture2D(1, 1);
-        using var guard = new TextureDestroyGuard(texture);
-
-        var ptr = texture.m_CachedPtr;
-        if (ptr == IntPtr.Zero)
-            return Build.Unknown;
-
-        if (DetectCanModifyIsReadable<TRelease>(texture))
-            return Build.Release;
-        if (DetectCanModifyIsReadable<TDebug>(texture))
-            return Build.Debug;
-
-        return Build.Unknown;
-    }
-
-    static unsafe bool DetectCanModifyIsReadable<T>(Texture2D tex)
-        where T : unmanaged, ITexture2DInternals
-    {
-        var unityptr = (T*)tex.m_CachedPtr;
-        if (unityptr is null)
-            return false;
-
-        if (unityptr->m_IsReadable != 1)
-            return false;
-
-        unityptr->m_IsReadable = 0;
-        try
-        {
-            return !tex.isReadable;
-        }
-        catch
-        {
-            return false;
-        }
-        finally
-        {
-            unityptr->m_IsReadable = 1;
         }
     }
 
@@ -732,10 +693,5 @@ internal static class TextureUtils
         float f = v & -v;
         uint r = *(uint*)&f;
         return (int)(r >> 23) - 0x7F;
-    }
-
-    struct TextureDestroyGuard(Texture tex) : IDisposable
-    {
-        public void Dispose() => Texture.Destroy(tex);
     }
 }
