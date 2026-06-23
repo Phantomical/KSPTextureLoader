@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <Description>Builds KSPTextureLoader-compatible Unity asset bundles from DDS/PNG textures</Description>
+
+        <!--
+            A standalone build-time tool. It is NOT loaded into KSP, so it targets
+            modern .NET rather than the net4.8 the in-game assemblies use.
+        -->
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <LangVersion>13</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <RootNamespace>KSPTextureBundler</RootNamespace>
+        <AssemblyName>KSPTextureBundler</AssemblyName>
+        <InvariantGlobalization>true</InvariantGlobalization>
+
+        <!--
+            This project is not part of the KSP plugin build. It is excluded from
+            the GameData output and does not participate in KSP reference resolution.
+        -->
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- The type-tree seed bundle the builder clones at runtime. -->
+        <EmbeddedResource Include="seed/seed.bundle" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="AssetsTools.NET" Version="3.0.4" />
+        <PackageReference Include="System.CommandLine" Version="2.0.9" />
+        <!-- Cross-platform PNG decode to RGBA32. -->
+        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+    </ItemGroup>
+</Project>
