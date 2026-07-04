@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using KSPTextureLoader.Utils;
 using UnityEngine;
@@ -7,18 +8,19 @@ using UnityEngine;
 namespace KSPTextureLoader.Format.AssetBundle;
 
 /// <summary>
-/// Creates a GPU texture by wrapping the pixel data in a tiny in-memory bundle
-/// (<see cref="TextureBundleBuilder"/>) and loading it asynchronously, so the
-/// GPU upload runs through Unity's threaded async-upload pipeline instead of
-/// stalling the main thread the way code-creating an array/volume texture does.
+/// Creates a GPU texture by wrapping the pixel data in a tiny streamed bundle
+/// (<see cref="TextureBundleBuilder"/> + <see cref="BundleStream"/>) and loading
+/// it asynchronously, so the GPU upload runs through Unity's threaded
+/// async-upload pipeline instead of stalling the main thread the way
+/// code-creating an array/volume texture does.
 /// </summary>
 internal static class TextureBundleLoader
 {
     /// <summary>
-    /// Build the bundle on the calling thread (call this from a background
-    /// thread), then load it on the main thread and return the realized texture.
-    /// The <paramref name="request"/>'s pixel buffer can be released as soon as
-    /// this returns the task.
+    /// Build the bundle prefix on the calling thread (call this from a
+    /// background thread), then load it on the main thread and return the
+    /// realized texture. The <paramref name="request"/>'s pixel buffer must
+    /// stay alive until the returned task completes.
     /// </summary>
     public static Task<Texture> CreateAsync(
         TextureBundleBuilder.TextureRequest request,
@@ -27,36 +29,71 @@ internal static class TextureBundleLoader
     {
         if (request is null)
             throw new ArgumentNullException(nameof(request));
+        if (request.Pixels is null)
+            throw new ArgumentNullException(nameof(request.Pixels));
 
-        TextureBundleBuilder.Built built = TextureBundleBuilder.Build(request, platform);
-        return LoadAsync(built);
+        var built = TextureBundleBuilder.Build(request, request.Pixels.LongLength, platform);
+        var stream = new BundleStream(
+            built.Prefix,
+            new MemoryStream(request.Pixels, writable: false),
+            0,
+            request.Pixels.LongLength
+        );
+        return LoadAsync(built, stream);
     }
 
-    /// <summary>Load an already-built bundle and return the realized texture.</summary>
-    public static Task<Texture> LoadAsync(TextureBundleBuilder.Built built) =>
-        AsyncUtil.LaunchMainThreadTask(() => LoadOnMainThread(built));
+    /// <summary>
+    /// Load an already-built bundle and return the realized texture.
+    /// <paramref name="bundleStream"/> holds the complete bundle bytes;
+    /// ownership passes to the loader, which keeps it open until Unity unloads
+    /// the bundle.
+    /// </summary>
+    public static Task<Texture> LoadAsync(TextureBundleBuilder.Built built, Stream bundleStream) =>
+        AsyncUtil.LaunchMainThreadTask(() => LoadOnMainThread(built, bundleStream));
 
-    static async Task<Texture> LoadOnMainThread(TextureBundleBuilder.Built built)
+    static async Task<Texture> LoadOnMainThread(
+        TextureBundleBuilder.Built built,
+        Stream bundleStream
+    )
     {
         // Keep bundle unloads from running while this load is in flight;
         // AssetBundle.Unload would stall against the loading thread.
         using var activeLoadGuard = new TextureLoader.ActiveAssetBundleLoadGuard();
 
-        var createRequest = UnityEngine.AssetBundle.LoadFromMemoryAsync(built.Bundle);
-        await AwaitOperation(createRequest, new AssetBundleCompleteHandler(createRequest));
-
-        UnityEngine.AssetBundle bundle = createRequest.assetBundle;
-        if (bundle == null)
-            throw new InvalidOperationException(
-                "LoadFromMemoryAsync produced no AssetBundle (malformed in-memory bundle)"
+        // Unity reads the stream from its loading thread until the bundle is
+        // unloaded, so the stream is handed to the AssetBundleHandle below,
+        // which disposes it after the unload.
+        UnityEngine.AssetBundle bundle;
+        try
+        {
+            var createRequest = UnityEngine.AssetBundle.LoadFromStreamAsync(
+                bundleStream,
+                0,
+                128 * 1024
             );
+            await AwaitOperation(createRequest, new AssetBundleCompleteHandler(createRequest));
+
+            bundle = createRequest.assetBundle;
+            if (bundle == null)
+                throw new InvalidOperationException(
+                    "LoadFromStreamAsync produced no AssetBundle (malformed in-memory bundle)"
+                );
+        }
+        catch
+        {
+            bundleStream.Dispose();
+            throw;
+        }
 
         if (Config.Instance.DebugMode >= DebugLevel.Debug)
             Debug.Log(
-                $"[KSPTextureLoader] Mounted in-memory bundle ({built.Bundle.Length} bytes), requesting asset \"{built.AssetName}\""
+                $"[KSPTextureLoader] Mounted streamed bundle ({bundleStream.Length} bytes), requesting asset \"{built.AssetName}\""
             );
 
-        var handle = new AssetBundleHandle($"<in-memory:{bundle.name}>", bundle);
+        var handle = new AssetBundleHandle($"<in-memory:{bundle.name}>", bundle)
+        {
+            onUnload = bundleStream,
+        };
         try
         {
             var loadRequest = bundle.LoadAssetAsync(built.AssetName, typeof(Texture));

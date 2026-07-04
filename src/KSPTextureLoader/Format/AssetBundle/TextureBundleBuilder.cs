@@ -3,10 +3,11 @@ using System;
 namespace KSPTextureLoader.Format.AssetBundle;
 
 /// <summary>
-/// Builds a minimal in-memory UnityFS bundle containing a single streamed
-/// texture object and the <c>AssetBundle</c> that references it, ready to be
-/// loaded with <see cref="TextureBundleLoader"/>. Pure CPU work; safe to call
-/// from a background thread.
+/// Builds the prefix of a minimal UnityFS bundle containing a single streamed
+/// texture object and the <c>AssetBundle</c> that references it. Combined with
+/// the pixel payload by <see cref="BundleStream"/>, it is ready to be loaded
+/// with <see cref="TextureBundleLoader"/>; the pixel bytes themselves are never
+/// copied. Pure CPU work; safe to call from a background thread.
 /// </summary>
 internal static class TextureBundleBuilder
 {
@@ -58,40 +59,33 @@ internal static class TextureBundleBuilder
         /// <summary>Whether Unity should keep a CPU-side copy of the pixels.</summary>
         public bool Readable;
 
-        /// <summary>The full mip chain in resS byte order. Stored verbatim in the
-        /// <c>.resS</c>; the object carries only <c>m_StreamData</c>. Ignored by
-        /// the overload of <see cref="Build(TextureRequest, byte*, long, int)"/>
-        /// that takes the pixel data separately.</summary>
+        /// <summary>The full mip chain in resS byte order. Only used by
+        /// <see cref="TextureBundleLoader.CreateAsync"/>; the streamed
+        /// <see cref="Build"/> path never materializes the pixel bytes and
+        /// ignores this field.</summary>
         public byte[] Pixels = [];
     }
 
-    /// <summary>The built bundle plus the name to request from it.</summary>
-    public readonly struct Built(byte[] bundle, string assetName)
+    /// <summary>The built bundle prefix plus the name to request from it. The
+    /// complete bundle is the prefix followed by <see cref="PixelsLength"/>
+    /// bytes of pixel data, spliced together by <see cref="BundleStream"/>.</summary>
+    public readonly struct Built(byte[] prefix, string assetName, long pixelsLength)
     {
-        public readonly byte[] Bundle = bundle;
+        public readonly byte[] Prefix = prefix;
         public readonly string AssetName = assetName;
+        public readonly long PixelsLength = pixelsLength;
     }
 
-    public static unsafe Built Build(TextureRequest req, int targetPlatform = StandaloneWindows64)
-    {
-        if (req is null)
-            throw new ArgumentNullException(nameof(req));
-        if (req.Pixels is null)
-            throw new ArgumentNullException(nameof(req.Pixels));
-
-        fixed (byte* pixels = req.Pixels)
-            return Build(req, pixels, req.Pixels.Length, targetPlatform);
-    }
-
-    public static unsafe Built Build(
+    public static Built Build(
         TextureRequest req,
-        byte* pixels,
         long pixelsLength,
         int targetPlatform = StandaloneWindows64
     )
     {
         if (req is null)
             throw new ArgumentNullException(nameof(req));
+        if (pixelsLength < 0)
+            throw new ArgumentOutOfRangeException(nameof(pixelsLength));
 
         // A fresh CAB name per build lets several of these bundles be mounted
         // concurrently without Unity rejecting a duplicate.
@@ -117,8 +111,8 @@ internal static class TextureBundleBuilder
         };
 
         byte[] serializedFile = SerializedFileWriter.Build(objects, targetPlatform);
-        byte[] bundle = BundleWriter.Build(cab, serializedFile, pixels, pixelsLength);
-        return new Built(bundle, ContainerKey);
+        byte[] prefix = BundleWriter.BuildPrefix(cab, serializedFile, pixelsLength);
+        return new Built(prefix, ContainerKey, pixelsLength);
     }
 
     static SerializedValue BuildTextureValue(TextureRequest req, string streamPath, long streamSize)
@@ -142,6 +136,14 @@ internal static class TextureBundleBuilder
         bool cube = req.ClassId == SerializedTypeTrees.CubemapClassId;
         int imageCount = cube ? 6 : 1;
 
+        // Unlike m_StreamData.size, m_CompleteImageSize is a signed int in the
+        // 2019.4 type tree, so the classic types cap at 2 GB per image.
+        long imageSize = streamSize / imageCount;
+        if (imageSize > int.MaxValue)
+            throw new InvalidOperationException(
+                "texture data exceeds 2 GB per image; m_CompleteImageSize is a signed 32-bit int"
+            );
+
         var tex = SerializedValue
             .Struct()
             .SetString("m_Name", req.Name)
@@ -151,7 +153,7 @@ internal static class TextureBundleBuilder
             .SetInt("m_Height", req.Height)
             // The size of one image (a single face's full mip chain), not the
             // total: Unity reads m_ImageCount * m_CompleteImageSize from the stream.
-            .SetInt("m_CompleteImageSize", checked((int)(streamSize / imageCount)))
+            .SetInt("m_CompleteImageSize", imageSize)
             .SetInt("m_TextureFormat", req.Format)
             .SetInt("m_MipCount", req.MipCount)
             .SetBool("m_IsReadable", req.Readable)
@@ -201,7 +203,8 @@ internal static class TextureBundleBuilder
         }
 
         tex.SetInt("m_MipCount", req.MipCount)
-            .SetInt("m_DataSize", checked((int)streamSize))
+            // m_DataSize is an unsigned int; the 4 GB bound is checked in Build.
+            .SetInt("m_DataSize", streamSize)
             .Set("m_TextureSettings", TextureSettings())
             .SetBool("m_IsReadable", req.Readable)
             .SetBytes("image data", [])
@@ -220,11 +223,12 @@ internal static class TextureBundleBuilder
             .SetInt("m_WrapV", 0)
             .SetInt("m_WrapW", 0);
 
+    // offset and size are unsigned ints; the 4 GB bound is checked in Build.
     static SerializedValue StreamData(long streamSize, string streamPath) =>
         SerializedValue
             .Struct()
             .SetInt("offset", 0)
-            .SetInt("size", checked((int)streamSize))
+            .SetInt("size", streamSize)
             .SetString("path", streamPath);
 
     static SerializedValue BuildAssetBundleValue(string identity, long texturePathId)

@@ -3,10 +3,13 @@ using System;
 namespace KSPTextureLoader.Format.AssetBundle;
 
 /// <summary>
-/// Emits a <c>UnityFS</c> bundle in memory wrapping a single serialized file
-/// (the <c>CAB-&lt;hash&gt;</c> entry) and its streamed resource
+/// Emits the prefix of a <c>UnityFS</c> bundle wrapping a single serialized
+/// file (the <c>CAB-&lt;hash&gt;</c> entry) and its streamed resource
 /// (<c>CAB-&lt;hash&gt;.resS</c>) — the write-side counterpart of
-/// <see cref="BundleDirectory"/> / <see cref="BlocksInfo"/>.
+/// <see cref="BundleDirectory"/> / <see cref="BlocksInfo"/>. The resS bytes
+/// themselves are not part of the prefix: the complete bundle is the prefix
+/// followed by the pixel payload, spliced together by <see cref="BundleStream"/>
+/// so the pixel data never has to be copied into a managed array.
 /// </summary>
 ///
 /// <remarks>
@@ -29,39 +32,31 @@ internal static class BundleWriter
     const uint SerializedFileNodeFlag = 0x4;
 
     /// <summary>
-    /// Build the bundle bytes from an already-serialized file and its resource
-    /// stream. <paramref name="cab"/> is the internal archive name; the resource
-    /// node is named "<paramref name="cab"/>.resS" to match the
-    /// <c>m_StreamData.path</c> written into the texture object.
+    /// Build the bundle prefix — header, blocks info and the serialized file —
+    /// from an already-serialized file and the length of its resource stream.
+    /// The caller supplies the <paramref name="resSLength"/> resS bytes right
+    /// after the prefix to form the complete bundle. <paramref name="cab"/> is
+    /// the internal archive name; the resource node is named
+    /// "<paramref name="cab"/>.resS" to match the <c>m_StreamData.path</c>
+    /// written into the texture object.
     /// </summary>
-    public static unsafe byte[] Build(string cab, byte[] serializedFile, byte[] resS)
-    {
-        if (resS is null)
-            throw new ArgumentNullException(nameof(resS));
-
-        fixed (byte* p = resS)
-            return Build(cab, serializedFile, p, resS.Length);
-    }
-
-    public static unsafe byte[] Build(
-        string cab,
-        byte[] serializedFile,
-        byte* resS,
-        long resSLength
-    )
+    public static byte[] BuildPrefix(string cab, byte[] serializedFile, long resSLength)
     {
         if (string.IsNullOrEmpty(cab))
             throw new ArgumentException("cab name is required", nameof(cab));
         if (serializedFile is null)
             throw new ArgumentNullException(nameof(serializedFile));
-        if (resSLength < 0 || (resS is null && resSLength != 0))
+        if (resSLength < 0)
             throw new ArgumentOutOfRangeException(nameof(resSLength));
 
         string resSName = cab + ".resS";
+
+        // The blocks-info block sizes are unsigned 32-bit, and everything here
+        // lives in a single uncompressed block.
         long blockDataSize = serializedFile.Length + resSLength;
-        if (blockDataSize > int.MaxValue - (1 << 16))
+        if (blockDataSize > uint.MaxValue)
             throw new InvalidOperationException(
-                "texture data is too large to fit in an in-memory bundle"
+                "texture data is too large to fit in a streamed bundle"
             );
 
         var blocksInfo = BuildBlocksInfo(
@@ -72,7 +67,7 @@ internal static class BundleWriter
             checked((uint)blockDataSize)
         );
 
-        var w = new EndianBinaryWriter(64 + blocksInfo.Length + (int)blockDataSize)
+        var w = new EndianBinaryWriter(64 + blocksInfo.Length + serializedFile.Length)
         {
             BigEndian = true,
         };
@@ -93,9 +88,8 @@ internal static class BundleWriter
 
         w.WriteBytes(blocksInfo);
         w.WriteBytes(serializedFile);
-        w.WriteBytes(resS, checked((int)resSLength));
 
-        w.PatchInt64(sizePos, w.Length);
+        w.PatchInt64(sizePos, w.Length + resSLength);
         return w.ToArray();
     }
 

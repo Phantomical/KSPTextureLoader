@@ -26,6 +26,12 @@ public class AssetBundleHandle
     internal IEnumerator coroutine;
 
     /// <summary>
+    /// Disposed after the bundle is unloaded. Used by stream-loaded bundles,
+    /// whose backing stream Unity keeps reading from until the unload.
+    /// </summary>
+    internal IDisposable onUnload;
+
+    /// <summary>
     /// A lazily-built, cached index of this bundle's texture content, used to
     /// load CPU textures directly from the mounted bundle via <c>archive:/</c>
     /// reads without re-parsing the bundle on every load. Access through
@@ -110,6 +116,9 @@ public class AssetBundleHandle
 
         bundle.Unload(false);
         bundle = null;
+
+        onUnload?.Dispose();
+        onUnload = null;
     }
 
     public void WaitUntilComplete()
