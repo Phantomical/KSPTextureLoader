@@ -4,6 +4,7 @@ using System.IO.MemoryMappedFiles;
 using System.Threading.Tasks;
 using DDSHeaders;
 using KSPTextureLoader.Burst;
+using KSPTextureLoader.Format.AssetBundle;
 using KSPTextureLoader.Format.DDS;
 using KSPTextureLoader.Jobs;
 using KSPTextureLoader.Utils;
@@ -372,6 +373,7 @@ internal static class DDSLoader
                 break;
 
             case DDSTextureType.Texture2DArray:
+                dguard.data = null;
                 await LoadTexture2DArray<T>(handle, options, metadata, dataTask);
                 break;
 
@@ -384,10 +386,12 @@ internal static class DDSLoader
                 break;
 
             case DDSTextureType.CubemapArray:
+                dguard.data = null;
                 await LoadTextureCubemapArray<T>(handle, options, metadata, dataTask);
                 break;
 
             case DDSTextureType.Texture3D:
+                dguard.data = null;
                 await LoadTexture3D<T>(handle, options, metadata, dataTask);
                 break;
 
@@ -443,6 +447,88 @@ internal static class DDSLoader
 
     static readonly ProfilerMarker LoadTextureDataMarker = new("LoadTextureData");
 
+    /// <summary>
+    /// Whether to load this texture by wrapping it in an in-memory asset bundle.
+    /// The bundle path routes the GPU upload through Unity's async-upload
+    /// pipeline instead of stalling the main thread, but it is driven by Unity
+    /// async operations that cannot be blocked on, so synchronous hints keep the
+    /// direct path.
+    /// </summary>
+    static bool ShouldLoadViaBundle(TextureLoadOptions options, long pixelDataSize)
+    {
+        if (options.Hint is not (TextureLoadHint.Asynchronous or TextureLoadHint.BatchAsynchronous))
+            return false;
+
+        // The whole bundle has to fit in a single managed array.
+        return pixelDataSize < int.MaxValue - (1 << 20);
+    }
+
+    /// <summary>
+    /// The classic Texture2D/Cubemap objects serialize a legacy
+    /// <see cref="TextureFormat"/> plus a color space; only graphics formats
+    /// that survive the round-trip can go through the bundle path.
+    /// </summary>
+    static bool TryGetClassicFormat(
+        GraphicsFormat format,
+        out int textureFormat,
+        out int colorSpace
+    )
+    {
+        var tf = GraphicsFormatUtility.GetTextureFormat(format);
+        bool srgb = GraphicsFormatUtility.IsSRGBFormat(format);
+        textureFormat = (int)tf;
+        colorSpace = srgb ? 1 : 0;
+        return GraphicsFormatUtility.GetGraphicsFormat(tf, srgb) == format;
+    }
+
+    static async Task LoadTextureViaBundle<T>(
+        TextureHandleImpl handle,
+        TextureLoadOptions options,
+        TextureBundleBuilder.TextureRequest request,
+        Task<LargeNativeArray<byte>> dataTask,
+        long pixelDataSize
+    )
+        where T : Texture
+    {
+        using var dguard = new TaskArrayDisposeGuard(dataTask);
+
+        var built = await Task.Run(async () =>
+        {
+            var data = await dataTask;
+            if (data.Length < pixelDataSize)
+                throw new Exception("Invalid DDS file: not enough data for specified texture size");
+
+            unsafe
+            {
+                var result = TextureBundleBuilder.Build(
+                    request,
+                    data.GetUnsafePtr(),
+                    pixelDataSize
+                );
+
+                if (Config.Instance.DebugMode >= DebugLevel.Debug)
+                    _ = AsyncUtil.LaunchMainThreadTask(() =>
+                        Debug.Log(
+                            $"[KSPTextureLoader] Built in-memory bundle for \"{request.Name}\" "
+                                + $"(ClassId={request.ClassId}, Width={request.Width}, Height={request.Height}, "
+                                + $"Depth={request.Depth}, MipCount={request.MipCount}, Format={request.Format}, "
+                                + $"ColorSpace={request.ColorSpace}, Readable={request.Readable}), "
+                                + $"pixelDataSize={pixelDataSize}, bundle size={result.Bundle.Length} bytes"
+                        )
+                    );
+
+                return result;
+            }
+        });
+
+        // The pixels have been copied into the bundle; free them before the
+        // load so we don't hold both copies for the whole upload.
+        dguard.Dispose();
+
+        var texture = await TextureBundleLoader.LoadAsync(built);
+        handle.SetTexture<T>(texture, options);
+    }
+
     static async Task LoadTexture2D<T>(
         TextureHandleImpl handle,
         TextureLoadOptions options,
@@ -463,6 +549,34 @@ internal static class DDSLoader
         {
             dguard.data = null;
             await DX11.UploadTexture2DAsync<T>(handle, options, metadata, dataTask);
+            return;
+        }
+
+        // Otherwise load through an in-memory asset bundle if possible.
+        long pixelDataSize = GetFaceMipChainSize(width, height, mipCount, format);
+        if (
+            ShouldLoadViaBundle(options, pixelDataSize)
+            && TryGetClassicFormat(format, out int textureFormat, out int colorSpace)
+        )
+        {
+            dguard.data = null;
+            await LoadTextureViaBundle<T>(
+                handle,
+                options,
+                new TextureBundleBuilder.TextureRequest
+                {
+                    ClassId = SerializedTypeTrees.Texture2DClassId,
+                    Name = handle.Path,
+                    Width = width,
+                    Height = height,
+                    MipCount = mipCount,
+                    Format = textureFormat,
+                    ColorSpace = colorSpace,
+                    Readable = !unreadable,
+                },
+                dataTask,
+                pixelDataSize
+            );
             return;
         }
 
@@ -512,12 +626,44 @@ internal static class DDSLoader
     )
         where T : Texture
     {
+        using var dguard = new TaskArrayDisposeGuard(dataTask);
+        var arraySize = metadata.arraySize;
+        var mipCount = metadata.mipCount;
+        var width = metadata.width;
+        var height = metadata.height;
+        var format = metadata.format;
+
+        long pixelDataSize = (long)GetFaceMipChainSize(width, height, mipCount, format) * arraySize;
+        if (ShouldLoadViaBundle(options, pixelDataSize))
+        {
+            dguard.data = null;
+            await LoadTextureViaBundle<T>(
+                handle,
+                options,
+                new TextureBundleBuilder.TextureRequest
+                {
+                    ClassId = SerializedTypeTrees.Texture2DArrayClassId,
+                    Name = handle.Path,
+                    Width = width,
+                    Height = height,
+                    Depth = arraySize,
+                    MipCount = mipCount,
+                    Format = (int)format,
+                    ColorSpace = GraphicsFormatUtility.IsSRGBFormat(format) ? 1 : 0,
+                    Readable = !options.Unreadable,
+                },
+                dataTask,
+                pixelDataSize
+            );
+            return;
+        }
+
         var tex2dArray = TextureUtils.CreateUninitializedTexture2DArray(
-            metadata.width,
-            metadata.height,
-            metadata.arraySize,
-            metadata.mipCount,
-            metadata.format
+            width,
+            height,
+            arraySize,
+            mipCount,
+            format
         );
         using var texGuard = new TextureCleanupGuard(tex2dArray);
 
@@ -529,11 +675,6 @@ internal static class DDSLoader
         }
 
         var buffer = await dataTask;
-        var arraySize = metadata.arraySize;
-        var mipCount = metadata.mipCount;
-        var width = metadata.width;
-        var height = metadata.height;
-        var format = metadata.format;
 
         long offset = 0;
         for (int element = 0; element < arraySize; ++element)
@@ -577,6 +718,34 @@ internal static class DDSLoader
         {
             dguard.data = null;
             await DX11.UploadTextureCubemapAsync<T>(handle, options, metadata, dataTask);
+            return;
+        }
+
+        // Otherwise load through an in-memory asset bundle if possible.
+        long pixelDataSize = 6L * GetFaceMipChainSize(width, height, mipCount, format);
+        if (
+            ShouldLoadViaBundle(options, pixelDataSize)
+            && TryGetClassicFormat(format, out int textureFormat, out int colorSpace)
+        )
+        {
+            dguard.data = null;
+            await LoadTextureViaBundle<T>(
+                handle,
+                options,
+                new TextureBundleBuilder.TextureRequest
+                {
+                    ClassId = SerializedTypeTrees.CubemapClassId,
+                    Name = handle.Path,
+                    Width = width,
+                    Height = height,
+                    MipCount = mipCount,
+                    Format = textureFormat,
+                    ColorSpace = colorSpace,
+                    Readable = !options.Unreadable,
+                },
+                dataTask,
+                pixelDataSize
+            );
             return;
         }
 
@@ -670,11 +839,37 @@ internal static class DDSLoader
     )
         where T : Texture
     {
+        using var dguard = new TaskArrayDisposeGuard(dataTask);
         var arraySize = metadata.arraySize;
         var mipCount = metadata.mipCount;
         var width = metadata.width;
         var height = metadata.height;
         var format = metadata.format;
+
+        long pixelDataSize = (long)GetFaceMipChainSize(width, height, mipCount, format) * arraySize;
+        if (ShouldLoadViaBundle(options, pixelDataSize))
+        {
+            dguard.data = null;
+            await LoadTextureViaBundle<T>(
+                handle,
+                options,
+                new TextureBundleBuilder.TextureRequest
+                {
+                    ClassId = SerializedTypeTrees.CubemapArrayClassId,
+                    Name = handle.Path,
+                    Width = width,
+                    Height = height,
+                    Depth = arraySize / 6,
+                    MipCount = mipCount,
+                    Format = (int)format,
+                    ColorSpace = GraphicsFormatUtility.IsSRGBFormat(format) ? 1 : 0,
+                    Readable = !options.Unreadable,
+                },
+                dataTask,
+                pixelDataSize
+            );
+            return;
+        }
 
         var cubeArray = TextureUtils.CreateUninitializedCubemapArray(
             width,
@@ -724,12 +919,41 @@ internal static class DDSLoader
     )
         where T : Texture
     {
+        using var dguard = new TaskArrayDisposeGuard(dataTask);
         var arraySize = metadata.arraySize;
         var mipCount = metadata.mipCount;
         var width = metadata.width;
         var height = metadata.height;
         var depth = metadata.depth;
         var format = metadata.format;
+
+        long pixelDataSize = 0;
+        for (int mip = 0; mip < mipCount; ++mip)
+            pixelDataSize += Get3DMipMapSize(width, height, depth, mip, format);
+
+        if (ShouldLoadViaBundle(options, pixelDataSize))
+        {
+            dguard.data = null;
+            await LoadTextureViaBundle<T>(
+                handle,
+                options,
+                new TextureBundleBuilder.TextureRequest
+                {
+                    ClassId = SerializedTypeTrees.Texture3DClassId,
+                    Name = handle.Path,
+                    Width = width,
+                    Height = height,
+                    Depth = depth,
+                    MipCount = mipCount,
+                    Format = (int)format,
+                    ColorSpace = GraphicsFormatUtility.IsSRGBFormat(format) ? 1 : 0,
+                    Readable = false,
+                },
+                dataTask,
+                pixelDataSize
+            );
+            return;
+        }
 
         var tex3d = TextureUtils.CreateUninitializedTexture3D(
             width,

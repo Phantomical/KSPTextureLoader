@@ -80,6 +80,15 @@ public partial class TextureLoader
         handle.SetBundle(bundle);
     }
 
+    /// <summary>
+    /// Put a bundle that is not tracked in <see cref="assetBundles"/> (e.g. a
+    /// transient in-memory bundle) on the same deferred-unload path as regular
+    /// asset bundles, so it is not unloaded while other bundle loads are in
+    /// flight (which would stall the main thread).
+    /// </summary>
+    internal void QueueBundleUnload(AssetBundleHandle handle) =>
+        StartCoroutine(AssetBundleCleanup(handle));
+
     IEnumerator AssetBundleCleanup(AssetBundleHandle handle)
     {
         yield return handle;
