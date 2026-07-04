@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>
 /// A read-only seekable stream presenting a complete <c>UnityFS</c> bundle to

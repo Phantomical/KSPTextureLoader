@@ -1,7 +1,7 @@
 using KSP.Testing;
-using KSPTextureLoader.Format.AssetBundle;
+using KSPTextureLoader.Format.Bundle;
 
-namespace KSPTextureLoaderTests.AssetBundle;
+namespace KSPTextureLoaderTests.Bundle;
 
 /// <summary>
 /// Tests for <see cref="Texture2DInfo.Extract"/>, the field walk at the heart of

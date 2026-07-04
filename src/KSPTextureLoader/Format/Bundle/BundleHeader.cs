@@ -1,6 +1,6 @@
 using System.IO;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>
 /// The fixed UnityFS bundle header, plus the derived locations of the blocks

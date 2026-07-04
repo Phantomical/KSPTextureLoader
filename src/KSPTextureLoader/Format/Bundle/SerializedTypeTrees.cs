@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>
 /// The serialized field layouts and old-type hashes for the texture classes and

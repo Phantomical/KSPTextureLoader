@@ -64,7 +64,7 @@ internal sealed class PixelDataSource
     }
 
     /// <summary>
-    /// Open a stream over the pixel bytes for <see cref="AssetBundle.BundleStream"/>,
+    /// Open a stream over the pixel bytes for <see cref="Bundle.BundleStream"/>,
     /// returning it along with the offset the pixel bytes start at within it.
     /// Ownership of the stream (and the buffer, for buffer-backed sources)
     /// passes to the caller. File-backed sources never read the pixel bytes.
@@ -104,7 +104,7 @@ internal sealed class PixelDataSource
 /// <summary>
 /// A read-only stream over a <see cref="LargeNativeArray{T}"/> that owns the
 /// array: disposing the stream frees it. Backs buffer-sourced
-/// <see cref="AssetBundle.BundleStream"/> payloads, which Unity keeps reading
+/// <see cref="Bundle.BundleStream"/> payloads, which Unity keeps reading
 /// from until the bundle is unloaded.
 /// </summary>
 internal sealed unsafe class NativeArrayStream : UnmanagedMemoryStream

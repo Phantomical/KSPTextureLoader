@@ -1,7 +1,7 @@
 using System;
 using System.Text;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>
 /// A growable byte-buffer writer that can emit both little-endian and

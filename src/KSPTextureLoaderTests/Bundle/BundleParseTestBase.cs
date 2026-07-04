@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using KSP.Testing;
 
-namespace KSPTextureLoaderTests.AssetBundle;
+namespace KSPTextureLoaderTests.Bundle;
 
 /// <summary>
 /// Base class for the asset-bundle parsing tests. These run inside KSP's

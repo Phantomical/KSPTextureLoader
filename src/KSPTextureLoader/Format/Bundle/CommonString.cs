@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>
 /// The built-in Unity "common string" buffer. Type tree node names and types

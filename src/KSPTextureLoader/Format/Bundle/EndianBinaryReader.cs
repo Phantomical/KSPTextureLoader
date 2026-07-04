@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>
 /// A minimal cursor over an unmanaged byte buffer that can read both

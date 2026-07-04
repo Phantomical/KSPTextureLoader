@@ -2,7 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Text;
 using System.Threading.Tasks;
-using KSPTextureLoader.Format.AssetBundle;
+using KSPTextureLoader.Format.Bundle;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 

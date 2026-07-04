@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using KSPTextureLoader.Utils;
 using UnityEngine;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>
 /// Creates a GPU texture by wrapping the pixel data in a tiny streamed bundle
@@ -63,14 +63,10 @@ internal static class TextureBundleLoader
         // Unity reads the stream from its loading thread until the bundle is
         // unloaded, so the stream is handed to the AssetBundleHandle below,
         // which disposes it after the unload.
-        UnityEngine.AssetBundle bundle;
+        AssetBundle bundle;
         try
         {
-            var createRequest = UnityEngine.AssetBundle.LoadFromStreamAsync(
-                bundleStream,
-                0,
-                128 * 1024
-            );
+            var createRequest = AssetBundle.LoadFromStreamAsync(bundleStream, 0, 128 * 1024);
             await AwaitOperation(createRequest, new AssetBundleCompleteHandler(createRequest));
 
             bundle = createRequest.assetBundle;

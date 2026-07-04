@@ -1,6 +1,6 @@
 using System;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>
 /// Builds the prefix of a minimal UnityFS bundle containing a single streamed

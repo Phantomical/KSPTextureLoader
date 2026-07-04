@@ -1,6 +1,6 @@
 using System.IO;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>
 /// Decompressor for the LZ4 block format used by UnityFS bundle blocks

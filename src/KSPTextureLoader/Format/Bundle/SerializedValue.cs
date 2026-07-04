@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>
 /// A mutable value supplied to <see cref="SerializedFileWriter"/> when emitting

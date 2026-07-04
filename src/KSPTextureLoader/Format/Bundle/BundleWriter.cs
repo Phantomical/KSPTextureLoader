@@ -1,6 +1,6 @@
 using System;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>
 /// Emits the prefix of a <c>UnityFS</c> bundle wrapping a single serialized

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>
 /// A single file contained within a UnityFS bundle (a serialized file such as

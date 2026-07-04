@@ -4,7 +4,7 @@ using System.IO.MemoryMappedFiles;
 using System.Threading.Tasks;
 using DDSHeaders;
 using KSPTextureLoader.Burst;
-using KSPTextureLoader.Format.AssetBundle;
+using KSPTextureLoader.Format.Bundle;
 using KSPTextureLoader.Format.DDS;
 using KSPTextureLoader.Jobs;
 using KSPTextureLoader.Utils;

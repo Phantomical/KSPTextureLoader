@@ -1,8 +1,8 @@
 using System;
 using KSP.Testing;
-using KSPTextureLoader.Format.AssetBundle;
+using KSPTextureLoader.Format.Bundle;
 
-namespace KSPTextureLoaderTests.AssetBundle;
+namespace KSPTextureLoaderTests.Bundle;
 
 /// <summary>
 /// Tests for <see cref="SerializedFile"/> header/type/object parsing and the

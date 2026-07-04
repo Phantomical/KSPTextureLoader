@@ -8,7 +8,7 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.IO.LowLevel.Unsafe;
 using Unity.Profiling;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>A single byte range to read from a path.</summary>
 internal readonly struct ReadRange(long offset, long size)

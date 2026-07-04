@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>Block compression modes used by UnityFS bundles.</summary>
 internal enum BundleCompressionType

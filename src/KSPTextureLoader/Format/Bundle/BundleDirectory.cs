@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using KSPTextureLoader.Utils;
 using Unity.Collections;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>
 /// Reads just the UnityFS header and directory of a bundle (the list of
