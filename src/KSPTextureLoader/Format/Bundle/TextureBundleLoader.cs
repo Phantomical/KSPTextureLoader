@@ -24,6 +24,7 @@ internal static class TextureBundleLoader
     /// </summary>
     public static Task<Texture> CreateAsync(
         TextureBundleBuilder.TextureRequest request,
+        TextureLoadOptions options,
         int platform = TextureBundleBuilder.StandaloneWindows64
     )
     {
@@ -39,7 +40,7 @@ internal static class TextureBundleLoader
             0,
             request.Pixels.LongLength
         );
-        return LoadAsync(built, stream);
+        return LoadAsync(built, stream, options);
     }
 
     /// <summary>
@@ -48,12 +49,27 @@ internal static class TextureBundleLoader
     /// ownership passes to the loader, which keeps it open until Unity unloads
     /// the bundle.
     /// </summary>
-    public static Task<Texture> LoadAsync(TextureBundleBuilder.Built built, Stream bundleStream) =>
-        AsyncUtil.LaunchMainThreadTask(() => LoadOnMainThread(built, bundleStream));
+    public static Task<Texture> LoadAsync(
+        TextureBundleBuilder.Built built,
+        Stream bundleStream,
+        TextureLoadOptions options
+    ) => AsyncUtil.LaunchMainThreadTask(() => LoadOnMainThread(built, bundleStream, options));
+
+    /// <summary>
+    /// Load an already-built bundle whose stream data points at an external
+    /// file (<see cref="TextureBundleBuilder.Build(TextureBundleBuilder.TextureRequest, long, string, long, int)"/>):
+    /// the prefix is the complete bundle and Unity reads the pixel bytes from
+    /// the file itself, so there is no stream to keep alive.
+    /// </summary>
+    public static Task<Texture> LoadAsync(
+        TextureBundleBuilder.Built built,
+        TextureLoadOptions options
+    ) => AsyncUtil.LaunchMainThreadTask(() => LoadOnMainThread(built, bundleStream: null, options));
 
     static async Task<Texture> LoadOnMainThread(
         TextureBundleBuilder.Built built,
-        Stream bundleStream
+        Stream bundleStream,
+        TextureLoadOptions options
     )
     {
         // Keep bundle unloads from running while this load is in flight;
@@ -66,10 +82,21 @@ internal static class TextureBundleLoader
         AssetBundle bundle;
         try
         {
-            var createRequest = AssetBundle.LoadFromStreamAsync(bundleStream, 0, 128 * 1024);
-            await AwaitOperation(createRequest, new AssetBundleCompleteHandler(createRequest));
+            if (options.Hint == TextureLoadHint.Asynchronous)
+            {
+                var createRequest = bundleStream is null
+                    ? AssetBundle.LoadFromMemoryAsync(built.Prefix)
+                    : AssetBundle.LoadFromStreamAsync(bundleStream, 0, 128 * 1024);
+                await AwaitOperation(createRequest, new AssetBundleCompleteHandler(createRequest));
+                bundle = createRequest.assetBundle;
+            }
+            else
+            {
+                bundle = bundleStream is null
+                    ? AssetBundle.LoadFromMemory(built.Prefix)
+                    : AssetBundle.LoadFromStream(bundleStream, 0, 128 * 1024);
+            }
 
-            bundle = createRequest.assetBundle;
             if (bundle == null)
                 throw new InvalidOperationException(
                     "LoadFromStreamAsync produced no AssetBundle (malformed in-memory bundle)"
@@ -77,13 +104,13 @@ internal static class TextureBundleLoader
         }
         catch
         {
-            bundleStream.Dispose();
+            bundleStream?.Dispose();
             throw;
         }
 
-        if (Config.Instance.DebugMode >= DebugLevel.Debug)
+        if (Config.Instance.DebugMode == DebugLevel.Trace)
             Debug.Log(
-                $"[KSPTextureLoader] Mounted streamed bundle ({bundleStream.Length} bytes), requesting asset \"{built.AssetName}\""
+                $"[KSPTextureLoader] Mounted streamed bundle ({bundleStream?.Length ?? built.Prefix.Length} bytes), requesting asset \"{built.AssetName}\""
             );
 
         var handle = new AssetBundleHandle($"<in-memory:{bundle.name}>", bundle)
