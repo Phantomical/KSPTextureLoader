@@ -345,7 +345,9 @@ internal static class BundleBuilder
         SetBool(tex, "m_DownscaleFallback", false);
         tex["m_Width"].AsInt = src.Width;
         tex["m_Height"].AsInt = src.Height;
-        tex["m_CompleteImageSize"].AsInt = checked((int)streamSize);
+        // The size of one image (a single face's full mip chain), not the total:
+        // Unity reads m_ImageCount * m_CompleteImageSize from the stream.
+        tex["m_CompleteImageSize"].AsInt = checked((int)(streamSize / imageCount));
         tex["m_TextureFormat"].AsInt = (int)src.Format;
         Set(tex, "m_MipCount", src.MipCount);
         SetBool(tex, "m_IsReadable", false);
@@ -457,7 +459,12 @@ internal static class BundleBuilder
         foreach (var (texName, pathId) in entries)
         {
             var pair = ValueBuilder.DefaultValueFieldFromArrayTemplate(container);
-            pair["first"].AsString = texName;
+            // Container keys must be lowercase with '/' separators, matching the
+            // EditorExtensions bundler's NormalizePath: Unity canonicalizes the
+            // name passed to LoadAsset the same way but compares it against the
+            // stored key verbatim, so a key with uppercase characters or
+            // backslashes can never be looked up.
+            pair["first"].AsString = texName.Replace('\\', '/').ToLowerInvariant();
             var second = pair["second"];
             second["preloadIndex"].AsInt = 0;
             second["preloadSize"].AsInt = 0;
