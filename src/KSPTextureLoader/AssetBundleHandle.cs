@@ -2,7 +2,7 @@ using System;
 using System.Collections;
 using System.Runtime.ExceptionServices;
 using System.Threading.Tasks;
-using KSPTextureLoader.Format.AssetBundle;
+using KSPTextureLoader.Format.Bundle;
 using Unity.Profiling;
 using UnityEngine;
 

@@ -1,7 +1,7 @@
 using KSP.Testing;
-using KSPTextureLoader.Format.AssetBundle;
+using KSPTextureLoader.Format.Bundle;
 
-namespace KSPTextureLoaderTests.AssetBundle;
+namespace KSPTextureLoaderTests.Bundle;
 
 /// <summary>
 /// Tests for the pure path/name helpers in <see cref="BundleIndex"/> that map

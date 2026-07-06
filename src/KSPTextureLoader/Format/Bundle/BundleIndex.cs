@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using KSPTextureLoader.Utils;
 using UnityEngine;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>
 /// A cached, parse-once index of the texture content of a single mounted asset

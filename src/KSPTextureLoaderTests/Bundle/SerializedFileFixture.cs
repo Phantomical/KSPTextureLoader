@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using KSPTextureLoader.Format.AssetBundle;
+using KSPTextureLoader.Format.Bundle;
 
-namespace KSPTextureLoaderTests.AssetBundle;
+namespace KSPTextureLoaderTests.Bundle;
 
 /// <summary>
 /// Builds synthetic Unity serialized files (the <c>CAB-*</c> entry inside a

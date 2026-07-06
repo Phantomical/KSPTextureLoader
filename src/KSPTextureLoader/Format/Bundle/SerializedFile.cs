@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace KSPTextureLoader.Format.AssetBundle;
+namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>One entry in a serialized file's type list.</summary>
 internal struct SerializedType
@@ -30,7 +30,7 @@ internal struct SerializedObject
 /// </summary>
 ///
 /// <remarks>
-/// Targets serialized file format version 17 (Unity 2019.4) but accepts the
+/// Targets serialized file format version 21 (Unity 2019.4) but accepts the
 /// 13–21 range. Versions 22+ (which widen header fields to 64-bit) are rejected.
 /// </remarks>
 internal sealed class SerializedFile
