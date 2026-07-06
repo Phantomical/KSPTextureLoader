@@ -172,5 +172,15 @@ internal static class Program
         };
         paletteTest.SetAction(_ => Commands.PaletteTest());
         yield return paletteTest;
+
+        var cubemapTest = new Command(
+            "dev-cubemap-test",
+            "Self-check 2D cross -> cubemap face mapping and block alignment."
+        )
+        {
+            Hidden = true,
+        };
+        cubemapTest.SetAction(_ => Commands.CubemapTest());
+        yield return cubemapTest;
     }
 }

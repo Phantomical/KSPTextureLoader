@@ -82,6 +82,11 @@ internal static class Commands
                     Decode = () =>
                     {
                         var (tex, skip) = DecodeFile(x.file);
+                        // A 'cubemap' entry repacks the decoded 2D cross into a
+                        // native cubemap before the per-texture flags are applied
+                        // (so filter/wrap/colorSpace still land on the cubemap).
+                        if (tex is not null && resolved.Cubemap)
+                            (tex, skip) = CubemapPacker.PackCross(tex);
                         if (tex is not null)
                         {
                             tex.AddressableName = x.key;
@@ -473,6 +478,136 @@ internal static class Commands
 
         Console.WriteLine(fails == 0 ? "PALETTE TESTS PASSED" : $"PALETTE TESTS FAILED ({fails})");
         return fails == 0 ? 0 : 2;
+    }
+
+    // Builds synthetic 4x3 cross textures whose every element (pixel for
+    // uncompressed formats, 4x4 block for compressed ones) is tagged with its grid
+    // cell id, runs them through CubemapPacker, and asserts each of the six output
+    // faces came from the cell ConvertTexture2dToCubemap reads for that face. Locks
+    // down the face ordering, orientation and the block-aligned copy math.
+    public static int CubemapTest()
+    {
+        // Expected cell (col, row) each cube face is taken from, in +X,-X,+Y,-Y,+Z,-Z
+        // order. Mirrors TextureUtils.ConvertTexture2dToCubemap.
+        var expected = new (int col, int row)[]
+        {
+            (3, 1), // +X
+            (1, 1), // -X
+            (2, 0), // +Y
+            (2, 2), // -Y
+            (2, 1), // +Z
+            (0, 1), // -Z
+        };
+
+        int fails = 0;
+        fails += CubemapCase("RGBA32 face=2", UnityTextureFormat.RGBA32, faceSize: 2, expected);
+        fails += CubemapCase("DXT5 face=4", UnityTextureFormat.DXT5, faceSize: 4, expected);
+        fails += CubemapCase("DXT1 face=8", UnityTextureFormat.DXT1, faceSize: 8, expected);
+
+        // A face size that isn't block-aligned must be rejected, not mis-copied.
+        var bad = MakeCross(UnityTextureFormat.DXT5, faceSize: 2);
+        var (badTex, badSkip) = CubemapPacker.PackCross(bad);
+        if (badTex is not null || badSkip is null)
+        {
+            Console.WriteLine("  block-align guard: FAIL expected a skip for a 2px DXT5 face");
+            fails++;
+        }
+        else
+        {
+            Console.WriteLine($"  block-align guard: ok ({badSkip.Detail})");
+        }
+
+        Console.WriteLine(fails == 0 ? "CUBEMAP TESTS PASSED" : $"CUBEMAP TESTS FAILED ({fails})");
+        return fails == 0 ? 0 : 2;
+    }
+
+    static int CubemapCase(
+        string label,
+        UnityTextureFormat format,
+        int faceSize,
+        (int col, int row)[] expected
+    )
+    {
+        var src = MakeCross(format, faceSize);
+        var (cube, skip) = CubemapPacker.PackCross(src);
+        if (cube is null)
+        {
+            Console.WriteLine($"  {label}: FAIL packing skipped ({skip?.Detail})");
+            return 1;
+        }
+        if (cube.Kind != TextureKind.Cubemap || cube.Width != faceSize || cube.Height != faceSize)
+        {
+            Console.WriteLine(
+                $"  {label}: FAIL got {cube.Kind} {cube.Width}x{cube.Height}, "
+                    + $"want Cubemap {faceSize}x{faceSize}"
+            );
+            return 1;
+        }
+
+        int elemBytes = TextureFormatInfo.BlockOrPixelSize(format);
+        long faceBytes = TextureFormatInfo.MipSize(format, faceSize, faceSize);
+        if (cube.Data.Length != faceBytes * 6)
+        {
+            Console.WriteLine($"  {label}: FAIL data {cube.Data.Length} != {faceBytes * 6}");
+            return 1;
+        }
+
+        // Every element of face i must carry the id of its expected source cell.
+        for (int face = 0; face < 6; face++)
+        {
+            byte want = (byte)(expected[face].row * 4 + expected[face].col);
+            long baseOff = faceBytes * face;
+            for (long e = 0; e < faceBytes; e += elemBytes)
+            {
+                if (cube.Data[baseOff + e] != want)
+                {
+                    Console.WriteLine(
+                        $"  {label}: FAIL face {face} element at {e} = {cube.Data[baseOff + e]}, "
+                            + $"want cell {want}"
+                    );
+                    return 1;
+                }
+            }
+        }
+
+        Console.WriteLine($"  {label}: ok (6 faces, {faceBytes} B each)");
+        return 0;
+    }
+
+    // A 4x3 cross where every element in grid cell (col, row) is filled with the
+    // byte value row*4+col, so the packed faces can be checked against their cells.
+    static SourceTexture MakeCross(UnityTextureFormat format, int faceSize)
+    {
+        int width = faceSize * 4;
+        int height = faceSize * 3;
+        int ew = TextureFormatInfo.BlockWidth(format);
+        int eh = TextureFormatInfo.BlockHeight(format);
+        int elemBytes = TextureFormatInfo.BlockOrPixelSize(format);
+        int colsElem = width / ew;
+        int rowsElem = height / eh;
+
+        var data = new byte[(long)colsElem * rowsElem * elemBytes];
+        for (int re = 0; re < rowsElem; re++)
+        for (int ce = 0; ce < colsElem; ce++)
+        {
+            int col = ce * ew / faceSize;
+            int row = re * eh / faceSize;
+            byte id = (byte)(row * 4 + col);
+            int off = (re * colsElem + ce) * elemBytes;
+            Array.Fill(data, id, off, elemBytes);
+        }
+
+        return new SourceTexture
+        {
+            Name = "cross",
+            Width = width,
+            Height = height,
+            MipCount = 1,
+            Format = format,
+            ColorSpace = 1,
+            Data = data,
+            SourcePath = $"synthetic-{format}-{faceSize}.dds",
+        };
     }
 
     static int Exp4(int n) => n * 17;

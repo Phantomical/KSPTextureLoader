@@ -39,6 +39,11 @@ internal sealed class TextureProperties
     /// <summary>0 = linear, 1 = sRGB; null keeps whatever the source file's decoder
     /// detected.</summary>
     public int? ColorSpace { get; init; }
+
+    /// <summary>When true, the (2D) input is a 4x3 cross that gets repacked into a
+    /// native cubemap at build time (see <see cref="CubemapPacker"/>) rather than
+    /// being converted in-game.</summary>
+    public bool Cubemap { get; init; }
 }
 
 /// <summary>
@@ -79,6 +84,7 @@ internal sealed class TexturePropertiesFile
         public float? MipBias { get; set; }
         public int? StreamingMipmapsPriority { get; set; }
         public string? ColorSpace { get; set; }
+        public bool? Cubemap { get; set; }
     }
 
     sealed class CompiledEntry
@@ -95,6 +101,7 @@ internal sealed class TexturePropertiesFile
         public float? MipBias;
         public int? StreamingMipmapsPriority;
         public int? ColorSpace;
+        public bool? Cubemap;
         public int MatchCount;
     }
 
@@ -160,6 +167,7 @@ internal sealed class TexturePropertiesFile
                         sbyte.MaxValue
                     ),
                     ColorSpace = ParseColorSpace(path, index, entry.ColorSpace),
+                    Cubemap = entry.Cubemap,
                 }
             );
         }
@@ -183,6 +191,7 @@ internal sealed class TexturePropertiesFile
         float mipBias = 0f;
         int streamingPriority = 0;
         int? colorSpace = null;
+        bool cubemap = false;
         foreach (var entry in entries)
         {
             if (!entry.Matcher.Match(relativePath).HasMatches)
@@ -208,6 +217,8 @@ internal sealed class TexturePropertiesFile
                 streamingPriority = p;
             if (entry.ColorSpace is int c)
                 colorSpace = c;
+            if (entry.Cubemap is bool cube)
+                cubemap = cube;
         }
         return new TextureProperties
         {
@@ -221,6 +232,7 @@ internal sealed class TexturePropertiesFile
             Aniso = aniso,
             MipBias = mipBias,
             ColorSpace = colorSpace,
+            Cubemap = cubemap,
         };
     }
 

@@ -44,6 +44,8 @@ properties:
     mipmapStreaming: false
     wrapU: repeat         # per-axis wrap; overrides 'wrap' for that axis
     wrapV: clamp
+  - files: 'skybox/*_cube.dds'
+    cubemap: true         # repack a 4x3 cross into a native cubemap
 ```
 
 Each entry needs a `files` glob plus any of the properties:
@@ -69,6 +71,14 @@ Each entry needs a `files` glob plus any of the properties:
   source file. Useful for data textures like normal maps stored as PNG, which
   would otherwise be tagged sRGB and be incorrectly gamma-converted when
   sampled.
+* `cubemap` - `true` repacks a 2D input into a native cubemap at build time, so
+  KSPTextureLoader loads a cubemap directly instead of converting it in-game.
+  The input must be a 4x3 horizontal cross (width = 4 faces, height = 3 faces)
+  laid out like `TextureUtils.ConvertTexture2dToCubemap` expects. The faces keep
+  the source format (a compressed cross stays compressed), which requires the
+  face size to be a multiple of the format's block size (4 for BC/DXT); inputs
+  that aren't a valid cross or aren't block-aligned are skipped with a message.
+  Only the base mip is used, producing a single-mip cubemap.
 
 Globs are matched case-insensitively against the same input-relative path that
 becomes the texture's bundle path, before `--prefix` is applied: `*` matches
