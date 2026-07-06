@@ -22,7 +22,8 @@ internal static class Commands
         string? name,
         string? seedPath,
         string? prefix,
-        bool mipmapStreaming
+        bool mipmapStreaming,
+        string? propertiesPath
     )
     {
         // When the caller supplies an explicit --name, that name is used verbatim as
@@ -31,6 +32,20 @@ internal static class Commands
         bool appendCabHash = name is null;
         name ??= Path.GetFileNameWithoutExtension(output);
         byte[] seed = seedPath is not null ? File.ReadAllBytes(seedPath) : LoadEmbeddedSeed();
+
+        TexturePropertiesFile? properties = null;
+        if (propertiesPath is not null)
+        {
+            try
+            {
+                properties = TexturePropertiesFile.Load(propertiesPath);
+            }
+            catch (Exception e) when (e is IOException or InvalidDataException)
+            {
+                Console.Error.WriteLine($"error: {e.Message}");
+                return 1;
+            }
+        }
 
         var files = CollectInputFiles(inputs);
         if (files.Count == 0)
@@ -41,36 +56,60 @@ internal static class Commands
 
         // Container keys come from the file path, so we can sort and dedup-check
         // without decoding anything yet. Each texture is decoded lazily during the
-        // build, keeping only one in memory at a time.
+        // build, keeping only one in memory at a time. Property globs match the
+        // same input-relative path the container key is built from, minus the
+        // --prefix (they describe input files, not bundle paths).
         var keyed = files
-            .Select(f => (file: f.file, key: AddressableName(f.file, f.baseDir, prefix)))
+            .Select(f =>
+            {
+                string rel = Path.GetRelativePath(f.baseDir, f.file).Replace('\\', '/');
+                return (file: f.file, rel, key: AddressableName(rel, prefix));
+            })
             .OrderBy(x => x.key, StringComparer.Ordinal)
             .ToList();
 
-        DuplicateNameCheck(keyed);
+        DuplicateNameCheck(keyed.Select(x => (x.file, x.key)));
 
         var jobInputs = keyed
-            .Select(x => new BundleBuilder.TextureInput
+            .Select(x =>
             {
-                AddressableName = x.key,
-                Decode = () =>
+                var resolved =
+                    properties?.Resolve(x.rel, mipmapStreaming)
+                    ?? new TextureProperties { MipmapStreaming = mipmapStreaming };
+                return new BundleBuilder.TextureInput
                 {
-                    var (tex, skip) = DecodeFile(x.file);
-                    if (tex is not null)
-                        tex.AddressableName = x.key;
-                    return (tex, skip);
-                },
+                    AddressableName = x.key,
+                    Decode = () =>
+                    {
+                        var (tex, skip) = DecodeFile(x.file);
+                        if (tex is not null)
+                        {
+                            tex.AddressableName = x.key;
+                            tex.Readable = resolved.Readable;
+                            tex.StreamingMipmaps = resolved.MipmapStreaming;
+                            tex.StreamingMipmapsPriority = resolved.StreamingMipmapsPriority;
+                            tex.Filter = resolved.Filter;
+                            tex.WrapU = resolved.WrapU;
+                            tex.WrapV = resolved.WrapV;
+                            tex.WrapW = resolved.WrapW;
+                            tex.Aniso = resolved.Aniso;
+                            tex.MipBias = resolved.MipBias;
+                            if (resolved.ColorSpace is int colorSpace)
+                                tex.ColorSpace = colorSpace;
+                        }
+                        return (tex, skip);
+                    },
+                };
             })
             .ToList();
 
-        var build = BundleBuilder.Build(
-            seed,
-            jobInputs,
-            name,
-            output,
-            mipmapStreaming,
-            appendCabHash
-        );
+        // Resolve ran for every input above, so any glob still unmatched is a
+        // likely typo worth surfacing.
+        if (properties is not null)
+            foreach (var pattern in properties.UnmatchedPatterns)
+                Console.WriteLine($"warning: properties entry '{pattern}' matched no input file");
+
+        var build = BundleBuilder.Build(seed, jobInputs, name, output, appendCabHash);
 
         foreach (var s in build.Skipped)
             Console.WriteLine($"skip  {Rel(s.SourcePath)}: {s.Reason} ({s.Detail})");
@@ -88,7 +127,7 @@ internal static class Commands
         return 0;
     }
 
-    static void DuplicateNameCheck(List<(string file, string key)> keyed)
+    static void DuplicateNameCheck(IEnumerable<(string file, string key)> keyed)
     {
         // KSPTextureLoader resolves textures by the last path component without
         // extension, case-insensitively. Two inputs that collapse to the same key
@@ -108,13 +147,11 @@ internal static class Commands
     /// <summary>
     /// Compute the AssetBundle container key for a file, mirroring the
     /// EditorExtensions bundler: the path relative to the input directory it was
-    /// found under (<paramref name="baseDir"/>), prefixed with
-    /// <paramref name="prefix"/>, with backslashes normalised to '/' and lowercased.
-    /// The extension is kept.
+    /// found under (<paramref name="rel"/>, already '/'-separated), prefixed with
+    /// <paramref name="prefix"/> and lowercased. The extension is kept.
     /// </summary>
-    static string AddressableName(string file, string baseDir, string? prefix)
+    static string AddressableName(string rel, string? prefix)
     {
-        string rel = Path.GetRelativePath(baseDir, file);
         string combined = string.IsNullOrEmpty(prefix)
             ? rel
             : prefix.TrimEnd('/', '\\') + "/" + rel;
@@ -616,6 +653,19 @@ internal static class Commands
         return ms.ToArray();
     }
 
+    static string ProbeSettings(AssetTypeValueField b)
+    {
+        var ts = b["m_TextureSettings"];
+        if (ts.IsDummy)
+            return "";
+        string extra = b["m_ColorSpace"].IsDummy ? "" : $" colorSpace={b["m_ColorSpace"].AsInt}";
+        if (!b["m_StreamingMipmapsPriority"].IsDummy)
+            extra += $" streamPrio={b["m_StreamingMipmapsPriority"].AsInt}";
+        return $" filter={ts["m_FilterMode"].AsInt} aniso={ts["m_Aniso"].AsInt} "
+            + $"bias={ts["m_MipBias"].AsFloat} "
+            + $"wrap={ts["m_WrapU"].AsInt}/{ts["m_WrapV"].AsInt}/{ts["m_WrapW"].AsInt}{extra}";
+    }
+
     public static int Probe(string path)
     {
         var am = new AssetsManager();
@@ -645,7 +695,9 @@ internal static class Commands
                 Console.WriteLine(
                     $"  TEX pathId={info.PathId} name='{b["m_Name"].AsString}' "
                         + $"{b["m_Width"].AsInt}x{b["m_Height"].AsInt} fmt={b["m_TextureFormat"].AsInt} "
-                        + $"mips={b["m_MipCount"].AsInt} streamSize={size} streamPath='{spath}'"
+                        + $"mips={b["m_MipCount"].AsInt} readable={b["m_IsReadable"].AsBool} "
+                        + $"streamMips={b["m_StreamingMipmaps"].AsBool}{ProbeSettings(b)} "
+                        + $"streamSize={size} streamPath='{spath}'"
                 );
             }
             foreach (
@@ -669,6 +721,7 @@ internal static class Commands
                         $"  {label} pathId={info.PathId} name='{b["m_Name"].AsString}' "
                             + $"{Opt("m_Width")}x{Opt("m_Height")} depth={Opt("m_Depth")} "
                             + $"cubes={Opt("m_CubemapCount")} fmt={fmt} mips={Opt("m_MipCount")} "
+                            + $"readable={b["m_IsReadable"].AsBool}{ProbeSettings(b)} "
                             + $"streamSize={b["m_StreamData"]["size"].AsUInt}"
                     );
                 }
@@ -703,7 +756,8 @@ internal static class Commands
             var (tex, _) = DecodeFile(f);
             if (tex is null)
                 continue;
-            byKey[AddressableName(f, baseDir, prefix)] = tex;
+            byKey[AddressableName(Path.GetRelativePath(baseDir, f).Replace('\\', '/'), prefix)] =
+                tex;
             byName[tex.Name] = tex;
         }
 

@@ -15,6 +15,29 @@ internal enum TextureKind
 }
 
 /// <summary>
+/// Unity's <c>FilterMode</c> values, serialized into
+/// <c>m_TextureSettings.m_FilterMode</c>.
+/// </summary>
+internal enum TextureFilterMode
+{
+    Point = 0,
+    Bilinear = 1,
+    Trilinear = 2,
+}
+
+/// <summary>
+/// Unity's <c>TextureWrapMode</c> values, serialized into
+/// <c>m_TextureSettings.m_WrapU/V/W</c>.
+/// </summary>
+internal enum TextureWrapMode
+{
+    Repeat = 0,
+    Clamp = 1,
+    Mirror = 2,
+    MirrorOnce = 3,
+}
+
+/// <summary>
 /// A decoded source texture ready to be written into a bundle: its Unity
 /// serialized <see cref="TextureFormat"/>, dimensions, mip count and the raw
 /// mip-chain bytes exactly as they will live in the <c>.resS</c> stream.
@@ -56,8 +79,43 @@ internal sealed class SourceTexture
     /// <summary>
     /// 0 = linear, 1 = sRGB. Stored in the Texture2D's <c>m_ColorSpace</c>. The
     /// KSPTextureLoader CPU path ignores this, but Unity's own loader honours it.
+    /// Detected from the source file; a <c>--properties</c> entry can override it
+    /// (e.g. PNG normal maps, which would otherwise be tagged sRGB).
     /// </summary>
-    public required int ColorSpace { get; init; }
+    public required int ColorSpace { get; set; }
+
+    /// <summary>Serialized into <c>m_IsReadable</c>: Unity keeps a CPU-side copy of the
+    /// pixels so scripts can read them back. Set from the <c>--properties</c> file.</summary>
+    public bool Readable { get; set; }
+
+    /// <summary>Serialized into <c>m_StreamingMipmaps</c>. Only the classic
+    /// Texture2D/Cubemap layout carries the field; ignored for the modern
+    /// array/3D types. Set from <c>--mipmap-streaming</c> or the
+    /// <c>--properties</c> file.</summary>
+    public bool StreamingMipmaps { get; set; }
+
+    /// <summary>Serialized into <c>m_StreamingMipmapsPriority</c> (-128..127):
+    /// higher-priority textures keep their mips resident longer under memory
+    /// pressure. Only meaningful when <see cref="StreamingMipmaps"/> is on.</summary>
+    public int StreamingMipmapsPriority { get; set; }
+
+    /// <summary>Serialized into <c>m_TextureSettings.m_FilterMode</c>. Set from the
+    /// <c>--properties</c> file.</summary>
+    public TextureFilterMode Filter { get; set; } = TextureFilterMode.Bilinear;
+
+    /// <summary>Serialized into <c>m_TextureSettings.m_Aniso</c> (0..16). 0 disables
+    /// anisotropic filtering entirely, even when the quality settings force it.</summary>
+    public int Aniso { get; set; } = 1;
+
+    /// <summary>Serialized into <c>m_TextureSettings.m_MipBias</c>.</summary>
+    public float MipBias { get; set; }
+
+    /// <summary>Serialized into <c>m_TextureSettings.m_WrapU/V/W</c>. Which axes the
+    /// sampler actually uses depends on the texture type (W is only meaningful for
+    /// 3D textures). Set from the <c>--properties</c> file.</summary>
+    public TextureWrapMode WrapU { get; set; } = TextureWrapMode.Repeat;
+    public TextureWrapMode WrapV { get; set; } = TextureWrapMode.Repeat;
+    public TextureWrapMode WrapW { get; set; } = TextureWrapMode.Repeat;
 
     /// <summary>Raw mip-chain bytes (largest mip first), copied verbatim into the resS.</summary>
     public required byte[] Data { get; init; }

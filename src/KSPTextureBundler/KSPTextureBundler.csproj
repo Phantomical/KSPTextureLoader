@@ -35,5 +35,9 @@
         <PackageReference Include="System.CommandLine" Version="2.0.9" />
         <!-- Cross-platform PNG decode to RGBA32. -->
         <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+        <!-- Glob matching for the properties file. -->
+        <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="9.0.0" />
+        <!-- YAML parsing for the properties file. -->
+        <PackageReference Include="YamlDotNet" Version="16.3.0" />
     </ItemGroup>
 </Project>

@@ -25,7 +25,56 @@ Available options are:
 --prefix <prefix>  A path prefix to prepend to every bundle texture path.
 --seed             Override the seed bundle used for type trees.
 --mipmap-streaming Enable mipmap streaming on all textures in the bundle.
+--properties       A YAML file assigning per-texture properties by glob.
 ```
+
+### Per-texture properties
+
+`--properties <file.yaml>` sets properties on individual textures instead of
+the whole bundle:
+
+```yaml
+properties:
+  - files: 'a/*/*.dds'
+    readable: true        # keep a CPU-side copy so scripts can read the pixels
+    mipmapStreaming: true # enable mipmap streaming for this texture
+    filter: trilinear     # point, bilinear (default), or trilinear
+    wrap: clamp           # repeat (default), clamp, mirror, or mirrorOnce
+  - files: 'a/special/*.dds'
+    mipmapStreaming: false
+    wrapU: repeat         # per-axis wrap; overrides 'wrap' for that axis
+    wrapV: clamp
+```
+
+Each entry needs a `files` glob plus any of the properties:
+
+* `readable` - keep a CPU-side copy of the pixels (`m_IsReadable`). Default false.
+* `mipmapStreaming` - enable mipmap streaming. Defaults to false, or true if
+  `--mipmap-streaming` was passed. Only applies to 2D textures and cubemaps;
+  array and 3D textures cannot be streamed by unity and ignore the setting.
+* `streamingMipmapsPriority` - mip streaming priority (-128 to 127, default
+  0): higher-priority textures keep their mips resident longer under memory
+  pressure. Only meaningful when `mipmapStreaming` is enabled.
+* `filter` - the sampler filter mode: `point`, `bilinear` (default), or
+  `trilinear`.
+* `wrap`, `wrapU`, `wrapV`, `wrapW` - the sampler wrap mode: `repeat`
+  (default), `clamp`, `mirror`, or `mirrorOnce`. `wrap` sets every axis at
+  once; the per-axis keys override it. Which axes are used depends on the
+  texture type: 2D textures and arrays sample U/V, 3D textures also use W,
+  and cubemaps are effectively always clamped by unity.
+* `aniso` - anisotropic filtering level (0 to 16, default 1). 0 disables
+  anisotropic filtering entirely, even when the quality settings force it on.
+* `mipBias` - mip level bias applied when sampling (default 0).
+* `colorSpace` - `srgb` or `linear`, overriding what was detected from the
+  source file. Useful for data textures like normal maps stored as PNG, which
+  would otherwise be tagged sRGB and be incorrectly gamma-converted when
+  sampled.
+
+Globs are matched case-insensitively against the same input-relative path that
+becomes the texture's bundle path, before `--prefix` is applied: `*` matches
+within one path segment, `**` spans directories, and `?` matches a single
+character. Every matching entry applies in order, so later entries override
+earlier ones for whichever properties they specify.
 
 ### Extracting textures from an asset bundle
 

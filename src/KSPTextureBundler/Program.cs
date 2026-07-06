@@ -41,6 +41,12 @@ internal static class Program
         {
             Description = "Enabled mipmap streaming on bundled textures.",
         };
+        var properties = new Option<string?>("--properties")
+        {
+            Description =
+                "A YAML file assigning per-texture properties (readable, mipmapStreaming) "
+                + "to input files matched by glob.",
+        };
         var inputs = new Argument<string[]>("inputs")
         {
             Description = "A directory containing the texture files",
@@ -53,6 +59,7 @@ internal static class Program
         cmd.Options.Add(seed);
         cmd.Options.Add(prefix);
         cmd.Options.Add(mipmapStreaming);
+        cmd.Options.Add(properties);
         cmd.Arguments.Add(inputs);
         cmd.SetAction(pr =>
             Commands.Build(
@@ -61,7 +68,8 @@ internal static class Program
                 pr.GetValue(name),
                 pr.GetValue(seed),
                 pr.GetValue(prefix),
-                pr.GetValue(mipmapStreaming)
+                pr.GetValue(mipmapStreaming),
+                pr.GetValue(properties)
             )
         );
         return cmd;

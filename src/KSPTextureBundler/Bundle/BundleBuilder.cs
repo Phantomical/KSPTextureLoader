@@ -56,7 +56,6 @@ internal static class BundleBuilder
         IReadOnlyList<TextureInput> inputs,
         string assetBundleName,
         string outputPath,
-        bool streamingMipmaps = false,
         bool appendCabHash = true
     )
     {
@@ -66,14 +65,7 @@ internal static class BundleBuilder
 
         try
         {
-            return BuildFromSeedFile(
-                seedTmp,
-                inputs,
-                assetBundleName,
-                outputPath,
-                streamingMipmaps,
-                appendCabHash
-            );
+            return BuildFromSeedFile(seedTmp, inputs, assetBundleName, outputPath, appendCabHash);
         }
         finally
         {
@@ -94,7 +86,6 @@ internal static class BundleBuilder
         IReadOnlyList<SourceTexture> textures,
         string assetBundleName,
         string outputPath,
-        bool streamingMipmaps = false,
         bool appendCabHash = true
     )
     {
@@ -107,14 +98,7 @@ internal static class BundleBuilder
                 Decode = () => ((SourceTexture?)t, (SkippedTexture?)null),
             })
             .ToList();
-        return Build(
-            seedBundle,
-            inputs,
-            assetBundleName,
-            outputPath,
-            streamingMipmaps,
-            appendCabHash
-        );
+        return Build(seedBundle, inputs, assetBundleName, outputPath, appendCabHash);
     }
 
     static BuildResult BuildFromSeedFile(
@@ -122,7 +106,6 @@ internal static class BundleBuilder
         IReadOnlyList<TextureInput> inputs,
         string assetBundleName,
         string outputPath,
-        bool streamingMipmaps,
         bool appendCabHash
     )
     {
@@ -213,7 +196,7 @@ internal static class BundleBuilder
                         );
 
                     var texField = am.CreateValueBaseField(afileInst, classId);
-                    PopulateForKind(texField, tex, offset, size, streamPath, streamingMipmaps);
+                    PopulateForKind(texField, tex, offset, size, streamPath);
 
                     info.SetNewData(texField);
                     afile.Metadata.AddAssetInfo(info);
@@ -283,8 +266,7 @@ internal static class BundleBuilder
         SourceTexture src,
         long streamOffset,
         long streamSize,
-        string streamPath,
-        bool streamingMipmaps
+        string streamPath
     )
     {
         switch (src.Kind)
@@ -299,7 +281,6 @@ internal static class BundleBuilder
                     streamOffset,
                     streamSize,
                     streamPath,
-                    streamingMipmaps,
                     imageCount: 6,
                     dimension: TextureDimensionCube
                 );
@@ -320,7 +301,6 @@ internal static class BundleBuilder
                     streamOffset,
                     streamSize,
                     streamPath,
-                    streamingMipmaps,
                     imageCount: 1,
                     dimension: TextureDimensionTex2D
                 );
@@ -335,7 +315,6 @@ internal static class BundleBuilder
         long streamOffset,
         long streamSize,
         string streamPath,
-        bool streamingMipmaps,
         int imageCount,
         int dimension
     )
@@ -350,13 +329,13 @@ internal static class BundleBuilder
         tex["m_CompleteImageSize"].AsInt = checked((int)(streamSize / imageCount));
         tex["m_TextureFormat"].AsInt = (int)src.Format;
         Set(tex, "m_MipCount", src.MipCount);
-        SetBool(tex, "m_IsReadable", false);
-        SetBool(tex, "m_StreamingMipmaps", streamingMipmaps);
-        Set(tex, "m_StreamingMipmapsPriority", 0);
+        SetBool(tex, "m_IsReadable", src.Readable);
+        SetBool(tex, "m_StreamingMipmaps", src.StreamingMipmaps);
+        Set(tex, "m_StreamingMipmapsPriority", src.StreamingMipmapsPriority);
         Set(tex, "m_ImageCount", imageCount);
         Set(tex, "m_TextureDimension", dimension);
 
-        ApplyTextureSettings(tex);
+        ApplyTextureSettings(tex, src);
 
         Set(tex, "m_LightmapFormat", 0);
         Set(tex, "m_ColorSpace", src.ColorSpace);
@@ -400,23 +379,23 @@ internal static class BundleBuilder
         Set(tex, "m_MipCount", src.MipCount);
         SetUInt(tex, "m_DataSize", checked((uint)streamSize));
 
-        ApplyTextureSettings(tex);
-        SetBool(tex, "m_IsReadable", false);
+        ApplyTextureSettings(tex, src);
+        SetBool(tex, "m_IsReadable", src.Readable);
 
         ApplyStreamData(tex, streamOffset, streamSize, streamPath);
     }
 
-    static void ApplyTextureSettings(AssetTypeValueField tex)
+    static void ApplyTextureSettings(AssetTypeValueField tex, SourceTexture src)
     {
         var ts = tex["m_TextureSettings"];
         if (ts.IsDummy)
             return;
-        Set(ts, "m_FilterMode", 1); // bilinear
-        Set(ts, "m_Aniso", 1);
-        SetFloat(ts, "m_MipBias", 0f);
-        Set(ts, "m_WrapU", 0); // repeat
-        Set(ts, "m_WrapV", 0);
-        Set(ts, "m_WrapW", 0);
+        Set(ts, "m_FilterMode", (int)src.Filter);
+        Set(ts, "m_Aniso", src.Aniso);
+        SetFloat(ts, "m_MipBias", src.MipBias);
+        Set(ts, "m_WrapU", (int)src.WrapU);
+        Set(ts, "m_WrapV", (int)src.WrapV);
+        Set(ts, "m_WrapW", (int)src.WrapW);
     }
 
     static void ApplyStreamData(
