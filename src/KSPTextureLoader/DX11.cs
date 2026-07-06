@@ -50,17 +50,33 @@ internal static class DX11
         return Dx11Texture.Device;
     }
 
+    static bool IsDirect3D11;
+    static bool AllowThreadedTextureCreation;
+
+    /// <summary>
+    /// Snapshot the Unity capability statics used by
+    /// <see cref="SupportsAsyncUpload"/>, which can only be read on the main
+    /// thread. Called from <see cref="TextureLoader"/> on startup.
+    /// </summary>
+    internal static void CacheCapabilities()
+    {
+        IsDirect3D11 = SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11;
+        AllowThreadedTextureCreation = Texture.allowThreadedTextureCreation;
+    }
+
+    // May be called from background threads, so unity state is limited to the
+    // capabilities snapshotted by CacheCapabilities.
     internal static bool SupportsAsyncUpload(int width, int height, GraphicsFormat format)
     {
         if (!Config.Instance.AllowNativeUploads)
             return false;
 
-        if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Direct3D11)
+        if (!IsDirect3D11)
             return false;
 
         // If unity doesn't support this then it is likely that the device is
         // created in a way that would prevent us from creating textures in a job.
-        if (!Texture.allowThreadedTextureCreation)
+        if (!AllowThreadedTextureCreation)
             return false;
 
         // Feeding a texture that is not a multiple of the block size will cause

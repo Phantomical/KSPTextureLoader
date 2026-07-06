@@ -322,12 +322,31 @@ internal static class DDSLoader
     #endregion
 
     #region LoadTexture
-    public static async Task LoadTexture<T>(TextureHandleImpl handle, TextureLoadOptions options)
+    public static Task LoadTexture<T>(TextureHandleImpl handle, TextureLoadOptions options)
         where T : Texture
     {
+        // KSPUtil.ApplicationRootPath can only be read on the main thread.
         var diskPath = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", handle.Path);
         var infoTask = ReadFileHeaderAsync(diskPath);
         var metadataTask = GetTextureMetadata<T>(infoTask, dataTask: null, options);
+
+        // Everything up to the GPU upload runs on background threads so that
+        // loads don't wait on the main thread; the load paths hop back to the
+        // main thread for the parts that need it.
+        return Task.Run(() =>
+            LoadTextureBackground<T>(handle, options, diskPath, infoTask, metadataTask)
+        );
+    }
+
+    static async Task LoadTextureBackground<T>(
+        TextureHandleImpl handle,
+        TextureLoadOptions options,
+        string diskPath,
+        Task<FileInfo> infoTask,
+        Task<TextureMetadata> metadataTask
+    )
+        where T : Texture
+    {
         var metadata = await metadataTask;
         var info = await infoTask;
 
@@ -452,7 +471,16 @@ internal static class DDSLoader
     /// </summary>
     static bool ShouldLoadViaBundle(TextureLoadOptions options, long pixelDataSize)
     {
-        if (options.Hint is not (TextureLoadHint.Asynchronous or TextureLoadHint.BatchAsynchronous))
+        if (options.Hint > TextureLoadHint.BatchAsynchronous)
+            return false;
+
+        // The bundle streams pixels via m_StreamData, which Unity uploads
+        // straight to the GPU without ever populating the CPU-side shadow. The
+        // resulting texture reports m_IsReadable but has no valid system memory
+        // behind it, so any CPU read (GetPixelData, Graphics.CopyTexture from
+        // it, ...) walks off the end of the uncommitted buffer. Readable
+        // textures therefore have to take the direct SetPixelData path.
+        if (!options.Unreadable)
             return false;
 
         // The resS sizes and offsets in the bundle are unsigned 32-bit; leave
@@ -478,6 +506,8 @@ internal static class DDSLoader
         return GraphicsFormatUtility.GetGraphicsFormat(tf, srgb) == format;
     }
 
+    // Runs on a background thread; only the bundle mount and SetTexture touch
+    // the main thread.
     static async Task LoadTextureViaBundle<T>(
         TextureHandleImpl handle,
         TextureLoadOptions options,
@@ -490,27 +520,57 @@ internal static class DDSLoader
         if (source.Length < pixelDataSize)
             throw new Exception("Invalid DDS file: not enough data for specified texture size");
 
-        var (built, stream) = await Task.Run(async () =>
+        TextureBundleBuilder.Built built;
+        BundleStream stream = null;
+        if (
+            source.FilePath is string filePath
+            && source.FileOffset + pixelDataSize <= uint.MaxValue
+        )
         {
-            var built = TextureBundleBuilder.Build(request, pixelDataSize);
+            // File-backed pixels: point the bundle's m_StreamData straight at
+            // the file and let Unity read the bytes itself. The whole bundle
+            // is the ~1 KB prefix; no stream needs to be kept alive.
+            built = TextureBundleBuilder.Build(request, pixelDataSize, filePath, source.FileOffset);
+        }
+        else
+        {
+            built = TextureBundleBuilder.Build(request, pixelDataSize);
 
-            if (Config.Instance.DebugMode >= DebugLevel.Debug)
-                _ = AsyncUtil.LaunchMainThreadTask(() =>
-                    Debug.Log(
-                        $"[KSPTextureLoader] Built streamed bundle for \"{request.Name}\" "
-                            + $"(ClassId={request.ClassId}, Width={request.Width}, Height={request.Height}, "
-                            + $"Depth={request.Depth}, MipCount={request.MipCount}, Format={request.Format}, "
-                            + $"ColorSpace={request.ColorSpace}, Readable={request.Readable}), "
-                            + $"pixelDataSize={pixelDataSize}, prefix size={built.Prefix.Length} bytes"
-                    )
-                );
-
+            // For palette textures this waits on the decoded pixels, whose
+            // decode jobs are scheduled on the main thread.
             var (payload, payloadOffset) = await source.OpenStreamAsync();
-            return (built, new BundleStream(built.Prefix, payload, payloadOffset, pixelDataSize));
-        });
+            stream = new BundleStream(built.Prefix, payload, payloadOffset, pixelDataSize);
+        }
 
-        var texture = await TextureBundleLoader.LoadAsync(built, stream);
-        handle.SetTexture<T>(texture, options);
+        LogBundleBuilt(request, pixelDataSize, built);
+
+        await AsyncUtil.LaunchMainThreadTask(async () =>
+        {
+            var texture = await (
+                stream is null
+                    ? TextureBundleLoader.LoadAsync(built, options)
+                    : TextureBundleLoader.LoadAsync(built, stream, options)
+            );
+            handle.SetTexture<T>(texture, options);
+        });
+    }
+
+    static void LogBundleBuilt(
+        TextureBundleBuilder.TextureRequest request,
+        long pixelDataSize,
+        TextureBundleBuilder.Built built
+    )
+    {
+        if (Config.Instance.DebugMode < DebugLevel.Debug)
+            return;
+
+        _ = AsyncUtil.LaunchMainThreadTask(() =>
+            Debug.Log(
+                $"[KSPTextureLoader] Built streamed bundle for \"{request.Name}\": "
+                    + $"{request.Width}x{request.Height}x{request.Depth}, {request.MipCount} mips, "
+                    + $"{pixelDataSize} pixel bytes, {built.Prefix.Length} byte prefix"
+            )
+        );
     }
 
     static async Task LoadTexture2D<T>(
@@ -530,7 +590,9 @@ internal static class DDSLoader
         // Prefer a native texture upload if available.
         if (DX11.SupportsAsyncUpload(width, height, format))
         {
-            await DX11.UploadTexture2DAsync<T>(handle, options, metadata, source.TakeData());
+            await AsyncUtil.LaunchMainThreadTask(() =>
+                DX11.UploadTexture2DAsync<T>(handle, options, metadata, source.TakeData())
+            );
             return;
         }
 
@@ -561,45 +623,53 @@ internal static class DDSLoader
             return;
         }
 
-        var dataTask = source.TakeData();
-        using var dguard = new TaskArrayDisposeGuard(dataTask);
-
-        var texture = TextureUtils.CreateUninitializedTexture2D(width, height, mipCount, format);
-        using var texGuard = new TextureDisposeGuard(texture);
-
-        if (options.Hint == TextureLoadHint.Synchronous)
+        await AsyncUtil.LaunchMainThreadTask(async () =>
         {
-            var data = await dataTask;
+            var dataTask = source.TakeData();
+            using var dguard = new TaskArrayDisposeGuard(dataTask);
 
-            using var scope = LoadTextureDataMarker.Auto();
-            texture.LoadRawTextureData(data.AsNativeArray());
-        }
-        else
-        {
-            // This will wait until the texture has been uploaded by the graphics
-            // and so it won't make a copy if we call GetRawTextureData.
-            await AsyncUtil.RunOnGraphicsThread(static () => { });
+            var texture = TextureUtils.CreateUninitializedTexture2D(
+                width,
+                height,
+                mipCount,
+                format
+            );
+            using var texGuard = new TextureDisposeGuard(texture);
 
-            var texdata = texture.GetRawTextureData<byte>();
-            await Task.Run(async () =>
+            if (options.Hint == TextureLoadHint.Synchronous)
             {
                 var data = await dataTask;
 
                 using var scope = LoadTextureDataMarker.Auto();
+                texture.LoadRawTextureData(data.AsNativeArray());
+            }
+            else
+            {
+                // This will wait until the texture has been uploaded by the graphics
+                // and so it won't make a copy if we call GetRawTextureData.
+                await AsyncUtil.RunOnGraphicsThread(static () => { });
 
-                if (data.Length != texdata.Length)
-                    throw new InvalidOperationException(
-                        $"input and output lengths do not match (input {data.Length}, output {texdata.Length})"
-                    );
+                var texdata = texture.GetRawTextureData<byte>();
+                await Task.Run(async () =>
+                {
+                    var data = await dataTask;
 
-                texdata.CopyFrom(data.AsNativeArray());
-            });
-        }
+                    using var scope = LoadTextureDataMarker.Auto();
 
-        texture.Apply(false, makeNoLongerReadable: unreadable);
+                    if (data.Length != texdata.Length)
+                        throw new InvalidOperationException(
+                            $"input and output lengths do not match (input {data.Length}, output {texdata.Length})"
+                        );
 
-        texGuard.Clear();
-        handle.SetTexture<T>(texture, options);
+                    texdata.CopyFrom(data.AsNativeArray());
+                });
+            }
+
+            texture.Apply(false, makeNoLongerReadable: unreadable);
+
+            texGuard.Clear();
+            handle.SetTexture<T>(texture, options);
+        });
     }
 
     static async Task LoadTexture2DArray<T>(
@@ -640,48 +710,51 @@ internal static class DDSLoader
             return;
         }
 
-        var dataTask = source.TakeData();
-        using var dguard = new TaskArrayDisposeGuard(dataTask);
-
-        var tex2dArray = TextureUtils.CreateUninitializedTexture2DArray(
-            width,
-            height,
-            arraySize,
-            mipCount,
-            format
-        );
-        using var texGuard = new TextureCleanupGuard(tex2dArray);
-
-        if (options.Hint != TextureLoadHint.Synchronous)
+        await AsyncUtil.LaunchMainThreadTask(async () =>
         {
-            // This will wait until the texture has been uploaded by the graphics
-            // and so it won't make a copy if we call SetPixelData.
-            await AsyncUtil.RunOnGraphicsThread(() => { });
-        }
+            var dataTask = source.TakeData();
+            using var dguard = new TaskArrayDisposeGuard(dataTask);
 
-        var buffer = await dataTask;
+            var tex2dArray = TextureUtils.CreateUninitializedTexture2DArray(
+                width,
+                height,
+                arraySize,
+                mipCount,
+                format
+            );
+            using var texGuard = new TextureCleanupGuard(tex2dArray);
 
-        long offset = 0;
-        for (int element = 0; element < arraySize; ++element)
-        {
-            for (int mip = 0; mip < mipCount; ++mip)
+            if (options.Hint != TextureLoadHint.Synchronous)
             {
-                int mipSize = Get2DMipMapSize(width, height, mip, format);
-
-                if (offset + mipSize > buffer.Length)
-                    throw new Exception(
-                        "Invalid DDS file: not enough data for specified texture size"
-                    );
-
-                var mipData = buffer.GetSubArray(offset, mipSize).AsNativeArray();
-                tex2dArray.SetPixelData(mipData, mip, element);
-                offset += mipSize;
+                // This will wait until the texture has been uploaded by the graphics
+                // and so it won't make a copy if we call SetPixelData.
+                await AsyncUtil.RunOnGraphicsThread(() => { });
             }
-        }
 
-        tex2dArray.Apply(false, options.Unreadable);
-        handle.SetTexture<T>(tex2dArray, options);
-        texGuard.Clear();
+            var buffer = await dataTask;
+
+            long offset = 0;
+            for (int element = 0; element < arraySize; ++element)
+            {
+                for (int mip = 0; mip < mipCount; ++mip)
+                {
+                    int mipSize = Get2DMipMapSize(width, height, mip, format);
+
+                    if (offset + mipSize > buffer.Length)
+                        throw new Exception(
+                            "Invalid DDS file: not enough data for specified texture size"
+                        );
+
+                    var mipData = buffer.GetSubArray(offset, mipSize).AsNativeArray();
+                    tex2dArray.SetPixelData(mipData, mip, element);
+                    offset += mipSize;
+                }
+            }
+
+            tex2dArray.Apply(false, options.Unreadable);
+            handle.SetTexture<T>(tex2dArray, options);
+            texGuard.Clear();
+        });
     }
 
     static async Task LoadTextureCubemap<T>(
@@ -700,7 +773,9 @@ internal static class DDSLoader
 
         if (options.Unreadable && DX11.SupportsAsyncUpload(width, height, format))
         {
-            await DX11.UploadTextureCubemapAsync<T>(handle, options, metadata, source.TakeData());
+            await AsyncUtil.LaunchMainThreadTask(() =>
+                DX11.UploadTextureCubemapAsync<T>(handle, options, metadata, source.TakeData())
+            );
             return;
         }
 
@@ -731,61 +806,13 @@ internal static class DDSLoader
             return;
         }
 
-        var dataTask = source.TakeData();
-        using var dguard = new TaskArrayDisposeGuard(dataTask);
-
-        var cubemap = TextureUtils.CreateUninitializedCubemap(width, mipCount, format);
-        using var texGuard = new TextureCleanupGuard(cubemap);
-
-        if (options.Hint != TextureLoadHint.Synchronous)
+        await AsyncUtil.LaunchMainThreadTask(async () =>
         {
-            // This will wait until the texture has been uploaded by the graphics
-            // and so it won't make a copy if we call SetPixelData.
-            await AsyncUtil.RunOnGraphicsThread(() => { });
-        }
+            var dataTask = source.TakeData();
+            using var dguard = new TaskArrayDisposeGuard(dataTask);
 
-        var buffer = await dataTask;
-
-        if (buffer.Length <= int.MaxValue)
-        {
-            long offset = 0;
-            for (int face = 0; face < 6; ++face)
-            {
-                for (int mip = 0; mip < mipCount; ++mip)
-                {
-                    int mipSize = Get2DMipMapSize(width, height, mip, format);
-
-                    if (offset + mipSize > buffer.Length)
-                        throw new Exception(
-                            "Invalid DDS file: not enough data for specified texture size"
-                        );
-
-                    var mipData = buffer.GetSubArray(offset, mipSize).AsNativeArray();
-                    cubemap.SetPixelData(mipData, mip, (CubemapFace)face);
-                    offset += mipSize;
-                }
-            }
-        }
-        else
-        {
-            // Alternate path for textures larger than 2^32. SetPixelData does its
-            // bound-checks using ints and it will throw spurious errors if you
-            // try to set data that has an offset > int.MaxValue.
-            //
-            // This shows up with 16k cubemaps, which are pretty niche but are used
-            // by Sol.
-            //
-            // This case is a workaround to the issue. Graphics.CopyTexture will
-            // copy the cpu half of the texture regardless of support, so we can
-            // use it to copy the parts we need as we go.
-
-            var staging = TextureUtils.CreateUninitializedTexture2D(
-                width,
-                height,
-                mipCount,
-                format
-            );
-            using var guard = new TextureDisposeGuard(staging);
+            var cubemap = TextureUtils.CreateUninitializedCubemap(width, mipCount, format);
+            using var texGuard = new TextureCleanupGuard(cubemap);
 
             if (options.Hint != TextureLoadHint.Synchronous)
             {
@@ -794,26 +821,77 @@ internal static class DDSLoader
                 await AsyncUtil.RunOnGraphicsThread(() => { });
             }
 
-            var sdata = staging.GetRawTextureData<byte>();
-            int mipChainSize = GetFaceMipChainSize(width, height, mipCount, format);
-            long offset = 0;
+            var buffer = await dataTask;
 
-            for (int face = 0; face < 6; ++face)
+            if (buffer.Length <= int.MaxValue)
             {
-                if (offset + mipChainSize > buffer.Length)
-                    throw new Exception(
-                        "Invalid DDS file: not enough data for specified texture size"
-                    );
+                long offset = 0;
+                for (int face = 0; face < 6; ++face)
+                {
+                    for (int mip = 0; mip < mipCount; ++mip)
+                    {
+                        int mipSize = Get2DMipMapSize(width, height, mip, format);
 
-                sdata.CopyFrom(buffer.GetSubArray(offset, mipChainSize).AsNativeArray());
-                Graphics.CopyTexture(staging, 0, cubemap, face);
-                offset += mipChainSize;
+                        if (offset + mipSize > buffer.Length)
+                            throw new Exception(
+                                "Invalid DDS file: not enough data for specified texture size"
+                            );
+
+                        var mipData = buffer.GetSubArray(offset, mipSize).AsNativeArray();
+                        cubemap.SetPixelData(mipData, mip, (CubemapFace)face);
+                        offset += mipSize;
+                    }
+                }
             }
-        }
+            else
+            {
+                // Alternate path for textures larger than 2^32. SetPixelData does its
+                // bound-checks using ints and it will throw spurious errors if you
+                // try to set data that has an offset > int.MaxValue.
+                //
+                // This shows up with 16k cubemaps, which are pretty niche but are used
+                // by Sol.
+                //
+                // This case is a workaround to the issue. Graphics.CopyTexture will
+                // copy the cpu half of the texture regardless of support, so we can
+                // use it to copy the parts we need as we go.
 
-        cubemap.Apply(false, options.Unreadable);
-        handle.SetTexture<T>(cubemap, options);
-        texGuard.Clear();
+                var staging = TextureUtils.CreateUninitializedTexture2D(
+                    width,
+                    height,
+                    mipCount,
+                    format
+                );
+                using var guard = new TextureDisposeGuard(staging);
+
+                if (options.Hint != TextureLoadHint.Synchronous)
+                {
+                    // This will wait until the texture has been uploaded by the graphics
+                    // and so it won't make a copy if we call SetPixelData.
+                    await AsyncUtil.RunOnGraphicsThread(() => { });
+                }
+
+                var sdata = staging.GetRawTextureData<byte>();
+                int mipChainSize = GetFaceMipChainSize(width, height, mipCount, format);
+                long offset = 0;
+
+                for (int face = 0; face < 6; ++face)
+                {
+                    if (offset + mipChainSize > buffer.Length)
+                        throw new Exception(
+                            "Invalid DDS file: not enough data for specified texture size"
+                        );
+
+                    sdata.CopyFrom(buffer.GetSubArray(offset, mipChainSize).AsNativeArray());
+                    Graphics.CopyTexture(staging, 0, cubemap, face);
+                    offset += mipChainSize;
+                }
+            }
+
+            cubemap.Apply(false, options.Unreadable);
+            handle.SetTexture<T>(cubemap, options);
+            texGuard.Clear();
+        });
     }
 
     static async Task LoadTextureCubemapArray<T>(
@@ -854,47 +932,50 @@ internal static class DDSLoader
             return;
         }
 
-        var dataTask = source.TakeData();
-        using var dguard = new TaskArrayDisposeGuard(dataTask);
-
-        var cubeArray = TextureUtils.CreateUninitializedCubemapArray(
-            width,
-            arraySize / 6,
-            mipCount,
-            format
-        );
-        using var texGuard = new TextureCleanupGuard(cubeArray);
-
-        if (options.Hint != TextureLoadHint.Synchronous)
+        await AsyncUtil.LaunchMainThreadTask(async () =>
         {
-            // This will wait until the texture has been uploaded by the graphics
-            // and so it won't make a copy if we call SetPixelData.
-            await AsyncUtil.RunOnGraphicsThread(() => { });
-        }
+            var dataTask = source.TakeData();
+            using var dguard = new TaskArrayDisposeGuard(dataTask);
 
-        var buffer = await dataTask;
+            var cubeArray = TextureUtils.CreateUninitializedCubemapArray(
+                width,
+                arraySize / 6,
+                mipCount,
+                format
+            );
+            using var texGuard = new TextureCleanupGuard(cubeArray);
 
-        long offset = 0;
-        for (int element = 0; element < arraySize; ++element)
-        {
-            int face = element % 6;
-            for (int mip = 0; mip < mipCount; ++mip)
+            if (options.Hint != TextureLoadHint.Synchronous)
             {
-                int mipSize = Get2DMipMapSize(width, height, mip, format);
-
-                if (offset + mipSize > buffer.Length)
-                    throw new Exception(
-                        "Invalid DDS file: not enough data for specified texture size"
-                    );
-
-                var mipData = buffer.GetSubArray(offset, mipSize).AsNativeArray();
-                cubeArray.SetPixelData(mipData, mip, (CubemapFace)face, element);
-                offset += mipSize;
+                // This will wait until the texture has been uploaded by the graphics
+                // and so it won't make a copy if we call SetPixelData.
+                await AsyncUtil.RunOnGraphicsThread(() => { });
             }
-        }
-        cubeArray.Apply(false, options.Unreadable);
-        handle.SetTexture<T>(cubeArray, options);
-        texGuard.Clear();
+
+            var buffer = await dataTask;
+
+            long offset = 0;
+            for (int element = 0; element < arraySize; ++element)
+            {
+                int face = element % 6;
+                for (int mip = 0; mip < mipCount; ++mip)
+                {
+                    int mipSize = Get2DMipMapSize(width, height, mip, format);
+
+                    if (offset + mipSize > buffer.Length)
+                        throw new Exception(
+                            "Invalid DDS file: not enough data for specified texture size"
+                        );
+
+                    var mipData = buffer.GetSubArray(offset, mipSize).AsNativeArray();
+                    cubeArray.SetPixelData(mipData, mip, (CubemapFace)face, element);
+                    offset += mipSize;
+                }
+            }
+            cubeArray.Apply(false, options.Unreadable);
+            handle.SetTexture<T>(cubeArray, options);
+            texGuard.Clear();
+        });
     }
 
     static async Task LoadTexture3D<T>(
@@ -939,43 +1020,48 @@ internal static class DDSLoader
             return;
         }
 
-        var dataTask = source.TakeData();
-        using var dguard = new TaskArrayDisposeGuard(dataTask);
-
-        var tex3d = TextureUtils.CreateUninitializedTexture3D(
-            width,
-            height,
-            depth,
-            mipCount,
-            format
-        );
-        using var texGuard = new TextureCleanupGuard(tex3d);
-
-        if (options.Hint != TextureLoadHint.Synchronous)
+        await AsyncUtil.LaunchMainThreadTask(async () =>
         {
-            // This will wait until the texture has been uploaded by the graphics
-            // and so it won't make a copy if we call SetPixelData.
-            await AsyncUtil.RunOnGraphicsThread(() => { });
-        }
+            var dataTask = source.TakeData();
+            using var dguard = new TaskArrayDisposeGuard(dataTask);
 
-        var buffer = await dataTask;
+            var tex3d = TextureUtils.CreateUninitializedTexture3D(
+                width,
+                height,
+                depth,
+                mipCount,
+                format
+            );
+            using var texGuard = new TextureCleanupGuard(tex3d);
 
-        long offset = 0;
-        for (int mip = 0; mip < mipCount; ++mip)
-        {
-            var mipSize = Get3DMipMapSize(width, height, depth, mip, format);
+            if (options.Hint != TextureLoadHint.Synchronous)
+            {
+                // This will wait until the texture has been uploaded by the graphics
+                // and so it won't make a copy if we call SetPixelData.
+                await AsyncUtil.RunOnGraphicsThread(() => { });
+            }
 
-            if (offset + mipSize > buffer.Length)
-                throw new Exception("Invalid DDS file: not enough data for specified texture size");
+            var buffer = await dataTask;
 
-            var mipData = buffer.GetSubArray(offset, mipSize).AsNativeArray();
-            tex3d.SetPixelData(mipData, mip);
-            offset += mipSize;
-        }
+            long offset = 0;
+            for (int mip = 0; mip < mipCount; ++mip)
+            {
+                var mipSize = Get3DMipMapSize(width, height, depth, mip, format);
 
-        tex3d.Apply(false, makeNoLongerReadable: true);
-        handle.SetTexture<T>(tex3d, options);
-        texGuard.Clear();
+                if (offset + mipSize > buffer.Length)
+                    throw new Exception(
+                        "Invalid DDS file: not enough data for specified texture size"
+                    );
+
+                var mipData = buffer.GetSubArray(offset, mipSize).AsNativeArray();
+                tex3d.SetPixelData(mipData, mip);
+                offset += mipSize;
+            }
+
+            tex3d.Apply(false, makeNoLongerReadable: true);
+            handle.SetTexture<T>(tex3d, options);
+            texGuard.Clear();
+        });
     }
     #endregion
 

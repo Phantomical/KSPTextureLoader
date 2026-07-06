@@ -26,6 +26,12 @@ internal sealed class PixelDataSource
     /// <summary>The number of pixel bytes available.</summary>
     public long Length { get; }
 
+    /// <summary>The backing file's path, or null for buffer-backed sources.</summary>
+    public string FilePath => path;
+
+    /// <summary>The offset of the pixel bytes within <see cref="FilePath"/>.</summary>
+    public long FileOffset => offset;
+
     /// <summary>A source backed by a region of a file on disk.</summary>
     public PixelDataSource(string path, long offset, long length)
     {

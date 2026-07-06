@@ -1,4 +1,5 @@
 using System;
+using Unity.Profiling;
 
 namespace KSPTextureLoader.Format.Bundle;
 
@@ -27,6 +28,8 @@ internal static class TextureBundleBuilder
     // A fixed already-canonical key sidesteps that entirely; the caller
     // renames the loaded texture afterwards anyway.
     const string ContainerKey = "texture";
+
+    static readonly ProfilerMarker BuildTextureBundleMarker = new("BuildTextureBundle");
 
     /// <summary>The texture to wrap in a bundle.</summary>
     public sealed class TextureRequest
@@ -61,8 +64,8 @@ internal static class TextureBundleBuilder
 
         /// <summary>The full mip chain in resS byte order. Only used by
         /// <see cref="TextureBundleLoader.CreateAsync"/>; the streamed
-        /// <see cref="Build"/> path never materializes the pixel bytes and
-        /// ignores this field.</summary>
+        /// <see cref="Build(TextureRequest, long, int)"/> path never
+        /// materializes the pixel bytes and ignores this field.</summary>
         public byte[] Pixels = [];
     }
 
@@ -80,24 +83,52 @@ internal static class TextureBundleBuilder
         TextureRequest req,
         long pixelsLength,
         int targetPlatform = StandaloneWindows64
+    ) => Build(req, pixelsLength, externalPath: null, externalOffset: 0, targetPlatform);
+
+    /// <summary>
+    /// Build a bundle whose streamed data lives in an existing file on disk.
+    /// </summary>
+    public static Built Build(
+        TextureRequest req,
+        long pixelsLength,
+        string externalPath,
+        long externalOffset,
+        int targetPlatform = StandaloneWindows64
     )
     {
         if (req is null)
             throw new ArgumentNullException(nameof(req));
         if (pixelsLength < 0)
             throw new ArgumentOutOfRangeException(nameof(pixelsLength));
+        if (externalOffset < 0)
+            throw new ArgumentOutOfRangeException(nameof(externalOffset));
 
-        // A fresh CAB name per build lets several of these bundles be mounted
-        // concurrently without Unity rejecting a duplicate.
+        using var scope = BuildTextureBundleMarker.Auto();
+
+        // Use a unique guid so that concurrent loads don't collide.
         string cab = "CAB-" + Guid.NewGuid().ToString("N");
-        string streamPath = $"archive:/{cab}/{cab}.resS";
+        string streamPath;
+        long streamOffset;
+        if (externalPath is null)
+        {
+            streamPath = $"archive:/{cab}/{cab}.resS";
+            streamOffset = 0;
+        }
+        else
+        {
+            // UnityFS uses forward slashes and runs into issues with backslashes
+            // so we need to normalize the path first.
+            streamPath = System.IO.Path.GetFullPath(externalPath).Replace('\\', '/');
+            streamOffset = externalOffset;
+        }
+
         long streamSize = pixelsLength;
-        if (streamSize > uint.MaxValue)
+        if (streamOffset + streamSize > uint.MaxValue)
             throw new InvalidOperationException(
                 "texture data exceeds 4 GB; stream offsets are 32-bit in Unity bundles"
             );
 
-        SerializedValue texture = BuildTextureValue(req, streamPath, streamSize);
+        SerializedValue texture = BuildTextureValue(req, streamPath, streamOffset, streamSize);
         SerializedValue assetBundle = BuildAssetBundleValue(cab, TexturePathId);
 
         var objects = new[]
@@ -111,15 +142,21 @@ internal static class TextureBundleBuilder
         };
 
         byte[] serializedFile = SerializedFileWriter.Build(objects, targetPlatform);
-        byte[] prefix = BundleWriter.BuildPrefix(cab, serializedFile, pixelsLength);
+        long resSLength = externalPath is null ? pixelsLength : 0;
+        byte[] prefix = BundleWriter.BuildPrefix(cab, serializedFile, resSLength);
         return new Built(prefix, ContainerKey, pixelsLength);
     }
 
-    static SerializedValue BuildTextureValue(TextureRequest req, string streamPath, long streamSize)
+    static SerializedValue BuildTextureValue(
+        TextureRequest req,
+        string streamPath,
+        long streamOffset,
+        long streamSize
+    )
     {
         return IsModern(req.ClassId)
-            ? BuildModernTexture(req, streamPath, streamSize)
-            : BuildClassicTexture(req, streamPath, streamSize);
+            ? BuildModernTexture(req, streamPath, streamOffset, streamSize)
+            : BuildClassicTexture(req, streamPath, streamOffset, streamSize);
     }
 
     static bool IsModern(int classId) =>
@@ -130,6 +167,7 @@ internal static class TextureBundleBuilder
     static SerializedValue BuildClassicTexture(
         TextureRequest req,
         string streamPath,
+        long streamOffset,
         long streamSize
     )
     {
@@ -167,7 +205,7 @@ internal static class TextureBundleBuilder
             .SetInt("m_LightmapFormat", 0)
             .SetInt("m_ColorSpace", req.ColorSpace)
             .SetBytes("image data", [])
-            .Set("m_StreamData", StreamData(streamSize, streamPath));
+            .Set("m_StreamData", StreamData(streamOffset, streamSize, streamPath));
 
         if (cube)
             tex.Set("m_SourceTextures", SerializedValue.Array());
@@ -178,6 +216,7 @@ internal static class TextureBundleBuilder
     static SerializedValue BuildModernTexture(
         TextureRequest req,
         string streamPath,
+        long streamOffset,
         long streamSize
     )
     {
@@ -208,7 +247,7 @@ internal static class TextureBundleBuilder
             .Set("m_TextureSettings", TextureSettings())
             .SetBool("m_IsReadable", req.Readable)
             .SetBytes("image data", [])
-            .Set("m_StreamData", StreamData(streamSize, streamPath));
+            .Set("m_StreamData", StreamData(streamOffset, streamSize, streamPath));
 
         return tex;
     }
@@ -224,27 +263,38 @@ internal static class TextureBundleBuilder
             .SetInt("m_WrapW", 0);
 
     // offset and size are unsigned ints; the 4 GB bound is checked in Build.
-    static SerializedValue StreamData(long streamSize, string streamPath) =>
+    static SerializedValue StreamData(long streamOffset, long streamSize, string streamPath) =>
         SerializedValue
             .Struct()
-            .SetInt("offset", 0)
+            .SetInt("offset", streamOffset)
             .SetInt("size", streamSize)
             .SetString("path", streamPath);
 
     static SerializedValue BuildAssetBundleValue(string identity, long texturePathId)
     {
+        // The preload table is what LoadAssetAsync actually loads during its
+        // asynchronous phase: the preload thread reads the objects listed for
+        // the requested asset, including their streamed data. Without an entry
+        // the request completes having loaded nothing, and the first access to
+        // its `asset` property then performs the entire load (pixel read +
+        // upload) synchronously on the main thread.
+        var preloadTable = SerializedValue.Array();
+        preloadTable.Elements.Add(
+            SerializedValue.Struct().SetInt("m_FileID", 0).Set("m_PathID", PathId(texturePathId))
+        );
+
         var container = SerializedValue.Array();
         container.Elements.Add(
             SerializedValue
                 .Struct()
                 .SetString("first", ContainerKey)
-                .Set("second", AssetInfo(0, 0, 0, texturePathId))
+                .Set("second", AssetInfo(0, 1, 0, texturePathId))
         );
 
         return SerializedValue
             .Struct()
             .SetString("m_Name", identity)
-            .Set("m_PreloadTable", SerializedValue.Array())
+            .Set("m_PreloadTable", preloadTable)
             .Set("m_Container", container)
             .Set("m_MainAsset", AssetInfo(0, 0, 0, 0))
             .SetInt("m_RuntimeCompatibility", 1)

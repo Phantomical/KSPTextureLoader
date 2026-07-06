@@ -41,6 +41,7 @@ public partial class TextureLoader : MonoBehaviour
         DontDestroyOnLoad(this);
         Instance = this;
         Context ??= new();
+        DX11.CacheCapabilities();
 
         GameEvents.onGameSceneLoadRequested.Add(OnGameSceneLoadRequested);
     }
