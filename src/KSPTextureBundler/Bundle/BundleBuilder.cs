@@ -434,6 +434,17 @@ internal static class BundleBuilder
         SetString(ab, "m_AssetBundleName", name);
         Set(ab, "m_RuntimeCompatibility", 1);
 
+        // Full-path lookup only. m_PathFlags controls the secondary name indexes
+        // Unity synthesizes from the container at load: bit0 (1) = filename
+        // without extension, bit1 (2) = filename with extension, bit2 (4) =
+        // case-insensitive queries. 0 (kPathFlagsNone) builds none of them, so a
+        // texture is only ever resolvable by its full container path. Textures are
+        // always loaded by full path and many share a bare file name across planet
+        // sub-directories (mid00, rockatlas, ...), so the basename tables would
+        // only introduce silent last-writer-wins collisions. (Full-path lookup is
+        // never gated by these flags, so 0 does not disable it.)
+        Set(ab, "m_PathFlags", 0);
+
         var container = ab["m_Container"]["Array"];
         foreach (var (texName, pathId) in entries)
         {

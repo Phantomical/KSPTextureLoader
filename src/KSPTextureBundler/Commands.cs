@@ -68,7 +68,7 @@ internal static class Commands
             .OrderBy(x => x.key, StringComparer.Ordinal)
             .ToList();
 
-        DuplicateNameCheck(keyed.Select(x => (x.file, x.key)));
+        DuplicateKeyCheck(keyed.Select(x => (x.file, x.key)));
 
         var jobInputs = keyed
             .Select(x =>
@@ -127,18 +127,18 @@ internal static class Commands
         return 0;
     }
 
-    static void DuplicateNameCheck(IEnumerable<(string file, string key)> keyed)
+    static void DuplicateKeyCheck(IEnumerable<(string file, string key)> keyed)
     {
-        // KSPTextureLoader resolves textures by the last path component without
-        // extension, case-insensitively. Two inputs that collapse to the same key
-        // are indistinguishable to the loader, so warn.
+        // KSPTextureLoader resolves textures by their full container key (the
+        // lowercased, '/'-separated path), and the bundle is written full-path
+        // only (m_PathFlags = 0, no basename tables). Only two inputs that map to
+        // the same full key are actually indistinguishable, so warn on that.
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (file, key) in keyed)
         {
-            string lookup = Path.GetFileNameWithoutExtension(key);
-            if (!seen.Add(lookup))
+            if (!seen.Add(key))
                 Console.WriteLine(
-                    $"warning: '{Rel(file)}' resolves to the same lookup key '{lookup}' as an "
+                    $"warning: '{Rel(file)}' maps to the same container key '{key}' as an "
                         + "earlier texture; the loader cannot tell them apart"
                 );
         }
@@ -731,7 +731,7 @@ internal static class Commands
             {
                 var b = am.GetBaseField(afileInst, info);
                 Console.WriteLine(
-                    $"  AB m_Name='{b["m_Name"].AsString}' m_AssetBundleName='{b["m_AssetBundleName"].AsString}'"
+                    $"  AB m_Name='{b["m_Name"].AsString}' m_AssetBundleName='{b["m_AssetBundleName"].AsString}' m_PathFlags={b["m_PathFlags"].AsInt}"
                 );
                 foreach (var pair in b["m_Container"]["Array"])
                     Console.WriteLine(
