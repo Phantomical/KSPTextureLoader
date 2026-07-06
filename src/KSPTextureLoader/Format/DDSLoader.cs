@@ -474,6 +474,15 @@ internal static class DDSLoader
         if (options.Hint > TextureLoadHint.BatchAsynchronous)
             return false;
 
+        // The bundle streams pixels via m_StreamData, which Unity uploads
+        // straight to the GPU without ever populating the CPU-side shadow. The
+        // resulting texture reports m_IsReadable but has no valid system memory
+        // behind it, so any CPU read (GetPixelData, Graphics.CopyTexture from
+        // it, ...) walks off the end of the uncommitted buffer. Readable
+        // textures therefore have to take the direct SetPixelData path.
+        if (!options.Unreadable)
+            return false;
+
         // The resS sizes and offsets in the bundle are unsigned 32-bit; leave
         // some headroom for the serialized file sharing the same block.
         return pixelDataSize < uint.MaxValue - (1 << 20);
