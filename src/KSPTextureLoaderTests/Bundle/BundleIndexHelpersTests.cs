@@ -14,9 +14,25 @@ public class BundleIndexHelpersTests : BundleParseTestBase
     [TestInfo("BundleIndex_NormalizeName")]
     public void TestNormalizeName()
     {
-        AssertEqual("strips-dir-and-ext", BundleIndex.NormalizeName("Foo/Bar/baz.png"), "baz");
-        AssertEqual("backslashes", BundleIndex.NormalizeName("Foo\\Bar\\baz.dds"), "baz");
-        AssertEqual("no-dir-no-ext", BundleIndex.NormalizeName("texture"), "texture");
+        // Keys are the full path, lowercased with '/' separators (no basename
+        // collapse), matching TextureLoader.CanonicalizeAssetPath.
+        AssertEqual(
+            "lowercases-keeps-path-and-ext",
+            BundleIndex.NormalizeName("Foo/Bar/baz.png"),
+            "foo/bar/baz.png"
+        );
+        AssertEqual(
+            "backslashes-to-slashes",
+            BundleIndex.NormalizeName("Foo\\Bar\\baz.dds"),
+            "foo/bar/baz.dds"
+        );
+        // Same file name under different directories stays distinct.
+        AssertEqual(
+            "distinct-by-dir",
+            BundleIndex.NormalizeName("Duna/PluginData/mid00.dds"),
+            "duna/plugindata/mid00.dds"
+        );
+        AssertEqual("no-dir-no-ext", BundleIndex.NormalizeName("Texture"), "texture");
         AssertEqual("null-is-null", BundleIndex.NormalizeName(null), null);
         AssertEqual("empty-is-null", BundleIndex.NormalizeName(""), null);
     }

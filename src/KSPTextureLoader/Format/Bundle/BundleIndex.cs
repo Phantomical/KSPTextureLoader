@@ -308,7 +308,10 @@ internal sealed class BundleIndex
         entriesByPathId[obj.PathId] = entry;
         result.Names.Add(info.Name);
 
-        // Always index by the texture's own name as a fallback.
+        // Fallback for bundles with no AssetBundle container object: index by the
+        // texture's own name (a bare name, not a full path). Bundles built by this
+        // mod always carry a container, so the full-path keys from IndexContainer
+        // are what real look-ups hit; this only helps odd container-less bundles.
         if (NormalizeName(info.Name) is string nameKey)
             result.Entries[nameKey] = entry;
     }
@@ -410,11 +413,20 @@ internal sealed class BundleIndex
         return $"archive:/{cab}/{LastComponent(streamPath)}";
     }
 
+    /// <summary>
+    /// Canonicalize an asset name to the index key: lowercased with '/'
+    /// separators. This is the same canonical form <see cref="TextureLoader"/>'s
+    /// <c>CanonicalizeAssetPath</c> produces and that the bundler writes as its
+    /// full-path container keys. The full path is kept intact (no basename
+    /// collapse) so textures that share a file name across sub-directories
+    /// (mid00, rockatlas, ...) stay distinct — matching how Unity's own
+    /// full-path lookup and the rest of the loader resolve textures.
+    /// </summary>
     static string NormalizeName(string assetName)
     {
         if (string.IsNullOrEmpty(assetName))
             return null;
-        return StripExtension(LastComponent(assetName));
+        return assetName.Replace('\\', '/').ToLowerInvariant();
     }
 
     static string LastComponent(string path)
