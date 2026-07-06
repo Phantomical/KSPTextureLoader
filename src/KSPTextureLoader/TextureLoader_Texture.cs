@@ -382,7 +382,7 @@ public partial class TextureLoader
         return readable;
     }
 
-    readonly struct ActiveAssetBundleLoadGuard : IDisposable
+    internal readonly struct ActiveAssetBundleLoadGuard : IDisposable
     {
         public ActiveAssetBundleLoadGuard()
         {
