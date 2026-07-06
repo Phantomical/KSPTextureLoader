@@ -129,6 +129,22 @@ internal class MainScreenContent : MonoBehaviour
             dumpTexLayout.gameObject,
             "Dump the textures screen layout and parent chain to a log file."
         );
+
+        // Experimental: GPU array texture via an in-memory async-loaded bundle.
+        var btnRow3 = DebugUIManager.CreateHorizontalLayout(content);
+        var btnHlg3 = btnRow3.GetComponent<HorizontalLayoutGroup>();
+        btnHlg3.childControlWidth = true;
+        btnHlg3.childForceExpandWidth = true;
+
+        var bundleUploadTest = DebugUIManager.CreateButton<BundleUploadTestButton>(
+            btnRow3.transform,
+            "Test Bundle Upload"
+        );
+        DebugUIManager.AttachTooltip(
+            bundleUploadTest.gameObject,
+            "Build a small Texture2DArray as an in-memory bundle and load it asynchronously, "
+                + "then write the result to BundleUploadTest.log. Watch the profiler for a main-thread stall."
+        );
     }
 
     void Update()
