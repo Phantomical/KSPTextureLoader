@@ -12,8 +12,7 @@ internal static class Program
         root.Subcommands.Add(BuildCommand());
         root.Subcommands.Add(ExtractCommand());
         root.Subcommands.Add(MakeSeedCommand());
-        foreach (var dev in DevCommands())
-            root.Subcommands.Add(dev);
+        root.Subcommands.Add(DevCommand());
 
         return root.Parse(args).Invoke();
     }
@@ -123,17 +122,55 @@ internal static class Program
         return cmd;
     }
 
-    static IEnumerable<Command> DevCommands()
+    // Developer-only inspection and self-check verbs, grouped under a single hidden
+    // `dev` parent command (e.g. `dev probe`, `dev validate`, `dev palette-test`,
+    // `dev cubemap-test`) so they stay out of the way of the normal build/extract
+    // workflow.
+    static Command DevCommand()
     {
-        var probeArg = new Argument<string>("bundle") { Description = "Bundle to inspect." };
-        var probe = new Command("dev-probe", "Dump a bundle's directory and type trees.")
+        var dev = new Command("dev", "Developer-only inspection and self-check commands.")
         {
             Hidden = true,
         };
+        dev.Subcommands.Add(ProbeCommand());
+        dev.Subcommands.Add(ValidateCommand());
+        dev.Subcommands.Add(PaletteTestCommand());
+        dev.Subcommands.Add(CubemapTestCommand());
+        // `dev` is hidden, so System.CommandLine renders nothing for `dev -h`;
+        // `dev help` lists the group's subcommands explicitly instead.
+        dev.Subcommands.Add(HelpCommand(dev));
+        return dev;
+    }
+
+    static Command HelpCommand(Command dev)
+    {
+        var help = new Command("help", "List the dev subcommands.");
+        help.SetAction(_ =>
+        {
+            Console.WriteLine(dev.Description);
+            Console.WriteLine();
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  KSPTextureBundler dev <command> [options]");
+            Console.WriteLine();
+            Console.WriteLine("Commands:");
+            int width = dev.Subcommands.Max(c => c.Name.Length);
+            foreach (var sub in dev.Subcommands)
+                Console.WriteLine($"  {sub.Name.PadRight(width)}  {sub.Description}");
+        });
+        return help;
+    }
+
+    static Command ProbeCommand()
+    {
+        var probeArg = new Argument<string>("bundle") { Description = "Bundle to inspect." };
+        var probe = new Command("probe", "Dump a bundle's directory and type trees.");
         probe.Arguments.Add(probeArg);
         probe.SetAction(pr => Commands.Probe(pr.GetValue(probeArg)!));
-        yield return probe;
+        return probe;
+    }
 
+    static Command ValidateCommand()
+    {
         var valBundle = new Argument<string>("bundle") { Description = "Bundle to validate." };
         var valInputs = new Argument<string[]>("inputs")
         {
@@ -145,12 +182,9 @@ internal static class Program
             Description = "Same --prefix used to build.",
         };
         var validate = new Command(
-            "dev-validate",
+            "validate",
             "Verify a bundle's streamed bytes are byte-exact with the source textures."
-        )
-        {
-            Hidden = true,
-        };
+        );
         validate.Arguments.Add(valBundle);
         validate.Arguments.Add(valInputs);
         validate.Options.Add(valPrefix);
@@ -161,26 +195,26 @@ internal static class Program
                 pr.GetValue(valPrefix)
             )
         );
-        yield return validate;
+        return validate;
+    }
 
+    static Command PaletteTestCommand()
+    {
         var paletteTest = new Command(
-            "dev-palette-test",
+            "palette-test",
             "Self-check Kopernicus palette conversion against the loader's decode math."
-        )
-        {
-            Hidden = true,
-        };
+        );
         paletteTest.SetAction(_ => Commands.PaletteTest());
-        yield return paletteTest;
+        return paletteTest;
+    }
 
+    static Command CubemapTestCommand()
+    {
         var cubemapTest = new Command(
-            "dev-cubemap-test",
+            "cubemap-test",
             "Self-check 2D cross -> cubemap face mapping and block alignment."
-        )
-        {
-            Hidden = true,
-        };
+        );
         cubemapTest.SetAction(_ => Commands.CubemapTest());
-        yield return cubemapTest;
+        return cubemapTest;
     }
 }
