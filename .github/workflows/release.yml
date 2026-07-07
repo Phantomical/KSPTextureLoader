@@ -27,6 +27,13 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: KSPTextureLoader.version
+
+      # The native KSPTextureBundler binaries built by the build workflow's
+      # bundler-aot matrix (one per RID). Each lands in bundler/<artifact-name>/.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: KSPTextureBundler-*
+          path: bundler
       - run: tree
 
       - name: Create Zip
@@ -34,8 +41,19 @@ jobs:
           cd KSPTextureLoader
           zip -r9 ../KSPTextureLoader.zip *
 
+      - name: Package bundler binaries
+        run: |
+          for dir in bundler/KSPTextureBundler-*; do
+            rid=${dir#bundler/KSPTextureBundler-}
+            # AOT binaries are always executable, but the artifact upload drops the
+            # unix exec bit, so restore it before zipping (harmless for the .exe).
+            chmod +x "$dir"/KSPTextureBundler 2>/dev/null || true
+            (cd "$dir" && zip -r9 "$GITHUB_WORKSPACE/KSPTextureBundler-$rid.zip" .)
+          done
+
       - name: Upload Release Assets
         run: |
           gh release upload --clobber ${{ github.ref_name }}  \
             KSPTextureLoader.zip                  \
-            KSPTextureLoader.version
+            KSPTextureLoader.version              \
+            KSPTextureBundler-*.zip

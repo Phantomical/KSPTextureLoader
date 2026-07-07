@@ -31,3 +31,62 @@ jobs:
         with:
           path: GameData/KSPTextureLoader/KSPTextureLoader.version
           name: KSPTextureLoader.version
+
+  # Publish the standalone KSPTextureBundler tool as a single self-contained
+  # Native-AOT executable for each desktop OS. This project is independent of the
+  # KSP net4.8 plugin, so it builds straight from its own csproj with the .NET 10
+  # SDK (no ckan/KSP references needed).
+  bundler-aot:
+    name: bundler-aot (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Build every platform even if one fails, so a single toolchain hiccup
+      # doesn't hide the others.
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # The Native-AOT linker on Linux needs clang and the zlib headers; the
+      # Windows (MSVC "Desktop development with C++") and macOS (Xcode command
+      # line tools) runners already ship a usable native toolchain.
+      - name: Install Linux AOT prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Publish native AOT bundler
+        run: >
+          dotnet publish src/KSPTextureBundler/KSPTextureBundler.csproj
+          -c Release -r ${{ matrix.rid }} -p:PublishAot=true
+
+      # A native build that links can still fail at runtime (e.g. a dependency
+      # that needs reflection under AOT), so run the binary's self-checks. Uses
+      # bash on every OS (available on the Windows runner too) to handle the .exe
+      # suffix uniformly.
+      - name: Smoke-test the native binary
+        shell: bash
+        run: |
+          BIN=src/KSPTextureBundler/bin/Release/net10.0/${{ matrix.rid }}/publish/KSPTextureBundler
+          [ -f "$BIN.exe" ] && BIN="$BIN.exe"
+          "$BIN" dev cubemap-test
+          "$BIN" dev palette-test
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KSPTextureBundler-${{ matrix.rid }}
+          # The executable is KSPTextureBundler(.exe); the second path only exists
+          # on Windows, so ignore the miss on the other platforms.
+          path: |
+            src/KSPTextureBundler/bin/Release/net10.0/${{ matrix.rid }}/publish/KSPTextureBundler
+            src/KSPTextureBundler/bin/Release/net10.0/${{ matrix.rid }}/publish/KSPTextureBundler.exe
+          if-no-files-found: ignore
