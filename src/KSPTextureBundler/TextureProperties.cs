@@ -47,6 +47,43 @@ internal sealed class TextureProperties
 }
 
 /// <summary>
+/// Source-generator context for the YAML model types below. YamlDotNet's static
+/// generator emits reflection-free (de)serializers for every
+/// <c>[YamlSerializable]</c> type registered here, so the deserializer works under
+/// Native AOT (see <see cref="StaticDeserializerBuilder"/> in
+/// <see cref="TexturePropertiesFile.Load"/>).
+/// </summary>
+[YamlStaticContext]
+public partial class TextureYamlContext : StaticContext { }
+
+/// <summary>The top-level shape of a <c>--properties</c> YAML document.</summary>
+[YamlSerializable]
+internal sealed class TexturePropertiesDocument
+{
+    public List<TexturePropertiesEntry>? Properties { get; set; }
+}
+
+/// <summary>One <c>properties[]</c> entry: a <c>files</c> glob plus the flags it sets.
+/// Every flag is nullable so an unset key means "don't override".</summary>
+[YamlSerializable]
+internal sealed class TexturePropertiesEntry
+{
+    public string? Files { get; set; }
+    public bool? Readable { get; set; }
+    public bool? MipmapStreaming { get; set; }
+    public string? Filter { get; set; }
+    public string? Wrap { get; set; }
+    public string? WrapU { get; set; }
+    public string? WrapV { get; set; }
+    public string? WrapW { get; set; }
+    public int? Aniso { get; set; }
+    public float? MipBias { get; set; }
+    public int? StreamingMipmapsPriority { get; set; }
+    public string? ColorSpace { get; set; }
+    public bool? Cubemap { get; set; }
+}
+
+/// <summary>
 /// A parsed <c>--properties</c> YAML file assigning per-texture flags by glob:
 /// <code>
 /// properties:
@@ -65,28 +102,6 @@ internal sealed class TextureProperties
 /// </summary>
 internal sealed class TexturePropertiesFile
 {
-    sealed class Document
-    {
-        public List<Entry>? Properties { get; set; }
-    }
-
-    sealed class Entry
-    {
-        public string? Files { get; set; }
-        public bool? Readable { get; set; }
-        public bool? MipmapStreaming { get; set; }
-        public string? Filter { get; set; }
-        public string? Wrap { get; set; }
-        public string? WrapU { get; set; }
-        public string? WrapV { get; set; }
-        public string? WrapW { get; set; }
-        public int? Aniso { get; set; }
-        public float? MipBias { get; set; }
-        public int? StreamingMipmapsPriority { get; set; }
-        public string? ColorSpace { get; set; }
-        public bool? Cubemap { get; set; }
-    }
-
     sealed class CompiledEntry
     {
         public required string Pattern;
@@ -115,15 +130,15 @@ internal sealed class TexturePropertiesFile
     /// </summary>
     public static TexturePropertiesFile Load(string path)
     {
-        var deserializer = new DeserializerBuilder()
+        var deserializer = new StaticDeserializerBuilder(new TextureYamlContext())
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
             .Build();
 
-        Document? doc;
+        TexturePropertiesDocument? doc;
         try
         {
             using var reader = new StreamReader(path);
-            doc = deserializer.Deserialize<Document>(reader);
+            doc = deserializer.Deserialize<TexturePropertiesDocument>(reader);
         }
         catch (YamlException e)
         {
