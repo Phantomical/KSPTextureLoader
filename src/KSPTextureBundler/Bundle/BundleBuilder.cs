@@ -173,15 +173,28 @@ internal static class BundleBuilder
                         continue;
                     }
 
-                    long offset = resS.Position;
                     long size = tex.Data.Length;
 
-                    if (offset + size > uint.MaxValue)
-                        throw new InvalidOperationException(
-                            "resS exceeds 4 GB; stream offsets are 32-bit in Unity asset bundles"
-                        );
+                    // Compressed textures whose dimensions are not a multiple of the
+                    // block size crash Unity's DX12/Vulkan async streamed-upload path
+                    // (it double-frees the per-slot upload record while building the
+                    // rescaled copy Unity insists on for a non-block-aligned size).
+                    // Store their pixels inline instead, so Unity uploads them during
+                    // deserialization rather than through the async pipeline.
+                    bool inline = NeedsInlineData(tex);
 
-                    resS.Write(tex.Data, 0, tex.Data.Length);
+                    long offset = 0;
+                    if (!inline)
+                    {
+                        offset = resS.Position;
+
+                        if (offset + size > uint.MaxValue)
+                            throw new InvalidOperationException(
+                                "resS exceeds 4 GB; stream offsets are 32-bit in Unity asset bundles"
+                            );
+
+                        resS.Write(tex.Data, 0, tex.Data.Length);
+                    }
 
                     long pathId = nextPathId++;
                     int classId = ClassIdFor(tex.Kind);
@@ -196,7 +209,7 @@ internal static class BundleBuilder
                         );
 
                     var texField = am.CreateValueBaseField(afileInst, classId);
-                    PopulateForKind(texField, tex, offset, size, streamPath);
+                    PopulateForKind(texField, tex, offset, size, streamPath, inline);
 
                     info.SetNewData(texField);
                     afile.Metadata.AddAssetInfo(info);
@@ -266,7 +279,8 @@ internal static class BundleBuilder
         SourceTexture src,
         long streamOffset,
         long streamSize,
-        string streamPath
+        string streamPath,
+        bool inline
     )
     {
         switch (src.Kind)
@@ -281,6 +295,7 @@ internal static class BundleBuilder
                     streamOffset,
                     streamSize,
                     streamPath,
+                    inline,
                     imageCount: 6,
                     dimension: TextureDimensionCube
                 );
@@ -291,7 +306,7 @@ internal static class BundleBuilder
             case TextureKind.Texture3D:
             case TextureKind.Texture2DArray:
             case TextureKind.CubemapArray:
-                PopulateModernTexture(tex, src, streamOffset, streamSize, streamPath);
+                PopulateModernTexture(tex, src, streamOffset, streamSize, streamPath, inline);
                 break;
 
             default:
@@ -301,6 +316,7 @@ internal static class BundleBuilder
                     streamOffset,
                     streamSize,
                     streamPath,
+                    inline,
                     imageCount: 1,
                     dimension: TextureDimensionTex2D
                 );
@@ -315,6 +331,7 @@ internal static class BundleBuilder
         long streamOffset,
         long streamSize,
         string streamPath,
+        bool inline,
         int imageCount,
         int dimension
     )
@@ -340,7 +357,7 @@ internal static class BundleBuilder
         Set(tex, "m_LightmapFormat", 0);
         Set(tex, "m_ColorSpace", src.ColorSpace);
 
-        ApplyStreamData(tex, streamOffset, streamSize, streamPath);
+        ApplyPixelStorage(tex, src.Data, inline, streamOffset, streamSize, streamPath);
     }
 
     /// <summary>
@@ -354,7 +371,8 @@ internal static class BundleBuilder
         SourceTexture src,
         long streamOffset,
         long streamSize,
-        string streamPath
+        string streamPath,
+        bool inline
     )
     {
         tex["m_Name"].AsString = src.Name;
@@ -382,7 +400,7 @@ internal static class BundleBuilder
         ApplyTextureSettings(tex, src);
         SetBool(tex, "m_IsReadable", src.Readable);
 
-        ApplyStreamData(tex, streamOffset, streamSize, streamPath);
+        ApplyPixelStorage(tex, src.Data, inline, streamOffset, streamSize, streamPath);
     }
 
     static void ApplyTextureSettings(AssetTypeValueField tex, SourceTexture src)
@@ -398,21 +416,55 @@ internal static class BundleBuilder
         Set(ts, "m_WrapW", (int)src.WrapW);
     }
 
-    static void ApplyStreamData(
+    /// <summary>
+    /// Write the texture's pixels either inline (in <c>image data</c>) or as a
+    /// reference into the streamed <c>.resS</c> (<c>m_StreamData</c>). Inline
+    /// storage keeps textures that would otherwise crash Unity's DX12/Vulkan async
+    /// streamed-upload path off it -- see <see cref="NeedsInlineData"/>.
+    /// </summary>
+    static void ApplyPixelStorage(
         AssetTypeValueField tex,
+        byte[] data,
+        bool inline,
         long streamOffset,
         long streamSize,
         string streamPath
     )
     {
+        var sd = tex["m_StreamData"];
+
+        if (inline)
+        {
+            // Pixels live in the serialized object; leave m_StreamData empty so
+            // Unity uploads them during deserialization instead of streaming them.
+            tex["image data"].AsByteArray = data;
+            sd["offset"].AsUInt = 0;
+            sd["size"].AsUInt = 0;
+            sd["path"].AsString = "";
+            return;
+        }
+
         // No inline pixels: the bytes live in the resS instead.
         tex["image data"].AsByteArray = [];
-
-        var sd = tex["m_StreamData"];
         sd["offset"].AsUInt = checked((uint)streamOffset);
         sd["size"].AsUInt = checked((uint)streamSize);
         sd["path"].AsString = streamPath;
     }
+
+    /// <summary>
+    /// Whether a texture's pixels must be stored inline rather than streamed. True
+    /// for block-compressed formats whose width or height is not a multiple of the
+    /// block size: such a texture forces Unity to build a rescaled upload copy, and
+    /// the DX12/Vulkan async upload-completion path double-frees the per-slot upload
+    /// record while doing so (a use-after-free that reliably crashes). The runtime
+    /// loose-texture path guards the same case in <c>DDSLoader.NeedsUnscaledUpload</c>.
+    /// </summary>
+    static bool NeedsInlineData(SourceTexture tex) =>
+        TextureFormatInfo.IsBlockCompressed(tex.Format)
+        && (
+            tex.Width % TextureFormatInfo.BlockWidth(tex.Format) != 0
+            || tex.Height % TextureFormatInfo.BlockHeight(tex.Format) != 0
+        );
 
     static Stream OpenEmbeddedClassPackage()
     {

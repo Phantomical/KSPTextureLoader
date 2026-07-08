@@ -464,28 +464,45 @@ internal static class DDSLoader
 
     /// <summary>
     /// Whether to load this texture by wrapping it in an in-memory asset bundle.
-    /// The bundle path routes the GPU upload through Unity's async-upload
-    /// pipeline instead of stalling the main thread, but it is driven by Unity
-    /// async operations that cannot be blocked on, so synchronous hints keep the
-    /// direct path.
     /// </summary>
-    static bool ShouldLoadViaBundle(TextureLoadOptions options, long pixelDataSize)
+    static bool ShouldLoadViaBundle(
+        TextureLoadOptions options,
+        long pixelDataSize,
+        GraphicsFormat format,
+        int width,
+        int height
+    )
     {
+        // Unity won't start the asset bundle load until the next frame, so there's
+        // no point in making use of one if we're not at least async.
         if (options.Hint > TextureLoadHint.BatchAsynchronous)
             return false;
 
-        // The bundle streams pixels via m_StreamData, which Unity uploads
-        // straight to the GPU without ever populating the CPU-side shadow. The
-        // resulting texture reports m_IsReadable but has no valid system memory
-        // behind it, so any CPU read (GetPixelData, Graphics.CopyTexture from
-        // it, ...) walks off the end of the uncommitted buffer. Readable
-        // textures therefore have to take the direct SetPixelData path.
+        // If the texture is readable then unity doesn't upload it in the
+        // background and so there is really no purpose in going through the
+        // asset bundle pipeline.
         if (!options.Unreadable)
             return false;
 
-        // The resS sizes and offsets in the bundle are unsigned 32-bit; leave
-        // some headroom for the serialized file sharing the same block.
+        // Unity will crash when running on DX12/Vulkan if the texture size is not
+        // a multiple of the block size and it is uploading the texture in the
+        // background.
+        if (!IsMultipleOfBlockSize(format, width, height))
+            return false;
+
+        // Unity only supports bundles that are max 4GB in size, anything larger
+        // than that needs to go through a different path.
         return pixelDataSize < uint.MaxValue - (1 << 20);
+    }
+
+    static bool IsMultipleOfBlockSize(GraphicsFormat format, int width, int height)
+    {
+        if (!GraphicsFormatUtility.IsCompressedFormat(format))
+            return false;
+
+        int blockWidth = (int)GraphicsFormatUtility.GetBlockWidth(format);
+        int blockHeight = (int)GraphicsFormatUtility.GetBlockHeight(format);
+        return width % blockWidth == 0 && height % blockHeight == 0;
     }
 
     /// <summary>
@@ -599,7 +616,7 @@ internal static class DDSLoader
         // Otherwise load through a streamed asset bundle if possible.
         long pixelDataSize = GetFaceMipChainSize(width, height, mipCount, format);
         if (
-            ShouldLoadViaBundle(options, pixelDataSize)
+            ShouldLoadViaBundle(options, pixelDataSize, format, width, height)
             && TryGetClassicFormat(format, out int textureFormat, out int colorSpace)
         )
         {
@@ -687,7 +704,7 @@ internal static class DDSLoader
         var format = metadata.format;
 
         long pixelDataSize = (long)GetFaceMipChainSize(width, height, mipCount, format) * arraySize;
-        if (ShouldLoadViaBundle(options, pixelDataSize))
+        if (ShouldLoadViaBundle(options, pixelDataSize, format, width, height))
         {
             await LoadTextureViaBundle<T>(
                 handle,
@@ -782,7 +799,7 @@ internal static class DDSLoader
         // Otherwise load through a streamed asset bundle if possible.
         long pixelDataSize = 6L * GetFaceMipChainSize(width, height, mipCount, format);
         if (
-            ShouldLoadViaBundle(options, pixelDataSize)
+            ShouldLoadViaBundle(options, pixelDataSize, format, width, height)
             && TryGetClassicFormat(format, out int textureFormat, out int colorSpace)
         )
         {
@@ -909,7 +926,7 @@ internal static class DDSLoader
         var format = metadata.format;
 
         long pixelDataSize = (long)GetFaceMipChainSize(width, height, mipCount, format) * arraySize;
-        if (ShouldLoadViaBundle(options, pixelDataSize))
+        if (ShouldLoadViaBundle(options, pixelDataSize, format, width, height))
         {
             await LoadTextureViaBundle<T>(
                 handle,
@@ -997,7 +1014,7 @@ internal static class DDSLoader
         for (int mip = 0; mip < mipCount; ++mip)
             pixelDataSize += Get3DMipMapSize(width, height, depth, mip, format);
 
-        if (ShouldLoadViaBundle(options, pixelDataSize))
+        if (ShouldLoadViaBundle(options, pixelDataSize, format, width, height))
         {
             await LoadTextureViaBundle<T>(
                 handle,
