@@ -138,6 +138,24 @@ internal sealed unsafe class EndianBinaryReader
     }
 
     /// <summary>
+    /// Copy <paramref name="count"/> bytes starting at absolute <paramref name="offset"/>
+    /// into a new array without moving the read position. Used to capture a raw,
+    /// verbatim-copyable byte range (e.g. a serialized type entry).
+    /// </summary>
+    public byte[] CopyBytes(long offset, int count)
+    {
+        if (count < 0)
+            throw new ArgumentOutOfRangeException(nameof(count));
+        if ((ulong)offset > (ulong)length || (ulong)count > (ulong)(length - offset))
+            throw new ArgumentOutOfRangeException(nameof(offset));
+
+        var result = new byte[count];
+        fixed (byte* dst = result)
+            Buffer.MemoryCopy(data + offset, dst, count, count);
+        return result;
+    }
+
+    /// <summary>
     /// Advance the position so that it is a multiple of <paramref name="alignment"/>.
     /// </summary>
     public void Align(int alignment = 4)

@@ -263,6 +263,98 @@ internal static class BundleBuilder
         }
     }
 
+    /// <summary>The class ids the loader can emit an object for, in the order their
+    /// type trees are registered into the reference bundle.</summary>
+    static readonly int[] BundleClassIds =
+    [
+        Texture2DClassId,
+        CubemapClassId,
+        Texture3DClassId,
+        Texture2DArrayClassId,
+        CubemapArrayClassId,
+        AssetBundleClassId,
+    ];
+
+    /// <summary>
+    /// Build a reference "type-tree bundle": an uncompressed UnityFS bundle whose
+    /// serialized file carries the type trees for every texture class plus the
+    /// AssetBundle scaffolding, and contains zero objects. The runtime loader ships
+    /// this artifact and copies its type-tree section verbatim into the bundles it
+    /// generates, so it no longer has to hand-roll those schemas.
+    /// </summary>
+    public static void BuildTypeTreeBundle(byte[] seedBundle, string outputPath)
+    {
+        string seedTmp = Path.Combine(Path.GetTempPath(), $"ksptb_seed_{Guid.NewGuid():N}.bundle");
+        File.WriteAllBytes(seedTmp, seedBundle);
+        try
+        {
+            BuildTypeTreeBundleFromSeedFile(seedTmp, outputPath);
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(seedTmp);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    static void BuildTypeTreeBundleFromSeedFile(string seedPath, string outputPath)
+    {
+        var am = new AssetsManager();
+        var bunInst = am.LoadBundleFile(seedPath, true);
+        var bundle = bunInst.file;
+
+        int serIdx = FindSerializedEntry(bundle);
+        var afileInst = am.LoadAssetsFileFromBundle(bunInst, serIdx, false);
+        var afile = afileInst.file;
+
+        if (!afile.Metadata.TypeTreeEnabled)
+            throw new InvalidOperationException("seed bundle has no type trees");
+
+        using (var tpk = OpenEmbeddedClassPackage())
+        {
+            am.LoadClassPackage(tpk);
+            am.LoadClassDatabaseFromPackage(afile.Metadata.UnityVersion);
+        }
+
+        // Drop every placeholder object; keep only the type-tree metadata.
+        foreach (var info in afile.Metadata.AssetInfos.ToList())
+            afile.Metadata.RemoveAssetInfo(info);
+
+        // Register the type tree for every class the loader can emit. AssetFileInfo.Create
+        // pulls and appends a class's type tree from the class database on first use;
+        // Texture2D and AssetBundle already come from the seed, so those calls just find
+        // the existing entry. The returned info is discarded -- we want the registered
+        // types, not the objects, so AssetInfos stays empty. AssetsFile.Write emits the
+        // TypeTreeTypes verbatim regardless of whether any object references them.
+        foreach (int classId in BundleClassIds)
+        {
+            var info = AssetFileInfo.Create(afile, AssetBundlePathId, classId, am.ClassDatabase);
+            if (info is null)
+                throw new InvalidOperationException($"no type tree available for class {classId}");
+        }
+
+        // Serialized file only; no resS (there is no pixel data).
+        var serDir = bundle.BlockAndDirInfo.DirectoryInfos[serIdx];
+        serDir.SetNewData(afile);
+
+        bundle.BlockAndDirInfo.DirectoryInfos.Clear();
+        bundle.BlockAndDirInfo.DirectoryInfos.Add(serDir);
+
+        // Written uncompressed so the loader can parse it without an LZ4 bulk-data
+        // decompress step (its slim bundle reader only decompresses the blocks info).
+        string outDir = Path.GetDirectoryName(Path.GetFullPath(outputPath))!;
+        Directory.CreateDirectory(outDir);
+        using var fs = File.Create(outputPath);
+        using var writer = new AssetsFileWriter(fs);
+        bundle.Write(writer);
+    }
+
     static int ClassIdFor(TextureKind kind) =>
         kind switch
         {

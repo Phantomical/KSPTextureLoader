@@ -253,6 +253,24 @@ internal static class Commands
     }
 
     // -------------------------------------------------------------------------
+    // make-typetree
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Emit the reference type-tree bundle the runtime loader ships: an uncompressed
+    /// UnityFS bundle carrying the type trees for all texture classes plus the
+    /// AssetBundle scaffolding, with no objects. The loader copies its type-tree
+    /// section verbatim into every bundle it generates at runtime.
+    /// </summary>
+    public static int MakeTypeTree(string? seedPath, string output)
+    {
+        byte[] seed = seedPath is not null ? File.ReadAllBytes(seedPath) : LoadEmbeddedSeed();
+        BundleBuilder.BuildTypeTreeBundle(seed, output);
+        Console.WriteLine($"wrote type-tree bundle {output}");
+        return 0;
+    }
+
+    // -------------------------------------------------------------------------
     // extract
     // -------------------------------------------------------------------------
 
@@ -820,6 +838,11 @@ internal static class Commands
             Console.WriteLine($"--- assets file [{i}] {di.Name} ---");
             Console.WriteLine($"  TypeTreeEnabled={afile.Metadata.TypeTreeEnabled}");
             Console.WriteLine($"  UnityVersion={afile.Metadata.UnityVersion}");
+            Console.WriteLine(
+                $"  Types={afile.Metadata.TypeTreeTypes.Count} Objects={afile.Metadata.AssetInfos.Count}"
+            );
+            foreach (var tt in afile.Metadata.TypeTreeTypes)
+                Console.WriteLine($"    type classId={tt.TypeId} nodes={tt.Nodes?.Count ?? 0}");
 
             var afileInst = am.LoadAssetsFileFromBundle(bunInst, i, false);
             foreach (var info in afile.GetAssetsOfType(AssetClassID.Texture2D))

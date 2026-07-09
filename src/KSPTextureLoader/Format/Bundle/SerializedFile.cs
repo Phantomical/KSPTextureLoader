@@ -11,6 +11,15 @@ internal struct SerializedType
     public bool IsStripped;
     public short ScriptTypeIndex;
     public TypeTree Tree;
+
+    /// <summary>
+    /// The verbatim bytes of this whole type entry (class id, strip/script fields,
+    /// hashes, type-tree blob and dependencies), or <c>null</c> when parsing did not
+    /// request capture. Lets a writer re-emit the entry byte-for-byte instead of
+    /// re-serializing the tree. See <see cref="SerializedFile.Parse"/>'s
+    /// <c>captureTypeBytes</c> flag.
+    /// </summary>
+    public byte[] RawBytes;
 }
 
 /// <summary>One object entry in a serialized file's object table.</summary>
@@ -38,6 +47,9 @@ internal sealed class SerializedFile
     public uint Version { get; private set; }
     public long DataOffset { get; private set; }
     public bool BigEndian { get; private set; }
+
+    /// <summary>The engine version string from the header (e.g. "2019.4.18f1").</summary>
+    public string UnityVersion { get; private set; }
     public List<SerializedType> Types { get; } = [];
     public List<SerializedObject> Objects { get; } = [];
 
@@ -45,14 +57,19 @@ internal sealed class SerializedFile
 
     SerializedFile(EndianBinaryReader reader) => this.reader = reader;
 
-    public static SerializedFile Parse(EndianBinaryReader reader)
+    /// <param name="reader">A reader positioned at the start of the serialized file.</param>
+    /// <param name="captureTypeBytes">
+    /// When <c>true</c>, each parsed type entry keeps its verbatim bytes in
+    /// <see cref="SerializedType.RawBytes"/> so a writer can re-emit it exactly.
+    /// </param>
+    public static SerializedFile Parse(EndianBinaryReader reader, bool captureTypeBytes = false)
     {
         var file = new SerializedFile(reader);
-        file.ParseHeader();
+        file.ParseHeader(captureTypeBytes);
         return file;
     }
 
-    void ParseHeader()
+    void ParseHeader(bool captureTypeBytes)
     {
         // The header is always big-endian until the endianness byte.
         reader.BigEndian = true;
@@ -81,7 +98,7 @@ internal sealed class SerializedFile
         reader.BigEndian = bigEndian;
 
         if (version >= 7)
-            reader.ReadCString(); // unity version string
+            UnityVersion = reader.ReadCString(); // unity version string
         if (version >= 8)
             reader.ReadInt32(); // target platform
 
@@ -89,7 +106,7 @@ internal sealed class SerializedFile
 
         int typeCount = reader.ReadInt32();
         for (int i = 0; i < typeCount; ++i)
-            Types.Add(ReadType(version, enableTypeTree));
+            Types.Add(ReadType(version, enableTypeTree, captureTypeBytes));
 
         int bigIdEnabled = 0;
         if (version >= 7 && version < 14)
@@ -135,8 +152,9 @@ internal sealed class SerializedFile
         // Script and external reference tables follow but are not needed here.
     }
 
-    SerializedType ReadType(uint version, bool enableTypeTree)
+    SerializedType ReadType(uint version, bool enableTypeTree, bool captureBytes)
     {
+        long start = reader.Position;
         var type = new SerializedType { ClassId = reader.ReadInt32() };
 
         if (version >= 16)
@@ -168,6 +186,9 @@ internal sealed class SerializedFile
                 reader.Skip((long)dependencyCount * 4);
             }
         }
+
+        if (captureBytes)
+            type.RawBytes = reader.CopyBytes(start, checked((int)(reader.Position - start)));
 
         return type;
     }

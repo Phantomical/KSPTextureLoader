@@ -36,6 +36,16 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!--
+            Reference type trees for the texture classes + AssetBundle scaffolding,
+            copied verbatim into the bundles the loader generates so they carry type
+            trees. Regenerate with `KSPTextureBundler make-typetree` if the seed or
+            class data changes.
+        -->
+        <EmbeddedResource Include="Format/Bundle/typetrees.bundle" />
+    </ItemGroup>
+
+    <ItemGroup>
         <PackageReference Include="KSPBuildTools" Version="1.1.1" />
 
         <PackageReference Include="Krafs.Publicizer" Version="2.3.0">

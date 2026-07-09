@@ -9,14 +9,16 @@ namespace KSPTextureLoader.Format.Bundle;
 /// </summary>
 ///
 /// <remarks>
-/// We don't emit type tree data, so the emitted files are only compatible with
-/// Unity 2019.4, and possibly only 2019.4.18f1.
+/// The emitted file enables the type tree and copies each class's type entry
+/// verbatim from the embedded reference bundle (see <see cref="ReferenceTypeTrees"/>),
+/// so Unity deserializes objects from the embedded tree. It still targets serialized
+/// file format 21 (Unity 2019.4), the version the reference type entries were
+/// captured for.
 /// </remarks>
 internal static class SerializedFileWriter
 {
-    // 2019.4 writes serialized-file format 21, and without type trees Unity
-    // requires an exact version match — anything else is rejected at load with
-    // "not built with the right version or build target".
+    // 2019.4 writes serialized-file format 21. The reference type entries copied
+    // into the metadata were captured from a format-21 file, so this must match.
     const uint FormatVersion = 21;
 
     const int ObjectAlignment = 16;
@@ -44,7 +46,7 @@ internal static class SerializedFileWriter
         for (int i = 0; i < objects.Count; ++i)
         {
             var ow = new EndianBinaryWriter { BigEndian = false };
-            WriteValue(ow, SerializedTypeTrees.Root(objects[i].ClassId), objects[i].Value);
+            WriteValue(ow, ReferenceTypeTrees.Root(objects[i].ClassId), objects[i].Value);
             objectData[i] = ow.ToArray();
         }
 
@@ -78,18 +80,16 @@ internal static class SerializedFileWriter
         // The metadata block, little-endian, starting right after the 20-byte
         // header.
         var meta = new EndianBinaryWriter { BigEndian = false };
-        meta.WriteCString(SerializedTypeTrees.UnityVersion);
+        meta.WriteCString(ReferenceTypeTrees.UnityVersion);
         meta.WriteInt32(targetPlatform);
-        meta.WriteBoolean(false); // m_EnableTypeTree
+        meta.WriteBoolean(true); // m_EnableTypeTree
 
+        // Each type entry (class id, strip/script fields, hashes, type-tree blob and
+        // dependencies) is copied verbatim from the reference bundle, so the emitted
+        // objects carry their full type tree and Unity deserializes them from it.
         meta.WriteInt32(typeOrder.Count);
         foreach (int classId in typeOrder)
-        {
-            meta.WriteInt32(classId);
-            meta.WriteBoolean(false); // m_IsStrippedType
-            meta.WriteInt16(-1); // m_ScriptTypeIndex
-            meta.WriteBytes(SerializedTypeTrees.OldTypeHash(classId));
-        }
+            meta.WriteBytes(ReferenceTypeTrees.TypeEntry(classId));
 
         meta.WriteInt32(objects.Count);
         for (int i = 0; i < objects.Count; ++i)

@@ -122,6 +122,29 @@ internal static class Program
         return cmd;
     }
 
+    static Command MakeTypeTreeCommand()
+    {
+        var seed = new Option<string?>("--seed")
+        {
+            Description = "Override the embedded type-tree seed bundle.",
+        };
+        var output = new Option<string>("--output", "-o")
+        {
+            Description = "Output type-tree bundle path.",
+            Required = true,
+        };
+
+        var cmd = new Command(
+            "make-typetree",
+            "Create a reference type-tree bundle (all texture type trees + AssetBundle "
+                + "scaffolding, no objects) for the runtime loader to embed."
+        );
+        cmd.Options.Add(seed);
+        cmd.Options.Add(output);
+        cmd.SetAction(pr => Commands.MakeTypeTree(pr.GetValue(seed), pr.GetValue(output)!));
+        return cmd;
+    }
+
     // Developer-only inspection and self-check verbs, grouped under a single hidden
     // `dev` parent command (e.g. `dev probe`, `dev validate`, `dev palette-test`,
     // `dev cubemap-test`) so they stay out of the way of the normal build/extract
@@ -134,6 +157,7 @@ internal static class Program
         };
         dev.Subcommands.Add(ProbeCommand());
         dev.Subcommands.Add(ValidateCommand());
+        dev.Subcommands.Add(MakeTypeTreeCommand());
         dev.Subcommands.Add(PaletteTestCommand());
         dev.Subcommands.Add(CubemapTestCommand());
         // `dev` is hidden, so System.CommandLine renders nothing for `dev -h`;
