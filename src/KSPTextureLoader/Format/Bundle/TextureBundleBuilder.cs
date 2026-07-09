@@ -10,6 +10,16 @@ namespace KSPTextureLoader.Format.Bundle;
 /// with <see cref="TextureBundleLoader"/>; the pixel bytes themselves are never
 /// copied. Pure CPU work; safe to call from a background thread.
 /// </summary>
+///
+/// <remarks>
+/// The whole prefix is written into a single <see cref="BundleBufferWriter"/>: the
+/// UnityFS framing (<see cref="BundleWriter"/>), the serialized-file framing
+/// (<see cref="SerializedFileWriter"/>) and the two object bodies written here by hand.
+/// The object bodies reproduce the exact field order, sizes and alignment padding of
+/// Unity 2019.4's own layout — the same layout the embedded type tree encodes, verified
+/// against it. Byte offsets and sizes are back-patched, so there are no intermediate
+/// buffers and only one final right-sized copy.
+/// </remarks>
 internal static class TextureBundleBuilder
 {
     // Unity BuildTarget.StandaloneWindows64.
@@ -18,6 +28,9 @@ internal static class TextureBundleBuilder
     // UnityEngine.Rendering.TextureDimension values for the classic types.
     const int TextureDimensionTex2D = 2;
     const int TextureDimensionCube = 4;
+
+    // Unity's usual default fallback, TextureFormat.ARGB32.
+    const int ForcedFallbackFormat = 4;
 
     const long AssetBundlePathId = 1;
     const long TexturePathId = 2;
@@ -128,43 +141,65 @@ internal static class TextureBundleBuilder
                 "texture data exceeds 4 GB; stream offsets are 32-bit in Unity bundles"
             );
 
-        SerializedValue texture = BuildTextureValue(req, streamPath, streamOffset, streamSize);
-        SerializedValue assetBundle = BuildAssetBundleValue(cab, TexturePathId);
-
-        var objects = new[]
-        {
-            new SerializedFileWriter.ObjectEntry(
-                AssetBundlePathId,
-                SerializedTypeTrees.AssetBundleClassId,
-                assetBundle
-            ),
-            new SerializedFileWriter.ObjectEntry(TexturePathId, req.ClassId, texture),
-        };
-
-        byte[] serializedFile = SerializedFileWriter.Build(objects, targetPlatform);
         long resSLength = externalPath is null ? pixelsLength : 0;
-        byte[] prefix = BundleWriter.BuildPrefix(cab, serializedFile, resSLength);
-        return new Built(prefix, ContainerKey, pixelsLength);
+
+        var w = new BundleBufferWriter(EstimateSize(req));
+
+        var prefix = BundleWriter.WriteHeaderAndBlocksInfo(w, cab, resSLength);
+
+        Span<SerializedFileWriter.ObjectMeta> objects =
+        [
+            new(AssetBundlePathId, SerializedTypeTrees.AssetBundleClassId),
+            new(TexturePathId, req.ClassId),
+        ];
+        Span<SerializedFileWriter.ObjectSlot> slots = stackalloc SerializedFileWriter.ObjectSlot[2];
+
+        var file = SerializedFileWriter.BeginFile(w, targetPlatform, objects, slots);
+
+        file.BeginObject(w, ref slots[0]);
+        WriteAssetBundleBody(w, cab, TexturePathId);
+        file.EndObject(w, slots[0]);
+
+        file.BeginObject(w, ref slots[1]);
+        WriteTextureBody(w, req, streamPath, streamOffset, streamSize);
+        file.EndObject(w, slots[1]);
+
+        long serializedFileLength = file.End(w);
+
+        w.AlignBase = 0;
+        BundleWriter.Finish(w, prefix, serializedFileLength);
+
+        return new Built(w.ToArray(), ContainerKey, pixelsLength);
     }
 
-    static SerializedValue BuildTextureValue(
-        TextureRequest req,
-        string streamPath,
-        long streamOffset,
-        long streamSize
-    )
-    {
-        return IsModern(req.ClassId)
-            ? BuildModernTexture(req, streamPath, streamOffset, streamSize)
-            : BuildClassicTexture(req, streamPath, streamOffset, streamSize);
-    }
+    // A generous starting capacity so the buffer rarely regrows: the framing plus the
+    // two verbatim type entries (the type trees dominate) plus room for the bodies.
+    static int EstimateSize(TextureRequest req) =>
+        1024
+        + ReferenceTypeTrees.TypeEntry(SerializedTypeTrees.AssetBundleClassId).Length
+        + ReferenceTypeTrees.TypeEntry(req.ClassId).Length;
 
     static bool IsModern(int classId) =>
         classId == SerializedTypeTrees.Texture3DClassId
         || classId == SerializedTypeTrees.Texture2DArrayClassId
         || classId == SerializedTypeTrees.CubemapArrayClassId;
 
-    static SerializedValue BuildClassicTexture(
+    static void WriteTextureBody(
+        BundleBufferWriter w,
+        TextureRequest req,
+        string streamPath,
+        long streamOffset,
+        long streamSize
+    )
+    {
+        if (IsModern(req.ClassId))
+            WriteModernTextureBody(w, req, streamPath, streamOffset, streamSize);
+        else
+            WriteClassicTextureBody(w, req, streamPath, streamOffset, streamSize);
+    }
+
+    static void WriteClassicTextureBody(
+        BundleBufferWriter w,
         TextureRequest req,
         string streamPath,
         long streamOffset,
@@ -182,38 +217,38 @@ internal static class TextureBundleBuilder
                 "texture data exceeds 2 GB per image; m_CompleteImageSize is a signed 32-bit int"
             );
 
-        var tex = SerializedValue
-            .Struct()
-            .SetString("m_Name", req.Name)
-            .SetInt("m_ForcedFallbackFormat", 4) // ARGB32, Unity's usual default
-            .SetBool("m_DownscaleFallback", false)
-            .SetInt("m_Width", req.Width)
-            .SetInt("m_Height", req.Height)
-            // The size of one image (a single face's full mip chain), not the
-            // total: Unity reads m_ImageCount * m_CompleteImageSize from the stream.
-            .SetInt("m_CompleteImageSize", imageSize)
-            .SetInt("m_TextureFormat", req.Format)
-            .SetInt("m_MipCount", req.MipCount)
-            .SetBool("m_IsReadable", req.Readable)
-            .SetBool("m_IgnoreMasterTextureLimit", false)
-            .SetBool("m_IsPreProcessed", false)
-            .SetBool("m_StreamingMipmaps", false)
-            .SetInt("m_StreamingMipmapsPriority", 0)
-            .SetInt("m_ImageCount", imageCount)
-            .SetInt("m_TextureDimension", cube ? TextureDimensionCube : TextureDimensionTex2D)
-            .Set("m_TextureSettings", TextureSettings())
-            .SetInt("m_LightmapFormat", 0)
-            .SetInt("m_ColorSpace", req.ColorSpace)
-            .SetBytes("image data", [])
-            .Set("m_StreamData", StreamData(streamOffset, streamSize, streamPath));
+        w.WriteAlignedString(req.Name); // m_Name
+        w.WriteInt32(ForcedFallbackFormat); // m_ForcedFallbackFormat
+        w.WriteBool(false); // m_DownscaleFallback
+        w.Align(4);
+        w.WriteInt32(req.Width); // m_Width
+        w.WriteInt32(req.Height); // m_Height
+        // The size of one image (a single face's full mip chain), not the total:
+        // Unity reads m_ImageCount * m_CompleteImageSize from the stream.
+        w.WriteInt32((int)imageSize); // m_CompleteImageSize
+        w.WriteInt32(req.Format); // m_TextureFormat
+        w.WriteInt32(req.MipCount); // m_MipCount
+        w.WriteBool(req.Readable); // m_IsReadable
+        w.WriteBool(false); // m_IgnoreMasterTextureLimit
+        w.WriteBool(false); // m_IsPreProcessed
+        w.WriteBool(false); // m_StreamingMipmaps
+        w.Align(4);
+        w.WriteInt32(0); // m_StreamingMipmapsPriority
+        w.Align(4);
+        w.WriteInt32(imageCount); // m_ImageCount
+        w.WriteInt32(cube ? TextureDimensionCube : TextureDimensionTex2D); // m_TextureDimension
+        WriteTextureSettings(w); // m_TextureSettings
+        w.WriteInt32(0); // m_LightmapFormat
+        w.WriteInt32(req.ColorSpace); // m_ColorSpace
+        WriteEmptyImageData(w); // image data
+        WriteStreamData(w, streamOffset, streamSize, streamPath); // m_StreamData
 
         if (cube)
-            tex.Set("m_SourceTextures", SerializedValue.Array());
-
-        return tex;
+            w.BeginArray().End(align: true); // m_SourceTextures (empty)
     }
 
-    static SerializedValue BuildModernTexture(
+    static void WriteModernTextureBody(
+        BundleBufferWriter w,
         TextureRequest req,
         string streamPath,
         long streamOffset,
@@ -221,100 +256,113 @@ internal static class TextureBundleBuilder
     )
     {
         bool cubemapArray = req.ClassId == SerializedTypeTrees.CubemapArrayClassId;
+        bool texture3D = req.ClassId == SerializedTypeTrees.Texture3DClassId;
 
-        var tex = SerializedValue
-            .Struct()
-            .SetString("m_Name", req.Name)
-            .SetInt("m_ForcedFallbackFormat", 4)
-            .SetBool("m_DownscaleFallback", false)
-            .SetInt("m_ColorSpace", req.ColorSpace)
-            .SetInt("m_Format", req.Format) // GraphicsFormat
-            .SetInt("m_Width", req.Width);
+        w.WriteAlignedString(req.Name); // m_Name
+        w.WriteInt32(ForcedFallbackFormat); // m_ForcedFallbackFormat
+        w.WriteBool(false); // m_DownscaleFallback
+        w.Align(4);
+        w.WriteInt32(req.ColorSpace); // m_ColorSpace
+        w.WriteInt32(req.Format); // m_Format (GraphicsFormat)
+        w.WriteInt32(req.Width); // m_Width
 
         if (cubemapArray)
         {
-            tex.SetInt("m_CubemapCount", req.Depth);
+            w.WriteInt32(req.Depth); // m_CubemapCount
         }
         else
         {
-            tex.SetInt("m_Height", req.Height);
-            tex.SetInt("m_Depth", req.Depth);
+            w.WriteInt32(req.Height); // m_Height
+            w.WriteInt32(req.Depth); // m_Depth
         }
 
-        tex.SetInt("m_MipCount", req.MipCount)
-            // m_DataSize is an unsigned int; the 4 GB bound is checked in Build.
-            .SetInt("m_DataSize", streamSize)
-            .Set("m_TextureSettings", TextureSettings())
-            .SetBool("m_IsReadable", req.Readable)
-            .SetBytes("image data", [])
-            .Set("m_StreamData", StreamData(streamOffset, streamSize, streamPath));
-
-        return tex;
+        w.WriteInt32(req.MipCount); // m_MipCount
+        // Only Texture3D's m_MipCount carries the align flag.
+        if (texture3D)
+            w.Align(4);
+        w.WriteUInt32((uint)streamSize); // m_DataSize (the 4 GB bound is checked in Build)
+        WriteTextureSettings(w); // m_TextureSettings
+        w.WriteBool(req.Readable); // m_IsReadable
+        w.Align(4);
+        WriteEmptyImageData(w); // image data
+        WriteStreamData(w, streamOffset, streamSize, streamPath); // m_StreamData
     }
 
-    static SerializedValue TextureSettings() =>
-        SerializedValue
-            .Struct()
-            .SetInt("m_FilterMode", 1) // bilinear
-            .SetInt("m_Aniso", 1)
-            .SetFloat("m_MipBias", 0f)
-            .SetInt("m_WrapU", 0) // repeat
-            .SetInt("m_WrapV", 0)
-            .SetInt("m_WrapW", 0);
+    static void WriteTextureSettings(BundleBufferWriter w)
+    {
+        w.WriteInt32(1); // m_FilterMode (bilinear)
+        w.WriteInt32(1); // m_Aniso
+        w.WriteSingle(0f); // m_MipBias
+        w.WriteInt32(0); // m_WrapU (repeat)
+        w.WriteInt32(0); // m_WrapV
+        w.WriteInt32(0); // m_WrapW
+    }
+
+    // The inline pixel array is always empty (pixels are streamed), but the node still
+    // carries a count prefix and the align flag.
+    static void WriteEmptyImageData(BundleBufferWriter w) => w.BeginArray().End(align: true);
 
     // offset and size are unsigned ints; the 4 GB bound is checked in Build.
-    static SerializedValue StreamData(long streamOffset, long streamSize, string streamPath) =>
-        SerializedValue
-            .Struct()
-            .SetInt("offset", streamOffset)
-            .SetInt("size", streamSize)
-            .SetString("path", streamPath);
-
-    static SerializedValue BuildAssetBundleValue(string identity, long texturePathId)
+    static void WriteStreamData(
+        BundleBufferWriter w,
+        long streamOffset,
+        long streamSize,
+        string streamPath
+    )
     {
-        // The preload table is what LoadAssetAsync actually loads during its
-        // asynchronous phase: the preload thread reads the objects listed for
-        // the requested asset, including their streamed data. Without an entry
-        // the request completes having loaded nothing, and the first access to
-        // its `asset` property then performs the entire load (pixel read +
-        // upload) synchronously on the main thread.
-        var preloadTable = SerializedValue.Array();
-        preloadTable.Elements.Add(
-            SerializedValue.Struct().SetInt("m_FileID", 0).Set("m_PathID", PathId(texturePathId))
-        );
-
-        var container = SerializedValue.Array();
-        container.Elements.Add(
-            SerializedValue
-                .Struct()
-                .SetString("first", ContainerKey)
-                .Set("second", AssetInfo(0, 1, 0, texturePathId))
-        );
-
-        return SerializedValue
-            .Struct()
-            .SetString("m_Name", identity)
-            .Set("m_PreloadTable", preloadTable)
-            .Set("m_Container", container)
-            .Set("m_MainAsset", AssetInfo(0, 0, 0, 0))
-            .SetInt("m_RuntimeCompatibility", 1)
-            .SetString("m_AssetBundleName", identity)
-            .Set("m_Dependencies", SerializedValue.Array())
-            .SetBool("m_IsStreamedSceneAssetBundle", false)
-            .SetInt("m_ExplicitDataLayout", 0)
-            .SetInt("m_PathFlags", 0)
-            .Set("m_SceneHashes", SerializedValue.Array());
+        w.WriteUInt32((uint)streamOffset); // offset
+        w.WriteUInt32((uint)streamSize); // size
+        w.WriteAlignedString(streamPath); // path
     }
 
-    static SerializedValue AssetInfo(int preloadIndex, int preloadSize, int fileId, long pathId) =>
-        SerializedValue
-            .Struct()
-            .SetInt("preloadIndex", preloadIndex)
-            .SetInt("preloadSize", preloadSize)
-            .Set(
-                "asset",
-                SerializedValue.Struct().SetInt("m_FileID", fileId).Set("m_PathID", PathId(pathId))
-            );
+    static void WriteAssetBundleBody(BundleBufferWriter w, string identity, long texturePathId)
+    {
+        w.WriteAlignedString(identity); // m_Name
 
-    static SerializedValue PathId(long pathId) => new() { Int = pathId };
+        // m_PreloadTable is what LoadAssetAsync actually loads during its asynchronous
+        // phase: the preload thread reads the objects listed for the requested asset,
+        // including their streamed data. Without an entry the request completes having
+        // loaded nothing, and the first access to its `asset` property then performs the
+        // entire load (pixel read + upload) synchronously on the main thread.
+        var preload = w.BeginArray();
+        preload.Add();
+        WritePPtr(w, fileId: 0, pathId: texturePathId);
+        preload.End(align: true);
+
+        // m_Container: map<string, AssetInfo>. Its Array is not aligned.
+        var container = w.BeginArray();
+        container.Add();
+        w.WriteAlignedString(ContainerKey); // pair.first
+        WriteAssetInfo(w, preloadIndex: 0, preloadSize: 1, fileId: 0, pathId: texturePathId);
+        container.End();
+
+        WriteAssetInfo(w, preloadIndex: 0, preloadSize: 0, fileId: 0, pathId: 0); // m_MainAsset
+        w.WriteUInt32(1); // m_RuntimeCompatibility
+        w.WriteAlignedString(identity); // m_AssetBundleName
+        w.BeginArray().End(align: true); // m_Dependencies (empty)
+        w.WriteBool(false); // m_IsStreamedSceneAssetBundle
+        w.Align(4);
+        w.WriteInt32(0); // m_ExplicitDataLayout
+        w.WriteInt32(0); // m_PathFlags
+        w.BeginArray().End(); // m_SceneHashes (empty map, Array not aligned)
+    }
+
+    static void WritePPtr(BundleBufferWriter w, int fileId, long pathId)
+    {
+        w.WriteInt32(fileId); // m_FileID
+        w.WriteInt64(pathId); // m_PathID
+    }
+
+    static void WriteAssetInfo(
+        BundleBufferWriter w,
+        int preloadIndex,
+        int preloadSize,
+        int fileId,
+        long pathId
+    )
+    {
+        w.WriteInt32(preloadIndex);
+        w.WriteInt32(preloadSize);
+        WritePPtr(w, fileId, pathId);
+    }
 }

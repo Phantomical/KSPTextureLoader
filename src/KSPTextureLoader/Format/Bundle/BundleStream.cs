@@ -6,7 +6,7 @@ namespace KSPTextureLoader.Format.Bundle;
 /// <summary>
 /// A read-only seekable stream presenting a complete <c>UnityFS</c> bundle to
 /// <c>AssetBundle.LoadFromStreamAsync</c>: the prefix built by
-/// <see cref="BundleWriter.BuildPrefix"/> followed by the resS pixel payload
+/// <see cref="BundleWriter.WriteHeaderAndBlocksInfo"/> followed by the resS pixel payload
 /// read from an underlying stream, so the pixel data never has to be copied
 /// into a managed array.
 /// </summary>

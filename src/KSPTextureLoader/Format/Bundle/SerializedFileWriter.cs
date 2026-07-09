@@ -1,19 +1,21 @@
 using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace KSPTextureLoader.Format.Bundle;
 
 /// <summary>
-/// Writer for serialized unity asset bundle files.
+/// Writes the framing of a serialized Unity asset-bundle file (the
+/// <c>CAB-&lt;hash&gt;</c> entry) directly into a shared <see cref="BundleBufferWriter"/>:
+/// the header, the little-endian metadata (unity version, type list, object table)
+/// and the padding up to the object-data section. Callers write each object body
+/// between <see cref="FileScope.BeginObject"/> and <see cref="FileScope.EndObject"/>,
+/// and the byte offsets/sizes are back-patched into the reserved object-table slots.
 /// </summary>
 ///
 /// <remarks>
-/// The emitted file enables the type tree and copies each class's type entry
-/// verbatim from the embedded reference bundle (see <see cref="ReferenceTypeTrees"/>),
-/// so Unity deserializes objects from the embedded tree. It still targets serialized
-/// file format 21 (Unity 2019.4), the version the reference type entries were
-/// captured for.
+/// The emitted file enables the type tree and copies each class's type entry verbatim
+/// from the embedded reference bundle (see <see cref="ReferenceTypeTrees"/>), so Unity
+/// deserializes objects from the embedded tree. It targets serialized file format 21
+/// (Unity 2019.4), the version the reference type entries were captured for.
 /// </remarks>
 internal static class SerializedFileWriter
 {
@@ -23,245 +25,162 @@ internal static class SerializedFileWriter
 
     const int ObjectAlignment = 16;
 
-    /// <summary>One object to place in the serialized file.</summary>
-    public readonly struct ObjectEntry(long pathId, int classId, SerializedValue value)
+    // metadataSize + fileSize + version + dataOffset + endianness byte + 3 reserved.
+    const int HeaderLength = 20;
+
+    /// <summary>Identifies one object to place in the serialized file.</summary>
+    public readonly struct ObjectMeta(long pathId, int classId)
     {
         public readonly long PathId = pathId;
         public readonly int ClassId = classId;
-        public readonly SerializedValue Value = value;
+    }
+
+    /// <summary>The reserved object-table slots for one object, patched as its body is written.</summary>
+    public struct ObjectSlot
+    {
+        internal int OffsetPosition;
+        internal int SizePosition;
+        internal int Start;
     }
 
     /// <summary>
-    /// Serialize the given objects into a complete serialized-file byte array.
-    /// <paramref name="targetPlatform"/> is the Unity <c>BuildTarget</c> the
-    /// bundle is tagged for; it must match the running player or Unity rejects
-    /// the bundle at load.
+    /// Bookkeeping returned by <see cref="BeginFile"/>: the reserved header slots and
+    /// the object-data section origin, used to place object bodies and finalize the file.
     /// </summary>
-    public static byte[] Build(IReadOnlyList<ObjectEntry> objects, int targetPlatform)
+    public readonly struct FileScope
     {
-        if (objects is null || objects.Count == 0)
+        internal readonly int FileStart;
+        internal readonly int FileSizePosition;
+        internal readonly int DataOffset;
+
+        internal FileScope(int fileStart, int fileSizePosition, int dataOffset)
+        {
+            FileStart = fileStart;
+            FileSizePosition = fileSizePosition;
+            DataOffset = dataOffset;
+        }
+
+        /// <summary>Align to the next object slot and record where this object's body begins.</summary>
+        public void BeginObject(BundleBufferWriter w, ref ObjectSlot slot)
+        {
+            w.Align(ObjectAlignment);
+            slot.Start = w.Length;
+            // The object-table offset is relative to the data section (dataOffset).
+            w.PatchUInt32(
+                slot.OffsetPosition,
+                (uint)(w.Length - FileStart - DataOffset),
+                bigEndian: false
+            );
+        }
+
+        /// <summary>Back-patch this object's byte size once its body has been written.</summary>
+        public void EndObject(BundleBufferWriter w, in ObjectSlot slot) =>
+            w.PatchUInt32(slot.SizePosition, (uint)(w.Length - slot.Start), bigEndian: false);
+
+        /// <summary>Patch the total file size and return it.</summary>
+        public long End(BundleBufferWriter w)
+        {
+            int fileLength = w.Length - FileStart;
+            w.PatchUInt32(FileSizePosition, (uint)fileLength, bigEndian: true);
+            return fileLength;
+        }
+    }
+
+    /// <summary>
+    /// Write the header, metadata and object-data padding into <paramref name="w"/> at
+    /// its current position, reserving one <see cref="ObjectSlot"/> per object in
+    /// <paramref name="slots"/>. <paramref name="targetPlatform"/> is the Unity
+    /// <c>BuildTarget</c> the bundle is tagged for; it must match the running player or
+    /// Unity rejects the bundle at load.
+    /// </summary>
+    public static FileScope BeginFile(
+        BundleBufferWriter w,
+        int targetPlatform,
+        ReadOnlySpan<ObjectMeta> objects,
+        Span<ObjectSlot> slots
+    )
+    {
+        if (objects.Length == 0)
             throw new ArgumentException("at least one object is required", nameof(objects));
+        if (slots.Length < objects.Length)
+            throw new ArgumentException("slots must have one entry per object", nameof(slots));
 
-        var objectData = new byte[objects.Count][];
-        for (int i = 0; i < objects.Count; ++i)
-        {
-            var ow = new EndianBinaryWriter { BigEndian = false };
-            WriteValue(ow, ReferenceTypeTrees.Root(objects[i].ClassId), objects[i].Value);
-            objectData[i] = ow.ToArray();
-        }
+        int fileStart = w.Length;
+        // Object-data alignment is relative to the serialized file's own start.
+        w.AlignBase = fileStart;
 
-        // Lay out the object data section. Keeping the section and every object
-        // start 16-aligned means alignment within an object's own buffer agrees
-        // with the file-absolute alignment the reader performs.
-        var byteStart = new long[objects.Count];
-        long sectionLength = 0;
-        for (int i = 0; i < objects.Count; ++i)
-        {
-            sectionLength = Align(sectionLength, ObjectAlignment);
-            byteStart[i] = sectionLength;
-            sectionLength += objectData[i].Length;
-        }
-
-        var typeOrder = new List<int>();
-        var typeIndex = new Dictionary<int, int>();
-        var objTypeIndex = new int[objects.Count];
-        for (int i = 0; i < objects.Count; ++i)
-        {
-            int classId = objects[i].ClassId;
-            if (!typeIndex.TryGetValue(classId, out int idx))
-            {
-                idx = typeOrder.Count;
-                typeIndex[classId] = idx;
-                typeOrder.Add(classId);
-            }
-            objTypeIndex[i] = idx;
-        }
-
-        // The metadata block, little-endian, starting right after the 20-byte
-        // header.
-        var meta = new EndianBinaryWriter { BigEndian = false };
-        meta.WriteCString(ReferenceTypeTrees.UnityVersion);
-        meta.WriteInt32(targetPlatform);
-        meta.WriteBoolean(true); // m_EnableTypeTree
-
-        // Each type entry (class id, strip/script fields, hashes, type-tree blob and
-        // dependencies) is copied verbatim from the reference bundle, so the emitted
-        // objects carry their full type tree and Unity deserializes them from it.
-        meta.WriteInt32(typeOrder.Count);
-        foreach (int classId in typeOrder)
-            meta.WriteBytes(ReferenceTypeTrees.TypeEntry(classId));
-
-        meta.WriteInt32(objects.Count);
-        for (int i = 0; i < objects.Count; ++i)
-        {
-            meta.Align(4);
-            meta.WriteInt64(objects[i].PathId);
-            meta.WriteUInt32(checked((uint)byteStart[i]));
-            meta.WriteUInt32(checked((uint)objectData[i].Length));
-            meta.WriteInt32(objTypeIndex[i]);
-        }
-
-        meta.WriteInt32(0); // m_ScriptTypes count
-        meta.WriteInt32(0); // m_Externals count
-        meta.WriteInt32(0); // m_RefTypes count
-        meta.WriteCString(""); // userInformation
-
-        byte[] metaBytes = meta.ToArray();
-
-        // Assemble the file: big-endian header, metadata, padding, object data.
-        int headerLen = 20;
-        long dataOffset = Align(headerLen + (long)metaBytes.Length, ObjectAlignment);
-        long fileSize = dataOffset + sectionLength;
-
-        var w = new EndianBinaryWriter((int)Math.Min(fileSize, int.MaxValue)) { BigEndian = true };
-        w.WriteUInt32(checked((uint)metaBytes.Length)); // m_MetadataSize
-        w.WriteUInt32(checked((uint)fileSize)); // m_FileSize
+        // Header (big-endian), sizes back-patched once known.
+        w.BigEndian = true;
+        int metaSizePosition = w.ReserveUInt32();
+        int fileSizePosition = w.ReserveUInt32();
         w.WriteUInt32(FormatVersion);
-        w.WriteUInt32(checked((uint)dataOffset));
+        int dataOffsetPosition = w.ReserveUInt32();
         w.WriteByte(0); // m_Endianess: 0 == little-endian data
         w.WriteZeros(3); // reserved
 
-        w.WriteBytes(metaBytes);
+        int metaStart = w.Length; // == fileStart + HeaderLength
 
-        while (w.Length < dataOffset)
-            w.WriteByte(0);
+        // Metadata (little-endian).
+        w.BigEndian = false;
+        w.WriteCString(ReferenceTypeTrees.UnityVersion);
+        w.WriteInt32(targetPlatform);
+        w.WriteBool(true); // m_EnableTypeTree
 
-        for (int i = 0; i < objects.Count; ++i)
+        // The distinct class ids, in first-seen order, form the type list. Each entry
+        // (class id, strip/script fields, hashes, type-tree blob and dependencies) is
+        // copied verbatim from the reference bundle so objects carry their full tree.
+        Span<int> typeOrder = stackalloc int[objects.Length];
+        int typeCount = 0;
+        for (int i = 0; i < objects.Length; ++i)
+            if (IndexOf(typeOrder, typeCount, objects[i].ClassId) < 0)
+                typeOrder[typeCount++] = objects[i].ClassId;
+
+        w.WriteInt32(typeCount);
+        for (int i = 0; i < typeCount; ++i)
+            w.WriteBytes(ReferenceTypeTrees.TypeEntry(typeOrder[i]));
+
+        // Object table: reserve the byte offset/size of each object, patched as bodies
+        // are written.
+        w.WriteInt32(objects.Length);
+        for (int i = 0; i < objects.Length; ++i)
         {
-            while (w.Length < dataOffset + byteStart[i])
-                w.WriteByte(0);
-            w.WriteBytes(objectData[i]);
-        }
-
-        return w.ToArray();
-    }
-
-    static long Align(long value, int alignment)
-    {
-        long rem = value % alignment;
-        return rem == 0 ? value : value + (alignment - rem);
-    }
-
-    // The generic object serializer: the exact inverse of TypeTreeReader.Read.
-
-    static void WriteValue(EndianBinaryWriter w, TypeTreeTreeNode node, SerializedValue v)
-    {
-        var self = node.Self;
-
-        if (self.IsArray)
-        {
-            WriteArray(w, node, v);
-        }
-        else if (node.Children.Count == 0)
-        {
-            WritePrimitive(w, self, v);
-        }
-        else if (node.Children.Count == 1 && node.Children[0].Self.IsArray)
-        {
-            // string / vector / map / TypelessData wrapper around a single Array
-            // child; the value is the array payload itself.
-            WriteValue(w, node.Children[0], v);
-        }
-        else
-        {
-            foreach (var child in node.Children)
-                WriteValue(w, child, RequireField(v, child.Self.Name, self.Type));
-        }
-
-        if (self.AlignBytes)
             w.Align(4);
+            w.WriteInt64(objects[i].PathId);
+            slots[i].OffsetPosition = w.ReserveUInt32();
+            slots[i].SizePosition = w.ReserveUInt32();
+            w.WriteInt32(IndexOf(typeOrder, typeCount, objects[i].ClassId));
+        }
+
+        w.WriteInt32(0); // m_ScriptTypes count
+        w.WriteInt32(0); // m_Externals count
+        w.WriteInt32(0); // m_RefTypes count
+        w.WriteCString(""); // userInformation
+
+        int metaLength = w.Length - metaStart;
+        int dataOffset = Align(HeaderLength + metaLength, ObjectAlignment);
+
+        // Pad up to the object-data section.
+        int padding = dataOffset - (w.Length - fileStart);
+        if (padding > 0)
+            w.WriteZeros(padding);
+
+        w.PatchUInt32(metaSizePosition, (uint)metaLength, bigEndian: true);
+        w.PatchUInt32(dataOffsetPosition, (uint)dataOffset, bigEndian: true);
+
+        return new FileScope(fileStart, fileSizePosition, dataOffset);
     }
 
-    static void WriteArray(EndianBinaryWriter w, TypeTreeTreeNode node, SerializedValue v)
+    static int IndexOf(Span<int> values, int count, int value)
     {
-        // child[0] is the "size" int, child[1] is the element template.
-        var elem = node.Children[1];
-        bool elemIsLeaf = elem.Children.Count == 0;
-
-        if (elemIsLeaf && elem.Self.ByteSize == 1)
-        {
-            if (elem.Self.Type == "char")
-            {
-                byte[] bytes = v.Str is null ? [] : Encoding.UTF8.GetBytes(v.Str);
-                w.WriteInt32(bytes.Length);
-                w.WriteBytes(bytes);
-            }
-            else
-            {
-                byte[] bytes = v.Bytes ?? [];
-                w.WriteInt32(bytes.Length);
-                w.WriteBytes(bytes);
-            }
-        }
-        else
-        {
-            var elements = v.Elements ?? [];
-            w.WriteInt32(elements.Count);
-            foreach (var e in elements)
-                WriteValue(w, elem, e);
-        }
+        for (int i = 0; i < count; ++i)
+            if (values[i] == value)
+                return i;
+        return -1;
     }
 
-    static void WritePrimitive(EndianBinaryWriter w, TypeTreeNode node, SerializedValue v)
+    static int Align(int value, int alignment)
     {
-        switch (node.Type)
-        {
-            case "SInt8":
-                w.WriteSByte((sbyte)v.Int);
-                break;
-            case "UInt8":
-            case "char":
-                w.WriteByte((byte)v.Int);
-                break;
-            case "SInt16":
-            case "short":
-                w.WriteInt16((short)v.Int);
-                break;
-            case "UInt16":
-            case "unsigned short":
-                w.WriteUInt16((ushort)v.Int);
-                break;
-            case "SInt32":
-            case "int":
-                w.WriteInt32((int)v.Int);
-                break;
-            case "UInt32":
-            case "unsigned int":
-            case "Type*":
-                w.WriteUInt32((uint)v.Int);
-                break;
-            case "SInt64":
-            case "long long":
-                w.WriteInt64(v.Int);
-                break;
-            case "UInt64":
-            case "unsigned long long":
-            case "FileSize":
-                w.WriteUInt64((ulong)v.Int);
-                break;
-            case "float":
-                w.WriteSingle((float)v.Float);
-                break;
-            case "double":
-                w.WriteDouble(v.Float);
-                break;
-            case "bool":
-                w.WriteBoolean(v.Int != 0);
-                break;
-            default:
-                // Unknown leaf: emit its declared size as zeros to stay aligned.
-                if (node.ByteSize > 0)
-                    w.WriteZeros(node.ByteSize);
-                break;
-        }
-    }
-
-    static SerializedValue RequireField(SerializedValue v, string name, string ownerType)
-    {
-        if (v?.Fields is null || !v.Fields.TryGetValue(name, out var field))
-            throw new InvalidOperationException(
-                $"missing value for field \"{name}\" of \"{ownerType}\""
-            );
-        return field;
+        int rem = value % alignment;
+        return rem == 0 ? value : value + (alignment - rem);
     }
 }
