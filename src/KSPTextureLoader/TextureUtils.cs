@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using System.Runtime.Serialization;
 using KSPTextureLoader.Internals;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Profiling;
@@ -139,6 +140,8 @@ internal static class TextureUtils
         );
     }
 
+    static readonly ProfilerMarker CreateTexture2DMarker = new("CreateUninitializedTexture2D");
+
     internal static Texture2D CreateUninitializedTexture2D(
         int width,
         int height,
@@ -147,6 +150,8 @@ internal static class TextureUtils
         InternalTextureCreationFlags flags = InternalTextureCreationFlags.None
     )
     {
+        using var scope = CreateTexture2DMarker.Auto();
+
         var tex = (Texture2D)FormatterServices.GetUninitializedObject(typeof(Texture2D));
         if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
             return tex;
@@ -168,6 +173,10 @@ internal static class TextureUtils
         return tex;
     }
 
+    static readonly ProfilerMarker CreateTexture2DArrayMarker = new(
+        "CreateUninitializedTexture2DArray"
+    );
+
     internal static Texture2DArray CreateUninitializedTexture2DArray(
         int width,
         int height,
@@ -177,6 +186,8 @@ internal static class TextureUtils
         InternalTextureCreationFlags flags = InternalTextureCreationFlags.None
     )
     {
+        using var scope = CreateTexture2DArrayMarker.Auto();
+
         var tex = (Texture2DArray)FormatterServices.GetUninitializedObject(typeof(Texture2DArray));
         if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
             return tex;
@@ -198,6 +209,8 @@ internal static class TextureUtils
         return tex;
     }
 
+    static readonly ProfilerMarker CreateTexture3DMarker = new("CreateUninitializedTexture3D");
+
     internal static Texture3D CreateUninitializedTexture3D(
         int width,
         int height,
@@ -207,6 +220,8 @@ internal static class TextureUtils
         InternalTextureCreationFlags flags = InternalTextureCreationFlags.None
     )
     {
+        using var scope = CreateTexture3DMarker.Auto();
+
         var tex = (Texture3D)FormatterServices.GetUninitializedObject(typeof(Texture3D));
         if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
             return tex;
@@ -228,6 +243,8 @@ internal static class TextureUtils
         return tex;
     }
 
+    static readonly ProfilerMarker CreateCubemapMarker = new("CreateUninitializedCubemap");
+
     internal static Cubemap CreateUninitializedCubemap(
         int extent,
         int mipCount,
@@ -235,6 +252,8 @@ internal static class TextureUtils
         InternalTextureCreationFlags flags = InternalTextureCreationFlags.None
     )
     {
+        using var scope = CreateCubemapMarker.Auto();
+
         var tex = (Cubemap)FormatterServices.GetUninitializedObject(typeof(Cubemap));
 
         if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
@@ -256,6 +275,10 @@ internal static class TextureUtils
         return tex;
     }
 
+    static readonly ProfilerMarker CreateCubemapArrayMarker = new(
+        "CreateUninitializedCubemapArray"
+    );
+
     internal static CubemapArray CreateUninitializedCubemapArray(
         int extent,
         int count,
@@ -264,6 +287,8 @@ internal static class TextureUtils
         InternalTextureCreationFlags flags = InternalTextureCreationFlags.None
     )
     {
+        using var scope = CreateCubemapArrayMarker.Auto();
+
         var tex = (CubemapArray)FormatterServices.GetUninitializedObject(typeof(CubemapArray));
 
         if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))

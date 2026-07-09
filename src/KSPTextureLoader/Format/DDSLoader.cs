@@ -14,13 +14,14 @@ using Unity.Jobs;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
-using static KSPTextureLoader.CPUTexture2D;
 using static KSPTextureLoader.Format.DDS.DDSUtil;
 
 namespace KSPTextureLoader.Format;
 
 internal static class DDSLoader
 {
+    static readonly ProfilerMarker TextureApplyMarker = new("Texture.Apply");
+
     internal enum DDSTextureType
     {
         Texture2D,
@@ -676,7 +677,8 @@ internal static class DDSLoader
                 });
             }
 
-            texture.Apply(false, makeNoLongerReadable: unreadable);
+            using (TextureApplyMarker.Auto())
+                texture.Apply(false, makeNoLongerReadable: unreadable);
 
             texGuard.Clear();
             handle.SetTexture<T>(texture, options);
@@ -762,7 +764,8 @@ internal static class DDSLoader
                 }
             }
 
-            tex2dArray.Apply(false, options.Unreadable);
+            using (TextureApplyMarker.Auto())
+                tex2dArray.Apply(false, options.Unreadable);
             handle.SetTexture<T>(tex2dArray, options);
             texGuard.Clear();
         });
@@ -899,7 +902,8 @@ internal static class DDSLoader
                 }
             }
 
-            cubemap.Apply(false, options.Unreadable);
+            using (TextureApplyMarker.Auto())
+                cubemap.Apply(false, options.Unreadable);
             handle.SetTexture<T>(cubemap, options);
             texGuard.Clear();
         });
@@ -985,7 +989,9 @@ internal static class DDSLoader
                     offset += mipSize;
                 }
             }
-            cubeArray.Apply(false, options.Unreadable);
+
+            using (TextureApplyMarker.Auto())
+                cubeArray.Apply(false, options.Unreadable);
             handle.SetTexture<T>(cubeArray, options);
             texGuard.Clear();
         });
@@ -1072,7 +1078,8 @@ internal static class DDSLoader
                 offset += mipSize;
             }
 
-            tex3d.Apply(false, makeNoLongerReadable: true);
+            using (TextureApplyMarker.Auto())
+                tex3d.Apply(false, makeNoLongerReadable: true);
             handle.SetTexture<T>(tex3d, options);
             texGuard.Clear();
         });
