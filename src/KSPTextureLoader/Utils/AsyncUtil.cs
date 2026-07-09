@@ -17,60 +17,115 @@ internal static class AsyncUtil
 
     #region LaunchMainThreadTask
 
+    abstract class MainThreadTask<T>
+    {
+        public readonly TaskCompletionSource<T> tcs = new(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+
+        public Task<T> Task => tcs.Task;
+
+        protected abstract void Execute();
+
+        public static void Callback(object state)
+        {
+            var task = (MainThreadTask<T>)state;
+
+            try
+            {
+                task.Execute();
+            }
+            catch (Exception e)
+            {
+                task.tcs.TrySetException(e);
+            }
+        }
+
+        public void Submit()
+        {
+            TextureLoader.Context.Submit(Callback, this);
+        }
+    }
+
+    sealed class FuncTaskTask(Func<Task> func) : MainThreadTask<Empty>
+    {
+        readonly Func<Task> func = func;
+
+        protected override void Execute()
+        {
+            func().ContinueWith(Continue, this, TaskScheduler.FromCurrentSynchronizationContext());
+        }
+
+        static void Continue(Task task, object state)
+        {
+            var ft = (FuncTaskTask)state;
+
+            try
+            {
+                task.GetAwaiter().GetResult();
+                ft.tcs.SetResult(default);
+            }
+            catch (Exception e)
+            {
+                ft.tcs.TrySetException(e);
+            }
+        }
+    }
+
     public static Task LaunchMainThreadTask(Func<Task> func)
     {
-        return LaunchMainThreadTask<Empty>(async () =>
+        var task = new FuncTaskTask(func);
+        task.Submit();
+        return task.Task;
+    }
+
+    sealed class FuncTaskTTask<T>(Func<Task<T>> func) : MainThreadTask<T>
+    {
+        readonly Func<Task<T>> func = func;
+
+        protected override void Execute()
         {
-            await func();
-            return default;
-        });
+            func().ContinueWith(Continue, this, TaskScheduler.FromCurrentSynchronizationContext());
+        }
+
+        static void Continue(Task<T> task, object state)
+        {
+            var ft = (FuncTaskTTask<T>)state;
+
+            try
+            {
+                ft.tcs.SetResult(task.Result);
+            }
+            catch (Exception e)
+            {
+                ft.tcs.TrySetException(e);
+            }
+        }
     }
 
     public static Task<T> LaunchMainThreadTask<T>(Func<Task<T>> func)
     {
-        var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var task = new FuncTaskTTask<T>(func);
+        task.Submit();
+        return task.Task;
+    }
 
-        TextureLoader.Context.Submit(
-            state =>
-            {
-                try
-                {
-                    var func = (Func<Task<T>>)state;
-                    var task = func();
+    sealed class ActionTask(Action func) : MainThreadTask<Empty>
+    {
+        readonly Action func = func;
 
-                    task.ContinueWith(
-                        task =>
-                        {
-                            try
-                            {
-                                tcs.SetResult(task.Result);
-                            }
-                            catch (Exception e)
-                            {
-                                tcs.TrySetException(e);
-                            }
-                        },
-                        TaskScheduler.FromCurrentSynchronizationContext()
-                    );
-                }
-                catch (Exception e)
-                {
-                    tcs.TrySetException(e);
-                }
-            },
-            func
-        );
-
-        return tcs.Task;
+        protected override void Execute()
+        {
+            func();
+            tcs.TrySetResult(default);
+        }
     }
 
     public static Task LaunchMainThreadTask(Action func)
     {
-        return LaunchMainThreadTask(() =>
-        {
-            func();
-            return default(Empty);
-        });
+        var task = new ActionTask(func);
+        task.Submit();
+        return task.Task;
     }
 
     public static Task<T> LaunchMainThreadTask<T>(Func<T> func)

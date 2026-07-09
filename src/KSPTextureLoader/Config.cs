@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using KSPTextureLoader.Utils;
 using Steamworks;
 using UnityEngine;
 
@@ -164,7 +165,7 @@ internal class Config : IConfigNode
                 continue;
             }
 
-            var diskPath = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", bundle.bundle);
+            var diskPath = Path.Combine(PathUtil.GameDataDir, bundle.bundle);
             if (!File.Exists(diskPath))
             {
                 Debug.LogError($"[KSPTextureLoader] ImplicitBundle {bundle.bundle} does not exist");
@@ -255,7 +256,7 @@ internal class Config : IConfigNode
         BundlePrefixMap = prefixMap;
     }
 
-    internal void GetImplicitBundlesForCanonicalPath(string key, List<string> bundles)
+    internal void GetImplicitBundlesForCanonicalPath(string key, ref MaybeList<string> bundles)
     {
         if (BundlePrefixMap is null || BundlePrefixMap.Count == 0)
             return;

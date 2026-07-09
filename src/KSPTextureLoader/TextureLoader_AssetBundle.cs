@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using KSPTextureLoader.Utils;
 using Unity.Profiling;
 using UnityEngine;
 
@@ -123,9 +124,9 @@ public partial class TextureLoader
         return path.Replace('\\', '/');
     }
 
-    private static List<string> GetAssetBundlesForKey(string key, string[] assetBundles)
+    private static MaybeList<string> GetAssetBundlesForKey(string key, string[] assetBundles)
     {
-        var bundles = new List<string>(assetBundles?.Length ?? 0);
+        var bundles = new MaybeList<string>(assetBundles?.Length ?? 0);
         if (assetBundles is not null)
         {
             foreach (var bundle in assetBundles)
@@ -135,7 +136,7 @@ public partial class TextureLoader
             }
         }
 
-        Config.Instance.GetImplicitBundlesForCanonicalPath(key, bundles);
+        Config.Instance.GetImplicitBundlesForCanonicalPath(key, ref bundles);
         return bundles;
     }
 }

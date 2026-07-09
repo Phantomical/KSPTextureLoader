@@ -43,7 +43,7 @@ public partial class TextureLoader
     private IEnumerator DoLoadCPUTexture(
         CPUTextureHandle handle,
         TextureLoadOptions options,
-        List<string> assetBundles
+        MaybeList<string> assetBundles
     )
     {
         using var guard = handle.Acquire();
@@ -68,7 +68,7 @@ public partial class TextureLoader
     private IEnumerator DoLoadCPUTextureInner(
         CPUTextureHandle handle,
         TextureLoadOptions options,
-        List<string> assetBundles
+        MaybeList<string> assetBundles
     )
     {
         if (Config.Instance.DebugMode >= DebugLevel.Debug)
@@ -135,7 +135,7 @@ public partial class TextureLoader
         }
 
         var extension = Path.GetExtension(handle.Path);
-        var diskPath = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", handle.Path);
+        var diskPath = Path.Combine(PathUtil.GameDataDir, handle.Path);
 
         if (!File.Exists(diskPath))
         {

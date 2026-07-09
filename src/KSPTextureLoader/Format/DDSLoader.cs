@@ -325,17 +325,14 @@ internal static class DDSLoader
     public static Task LoadTexture<T>(TextureHandleImpl handle, TextureLoadOptions options)
         where T : Texture
     {
-        // KSPUtil.ApplicationRootPath can only be read on the main thread.
-        var diskPath = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", handle.Path);
-        var infoTask = ReadFileHeaderAsync(diskPath);
-        var metadataTask = GetTextureMetadata<T>(infoTask, dataTask: null, options);
-
-        // Everything up to the GPU upload runs on background threads so that
-        // loads don't wait on the main thread; the load paths hop back to the
-        // main thread for the parts that need it.
         return Task.Run(() =>
-            LoadTextureBackground<T>(handle, options, diskPath, infoTask, metadataTask)
-        );
+        {
+            var diskPath = Path.Combine(PathUtil.GameDataDir, handle.Path);
+            var infoTask = ReadFileHeaderAsync(diskPath);
+            var metadataTask = GetTextureMetadata<T>(infoTask, dataTask: null, options);
+
+            return LoadTextureBackground<T>(handle, options, diskPath, infoTask, metadataTask);
+        });
     }
 
     static async Task LoadTextureBackground<T>(

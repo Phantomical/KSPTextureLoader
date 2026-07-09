@@ -1,8 +1,10 @@
 using System;
 using System.Collections;
+using System.IO;
 using System.Runtime.ExceptionServices;
 using System.Threading.Tasks;
 using KSPTextureLoader.Format.Bundle;
+using KSPTextureLoader.Utils;
 using Unity.Profiling;
 using UnityEngine;
 
@@ -168,8 +170,7 @@ public class AssetBundleHandle
         }
     }
 
-    private string BundleDiskPath =>
-        System.IO.Path.Combine(KSPUtil.ApplicationRootPath, "GameData", Path);
+    private string BundleDiskPath => System.IO.Path.Combine(PathUtil.GameDataDir, Path);
 
     void ISetException.SetException(ExceptionDispatchInfo ex)
     {

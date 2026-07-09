@@ -34,7 +34,11 @@ public partial class TextureLoader
         if (path is null)
             throw new ArgumentNullException(nameof(path), "path argument was null");
 
-        TextureHandleImpl GetApplicableExistingHandle(string key)
+        static TextureHandleImpl GetApplicableExistingHandle(
+            string key,
+            string path,
+            TextureLoadOptions options
+        )
         {
             if (!textures.TryGetValue(key, out var weakHandle))
                 return null;
@@ -61,7 +65,7 @@ public partial class TextureLoader
         }
 
         var key = CanonicalizeResourcePath(path);
-        var handle = GetApplicableExistingHandle(key);
+        var handle = GetApplicableExistingHandle(key, path, options);
         if (handle is not null)
             return new TextureHandle<T>(handle).Acquire();
 
@@ -76,16 +80,24 @@ public partial class TextureLoader
         return new(handle);
     }
 
+    readonly Dictionary<string, ProfilerMarker> LoadTextureMarkerCache = [];
+
     private IEnumerator DoLoadTexture<T>(
         TextureHandleImpl handle,
         TextureLoadOptions options,
-        List<string> assetBundles
+        MaybeList<string> assetBundles
     )
         where T : Texture
     {
         // Ensure that the texture handle doesn't get disposed of while we are still working on it.
         using var guard = handle.Acquire();
-        var marker = new ProfilerMarker($"LoadTexture: {handle.Path}");
+
+        if (!LoadTextureMarkerCache.TryGetValue(handle.Path, out var marker))
+        {
+            marker = new ProfilerMarker($"LoadTexture: {handle.Path}");
+            LoadTextureMarkerCache.Add(handle.Path, marker);
+        }
+
         using var coroutine = ExceptionUtils.CatchExceptions(
             handle,
             DoLoadTextureInner<T>(handle, options, assetBundles)
@@ -106,7 +118,7 @@ public partial class TextureLoader
     private IEnumerator DoLoadTextureInner<T>(
         TextureHandleImpl handle,
         TextureLoadOptions options,
-        List<string> assetBundles
+        MaybeList<string> assetBundles
     )
         where T : Texture
     {
@@ -189,7 +201,7 @@ public partial class TextureLoader
             }
         }
 
-        var diskPath = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", handle.Path);
+        var diskPath = Path.Combine(PathUtil.GameDataDir, handle.Path);
         if (!File.Exists(diskPath))
         {
             if (assetBundleExceptions is null)
@@ -217,10 +229,7 @@ public partial class TextureLoader
         }
         else if (extension == ".dds")
         {
-            var task = AsyncUtil.LaunchMainThreadTask(() =>
-                (Task)DDSLoader.LoadTexture<T>(handle, options)
-            );
-
+            var task = DDSLoader.LoadTexture<T>(handle, options);
             using (handle.WithCompleteHandler(new TaskCompleteHandler(task)))
                 yield return new WaitUntilTask(task);
 
@@ -243,7 +252,7 @@ public partial class TextureLoader
                 return true;
         }
 
-        var diskPath = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", path);
+        var diskPath = Path.Combine(PathUtil.GameDataDir, path);
         if (File.Exists(diskPath))
             return true;
 

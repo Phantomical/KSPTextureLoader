@@ -82,20 +82,11 @@ internal static class TextureBundleLoader
         AssetBundle bundle;
         try
         {
-            if (options.Hint == TextureLoadHint.Asynchronous)
-            {
-                var createRequest = bundleStream is null
-                    ? AssetBundle.LoadFromMemoryAsync(built.Prefix)
-                    : AssetBundle.LoadFromStreamAsync(bundleStream, 0, 128 * 1024);
-                await AwaitOperation(createRequest, new AssetBundleCompleteHandler(createRequest));
-                bundle = createRequest.assetBundle;
-            }
-            else
-            {
-                bundle = bundleStream is null
-                    ? AssetBundle.LoadFromMemory(built.Prefix)
-                    : AssetBundle.LoadFromStream(bundleStream, 0, 128 * 1024);
-            }
+            var createRequest = bundleStream is null
+                ? AssetBundle.LoadFromMemoryAsync(built.Prefix)
+                : AssetBundle.LoadFromStreamAsync(bundleStream, 0, 128 * 1024);
+            await AwaitOperation(createRequest, new AssetBundleCompleteHandler(createRequest));
+            bundle = createRequest.assetBundle;
 
             if (bundle == null)
                 throw new InvalidOperationException(

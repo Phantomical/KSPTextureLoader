@@ -25,7 +25,7 @@ internal static class PNGLoader
         where T : Texture
     {
         Texture2D texture;
-        var diskPath = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", handle.Path);
+        var diskPath = Path.Combine(PathUtil.GameDataDir, handle.Path);
         // Cubemap textures need to be converted, so they must be readable.
         var unreadable = false;
 
