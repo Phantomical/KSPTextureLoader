@@ -98,14 +98,19 @@ public partial class TextureLoader
             LoadTextureMarkerCache.Add(handle.Path, marker);
         }
 
-        using var coroutine = ExceptionUtils.CatchExceptions(
-            handle,
-            DoLoadTextureInner<T>(handle, options, assetBundles)
-        );
+        IEnumerator<object> coroutine;
+        using (CompletionContext.Enter(handle))
+            coroutine = ExceptionUtils.CatchExceptions(
+                handle,
+                DoLoadTextureInner<T>(handle, options, assetBundles)
+            );
+
+        using var _guard = coroutine;
 
         while (true)
         {
             using (var scope = marker.Auto())
+            using (CompletionContext.Enter(handle))
             {
                 if (!coroutine.MoveNext())
                     break;
@@ -245,6 +250,9 @@ public partial class TextureLoader
 
     private bool DoTextureExists(string path, TextureLoadOptions options)
     {
+        if (string.IsNullOrEmpty(path))
+            return false;
+
         var key = CanonicalizeResourcePath(path);
         if (textures.TryGetValue(key, out var weakHandle))
         {

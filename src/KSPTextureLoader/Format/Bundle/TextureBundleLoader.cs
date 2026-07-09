@@ -24,7 +24,6 @@ internal static class TextureBundleLoader
     /// </summary>
     public static Task<Texture> CreateAsync(
         TextureBundleBuilder.TextureRequest request,
-        TextureLoadOptions options,
         int platform = TextureBundleBuilder.StandaloneWindows64
     )
     {
@@ -40,36 +39,20 @@ internal static class TextureBundleLoader
             0,
             request.Pixels.LongLength
         );
-        return LoadAsync(built, stream, options);
+
+        return AsyncUtil.LaunchMainThreadTask(() => LoadOnMainThread(built, stream));
     }
 
     /// <summary>
-    /// Load an already-built bundle and return the realized texture.
-    /// <paramref name="bundleStream"/> holds the complete bundle bytes;
-    /// ownership passes to the loader, which keeps it open until Unity unloads
-    /// the bundle.
+    /// Load a texture from a <see cref="TextureBundleBuilder.Built" /> instance.
     /// </summary>
-    public static Task<Texture> LoadAsync(
+    /// <param name="built"></param>
+    /// <param name="bundleStream"></param>
+    /// <returns></returns>
+    /// <exception cref="InvalidOperationException"></exception>
+    public static async Task<Texture> LoadOnMainThread(
         TextureBundleBuilder.Built built,
-        Stream bundleStream,
-        TextureLoadOptions options
-    ) => AsyncUtil.LaunchMainThreadTask(() => LoadOnMainThread(built, bundleStream, options));
-
-    /// <summary>
-    /// Load an already-built bundle whose stream data points at an external
-    /// file (<see cref="TextureBundleBuilder.Build(TextureBundleBuilder.TextureRequest, long, string, long, int)"/>):
-    /// the prefix is the complete bundle and Unity reads the pixel bytes from
-    /// the file itself, so there is no stream to keep alive.
-    /// </summary>
-    public static Task<Texture> LoadAsync(
-        TextureBundleBuilder.Built built,
-        TextureLoadOptions options
-    ) => AsyncUtil.LaunchMainThreadTask(() => LoadOnMainThread(built, bundleStream: null, options));
-
-    static async Task<Texture> LoadOnMainThread(
-        TextureBundleBuilder.Built built,
-        Stream bundleStream,
-        TextureLoadOptions options
+        Stream bundleStream = null
     )
     {
         // Keep bundle unloads from running while this load is in flight;
@@ -85,13 +68,7 @@ internal static class TextureBundleLoader
             var createRequest = bundleStream is null
                 ? AssetBundle.LoadFromMemoryAsync(built.Prefix)
                 : AssetBundle.LoadFromStreamAsync(bundleStream, 0, 128 * 1024);
-            await AwaitOperation(createRequest, new AssetBundleCompleteHandler(createRequest));
-            bundle = createRequest.assetBundle;
-
-            if (bundle == null)
-                throw new InvalidOperationException(
-                    "LoadFromStreamAsync produced no AssetBundle (malformed in-memory bundle)"
-                );
+            bundle = await AsyncUtil.WaitFor(createRequest);
         }
         catch
         {
@@ -111,25 +88,7 @@ internal static class TextureBundleLoader
         try
         {
             var loadRequest = bundle.LoadAssetAsync(built.AssetName, typeof(Texture));
-            await AwaitOperation(loadRequest, new AssetBundleRequestCompleteHandler(loadRequest));
-
-            if (loadRequest.asset is not Texture texture)
-            {
-                var allAssets = bundle.LoadAllAssets(typeof(Texture));
-                Debug.LogError(
-                    $"[KSPTextureLoader] in-memory bundle did not contain a Texture named \"{built.AssetName}\"; "
-                        + $"loadRequest.asset = {(loadRequest.asset == null ? "null" : loadRequest.asset.GetType().FullName)}, "
-                        + $"bundle.Contains(name) = {bundle.Contains(built.AssetName)}, "
-                        + $"bundle.GetAllAssetNames() = [{string.Join(", ", bundle.GetAllAssetNames())}], "
-                        + $"LoadAllAssets(typeof(Texture)) count = {allAssets.Length}, contents = "
-                        + $"[{string.Join(", ", Array.ConvertAll(allAssets, o => $"{o.GetType().FullName}:{o.name}"))}]"
-                );
-                throw new InvalidOperationException(
-                    $"in-memory bundle did not contain a Texture named \"{built.AssetName}\""
-                );
-            }
-
-            return texture;
+            return await AsyncUtil.WaitFor<Texture>(loadRequest);
         }
         finally
         {
@@ -144,65 +103,5 @@ internal static class TextureBundleLoader
                 handle.DestroyNoRemove();
             }
         }
-    }
-
-    sealed class PendingOperation(ICompleteHandler handler, TaskCompletionSource<bool> tcs)
-    {
-        public readonly ICompleteHandler Handler = handler;
-        public readonly TaskCompletionSource<bool> Tcs = tcs;
-    }
-
-    // Operations still waiting on the player loop. Only touched on the main
-    // thread.
-    static readonly List<PendingOperation> pendingOperations = [];
-    static bool blockedHookRegistered;
-
-    /// <summary>
-    /// Wrap a Unity <see cref="AsyncOperation"/> as a task. Must be called on the
-    /// main thread. Normally the operation completes via the player loop, but if
-    /// someone blocks the main thread waiting on a texture (so the player loop
-    /// never runs) <paramref name="handler"/> is used to complete it
-    /// synchronously instead — otherwise the load would deadlock.
-    /// </summary>
-    static Task AwaitOperation(AsyncOperation operation, ICompleteHandler handler)
-    {
-        if (operation.isDone)
-            return Task.CompletedTask;
-
-        if (!blockedHookRegistered)
-        {
-            TextureLoader.Context.AddBlockedHook(ForcePendingOperation);
-            blockedHookRegistered = true;
-        }
-
-        var tcs = new TaskCompletionSource<bool>(
-            TaskCreationOptions.RunContinuationsAsynchronously
-        );
-        var pending = new PendingOperation(handler, tcs);
-        pendingOperations.Add(pending);
-        operation.completed += _ =>
-        {
-            pendingOperations.Remove(pending);
-            tcs.TrySetResult(true);
-        };
-        return tcs.Task;
-    }
-
-    static bool ForcePendingOperation()
-    {
-        if (pendingOperations.Count == 0)
-            return false;
-
-        // Forcing an asset bundle operation while a scene switch is in flight
-        // can deadlock inside unity; leave the operation for the player loop,
-        // same as the regular asset bundle loader.
-        if (TextureLoader.PendingSceneSwitch)
-            return false;
-
-        var pending = pendingOperations[0];
-        pendingOperations.RemoveAt(0);
-        pending.Handler.WaitUntilComplete();
-        pending.Tcs.TrySetResult(true);
-        return true;
     }
 }

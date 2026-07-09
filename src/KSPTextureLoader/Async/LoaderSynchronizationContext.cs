@@ -35,7 +35,6 @@ internal class LoaderSynchronizationContext : SynchronizationContext
 
     readonly Queue<WorkItem> queue = [];
     readonly BlockingQueue<WorkItem> mailbox = new();
-    readonly List<Func<bool>> blockedHooks = [];
 
     readonly int mainThreadId = Thread.CurrentThread.ManagedThreadId;
 
@@ -88,35 +87,6 @@ internal class LoaderSynchronizationContext : SynchronizationContext
         queue.Enqueue(mailbox.Dequeue());
     }
 
-    /// <summary>
-    /// Register a hook that runs when the main thread is about to block waiting
-    /// for new work. The hook should force forward work that can only progress
-    /// on the main thread (e.g. a unity <see cref="UnityEngine.AsyncOperation"/>,
-    /// which needs the player loop to complete) and return true if it made
-    /// progress. Without this such work would deadlock against
-    /// <see cref="WaitUntilComplete"/>.
-    /// </summary>
-    public void AddBlockedHook(Func<bool> hook)
-    {
-        if (Thread.CurrentThread.ManagedThreadId != mainThreadId)
-            throw new InvalidOperationException(
-                "Blocked hooks can only be registered on the main thread"
-            );
-
-        blockedHooks.Add(hook);
-    }
-
-    bool RunBlockedHooks()
-    {
-        foreach (var hook in blockedHooks)
-        {
-            if (hook())
-                return true;
-        }
-
-        return false;
-    }
-
     void Execute(WorkItem item)
     {
         var context = Current;
@@ -157,7 +127,7 @@ internal class LoaderSynchronizationContext : SynchronizationContext
         Update();
     }
 
-    public void WaitUntilComplete(Task task)
+    public void WaitUntilComplete(Task task, ICompletionContext context)
     {
         if (Thread.CurrentThread.ManagedThreadId != mainThreadId)
             throw new InvalidOperationException("Cannot block on tasks outside of the main thread");
@@ -184,7 +154,7 @@ internal class LoaderSynchronizationContext : SynchronizationContext
                 if (task.IsCompleted)
                     break;
 
-                if (RunBlockedHooks())
+                if (context?.CompleteOne() ?? false)
                     continue;
 
                 BlockMailbox();
@@ -192,15 +162,15 @@ internal class LoaderSynchronizationContext : SynchronizationContext
         }
     }
 
-    public void RunUntilComplete(Task task)
+    public void RunUntilComplete(Task task, ICompletionContext context)
     {
-        WaitUntilComplete(task);
+        WaitUntilComplete(task, context);
         task.GetAwaiter().GetResult();
     }
 
-    public T RunUntilComplete<T>(Task<T> task)
+    public T RunUntilComplete<T>(Task<T> task, ICompletionContext context)
     {
-        WaitUntilComplete(task);
+        WaitUntilComplete(task, context);
         return task.Result;
     }
 

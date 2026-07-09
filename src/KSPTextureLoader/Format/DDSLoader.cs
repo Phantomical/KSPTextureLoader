@@ -560,11 +560,7 @@ internal static class DDSLoader
 
         await AsyncUtil.LaunchMainThreadTask(async () =>
         {
-            var texture = await (
-                stream is null
-                    ? TextureBundleLoader.LoadAsync(built, options)
-                    : TextureBundleLoader.LoadAsync(built, stream, options)
-            );
+            var texture = await TextureBundleLoader.LoadOnMainThread(built, stream);
             handle.SetTexture<T>(texture, options);
         });
     }
@@ -637,11 +633,10 @@ internal static class DDSLoader
             return;
         }
 
+        var dataTask = source.TakeData();
+        using var dguard = new TaskArrayDisposeGuard(dataTask);
         await AsyncUtil.LaunchMainThreadTask(async () =>
         {
-            var dataTask = source.TakeData();
-            using var dguard = new TaskArrayDisposeGuard(dataTask);
-
             var texture = TextureUtils.CreateUninitializedTexture2D(
                 width,
                 height,

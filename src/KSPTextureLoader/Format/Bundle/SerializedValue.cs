@@ -26,8 +26,7 @@ internal sealed class SerializedValue
     /// <summary>Elements of a non-byte array (<c>vector</c> / <c>map</c>).</summary>
     public List<SerializedValue> Elements;
 
-    public static SerializedValue Struct() =>
-        new() { Fields = new Dictionary<string, SerializedValue>() };
+    public static SerializedValue Struct() => new() { Fields = [] };
 
     public static SerializedValue OfInt(long value) => new() { Int = value };
 

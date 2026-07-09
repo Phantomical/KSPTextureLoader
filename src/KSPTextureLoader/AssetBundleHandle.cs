@@ -17,14 +17,15 @@ public class AssetBundleHandle
     : CustomYieldInstruction,
         IDisposable,
         ISetException,
-        ICompleteHandler
+        ICompleteHandler,
+        ICompletionContext
 {
     private static readonly ProfilerMarker CompleteMarker = new("AssetBundleHandle.Complete");
 
     public int RefCount { get; private set; } = 1;
     private AssetBundle bundle;
     private ExceptionDispatchInfo exception;
-    internal ICompleteHandler completeHandler;
+    MiniStack<ICompleteHandler> completeHandlers;
     internal IEnumerator coroutine;
 
     /// <summary>
@@ -137,7 +138,8 @@ public class AssetBundleHandle
 
         while (true)
         {
-            completeHandler?.WaitUntilComplete();
+            while (completeHandlers.TryPop(out var handler))
+                handler.WaitUntilComplete();
 
             // When blocking on an asset bundle request unity will take the time
             // to run other coroutines, which could set this to null.
@@ -153,7 +155,7 @@ public class AssetBundleHandle
     {
         this.bundle = bundle;
         this.coroutine = null;
-        this.completeHandler = null;
+        this.completeHandlers.Clear();
     }
 
     /// <summary>
@@ -170,6 +172,9 @@ public class AssetBundleHandle
         }
     }
 
+    internal CompletionContext.HandlerGuard WithCompleteHandler(ICompleteHandler handler) =>
+        CompletionContext.BlockedOn(handler);
+
     private string BundleDiskPath => System.IO.Path.Combine(PathUtil.GameDataDir, Path);
 
     void ISetException.SetException(ExceptionDispatchInfo ex)
@@ -179,6 +184,26 @@ public class AssetBundleHandle
 
         this.exception = ex;
         this.coroutine = null;
-        this.completeHandler = null;
+        this.completeHandlers.Clear();
+    }
+
+    void ICompletionContext.MarkBlockedOn(ICompleteHandler handler)
+    {
+        completeHandlers.Push(handler);
+    }
+
+    void ICompletionContext.MarkCompleted(ICompleteHandler handler)
+    {
+        if (completeHandlers.TryPeek(out var top) && ReferenceEquals(top, handler))
+            completeHandlers.Pop();
+    }
+
+    bool ICompletionContext.CompleteOne()
+    {
+        if (!completeHandlers.TryPop(out var handler))
+            return false;
+
+        handler.WaitUntilComplete();
+        return true;
     }
 }

@@ -9,7 +9,7 @@ using UnityEngine;
 
 namespace KSPTextureLoader;
 
-internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
+internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler, ICompletionContext
 {
     internal struct ExternalMarker;
 
@@ -37,7 +37,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
     private AssetBundleHandle bundle;
 
     private ExceptionDispatchInfo exception;
-    internal ICompleteHandler completeHandler;
+    MiniStack<ICompleteHandler> completeHandlers;
     internal IEnumerator coroutine;
 
     public bool IsComplete => coroutine is null;
@@ -157,10 +157,11 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
     /// <returns>true if complete</returns>
     internal bool Tick()
     {
-        if (completeHandler is not null)
+        while (completeHandlers.TryPeek(out var handler))
         {
-            if (!completeHandler.IsComplete)
+            if (!handler.IsComplete)
                 return false;
+            completeHandlers.Pop();
         }
 
         if (coroutine is null)
@@ -175,18 +176,16 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
     /// <returns>true if complete</returns>
     internal bool Step()
     {
-        completeHandler?.WaitUntilComplete();
+        while (completeHandlers.TryPop(out var handler))
+            handler.WaitUntilComplete();
 
         if (coroutine is null)
             return true;
         return !coroutine.MoveNext();
     }
 
-    internal CompleteHandlerGuard WithCompleteHandler(ICompleteHandler handler)
-    {
-        completeHandler = handler;
-        return new CompleteHandlerGuard(this);
-    }
+    internal CompletionContext.HandlerGuard WithCompleteHandler(ICompleteHandler handler) =>
+        CompletionContext.BlockedOn(handler);
 
     /// <summary>
     /// Get a new handle for the same texture and increase the reference count.
@@ -396,7 +395,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
             bundle = setOptions.AssetBundle?.Acquire();
 
         coroutine = null;
-        completeHandler = null;
+        completeHandlers.Clear();
 
         try
         {
@@ -413,7 +412,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
     {
         exception = ex;
         coroutine = null;
-        completeHandler = null;
+        completeHandlers.Clear();
 
         try
         {
@@ -424,6 +423,26 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
             Debug.LogError($"[KSPTextureLoader] OnError event threw an exception");
             Debug.LogException(e);
         }
+    }
+
+    void ICompletionContext.MarkBlockedOn(ICompleteHandler handler)
+    {
+        completeHandlers.Push(handler);
+    }
+
+    void ICompletionContext.MarkCompleted(ICompleteHandler handler)
+    {
+        if (completeHandlers.TryPeek(out var top) && ReferenceEquals(top, handler))
+            completeHandlers.Pop();
+    }
+
+    bool ICompletionContext.CompleteOne()
+    {
+        if (!completeHandlers.TryPop(out var handler))
+            return false;
+
+        handler.WaitUntilComplete();
+        return true;
     }
 }
 

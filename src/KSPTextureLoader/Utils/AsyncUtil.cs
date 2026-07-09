@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -17,13 +18,24 @@ internal static class AsyncUtil
 
     #region LaunchMainThreadTask
 
-    abstract class MainThreadTask<T>
+    abstract class MainThreadTask<T>()
+        : TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously)
     {
-        public readonly TaskCompletionSource<T> tcs = new(
-            TaskCreationOptions.RunContinuationsAsynchronously
-        );
+        // We use AsyncLocal to preserve some state throughout the call chain, so
+        // we need to carry the ExecutionContext into dependent calls.
+        readonly ExecutionContext executionContext = ExecutionContext.Capture();
 
-        public Task<T> Task => tcs.Task;
+        // However, we want tasks run on the main thread to use the loader
+        // synchronization context, so we overwrite that in the execution context.
+        SynchronizationContext syncContext;
+
+        static readonly ContextCallback RunExecute = static state =>
+        {
+            var task = (MainThreadTask<T>)state;
+
+            SynchronizationContext.SetSynchronizationContext(task.syncContext);
+            task.Execute();
+        };
 
         protected abstract void Execute();
 
@@ -33,11 +45,19 @@ internal static class AsyncUtil
 
             try
             {
-                task.Execute();
+                if (task.executionContext is null)
+                {
+                    task.Execute();
+                }
+                else
+                {
+                    task.syncContext = SynchronizationContext.Current;
+                    ExecutionContext.Run(task.executionContext, RunExecute, task);
+                }
             }
             catch (Exception e)
             {
-                task.tcs.TrySetException(e);
+                task.TrySetException(e);
             }
         }
 
@@ -53,7 +73,7 @@ internal static class AsyncUtil
 
         protected override void Execute()
         {
-            func().ContinueWith(Continue, this, TaskScheduler.FromCurrentSynchronizationContext());
+            func().ContinueWith(Continue, this);
         }
 
         static void Continue(Task task, object state)
@@ -63,11 +83,11 @@ internal static class AsyncUtil
             try
             {
                 task.GetAwaiter().GetResult();
-                ft.tcs.SetResult(default);
+                ft.SetResult(default);
             }
             catch (Exception e)
             {
-                ft.tcs.TrySetException(e);
+                ft.TrySetException(e);
             }
         }
     }
@@ -85,7 +105,7 @@ internal static class AsyncUtil
 
         protected override void Execute()
         {
-            func().ContinueWith(Continue, this, TaskScheduler.FromCurrentSynchronizationContext());
+            func().ContinueWith(Continue, this);
         }
 
         static void Continue(Task<T> task, object state)
@@ -94,11 +114,11 @@ internal static class AsyncUtil
 
             try
             {
-                ft.tcs.SetResult(task.Result);
+                ft.SetResult(task.Result);
             }
             catch (Exception e)
             {
-                ft.tcs.TrySetException(e);
+                ft.TrySetException(e);
             }
         }
     }
@@ -117,7 +137,7 @@ internal static class AsyncUtil
         protected override void Execute()
         {
             func();
-            tcs.TrySetResult(default);
+            TrySetResult(default);
         }
     }
 
@@ -128,27 +148,21 @@ internal static class AsyncUtil
         return task.Task;
     }
 
+    sealed class FuncTask<T>(Func<T> func) : MainThreadTask<T>
+    {
+        readonly Func<T> func = func;
+
+        protected override void Execute()
+        {
+            TrySetResult(func());
+        }
+    }
+
     public static Task<T> LaunchMainThreadTask<T>(Func<T> func)
     {
-        var tcs = new TaskCompletionSource<T>();
-
-        TextureLoader.Context.Submit(
-            state =>
-            {
-                try
-                {
-                    var func = (Func<T>)state;
-                    tcs.SetResult(func());
-                }
-                catch (Exception e)
-                {
-                    tcs.TrySetException(e);
-                }
-            },
-            func
-        );
-
-        return tcs.Task;
+        var task = new FuncTask<T>(func);
+        task.Submit();
+        return task.Task;
     }
     #endregion
 
@@ -159,8 +173,8 @@ internal static class AsyncUtil
 
         public void Execute()
         {
-            using (tcs)
-                tcs.Target.TrySetResult(default);
+            using var _guard = tcs;
+            tcs.Target.TrySetResult(default);
         }
     }
 
@@ -193,6 +207,145 @@ internal static class AsyncUtil
                 JobHandle.ScheduleBatchedJobs();
             });
         }
+
+        return tcs.Task;
+    }
+    #endregion
+
+    #region WaitForAssetBundle
+    class AssetBundleCompletionSource : TaskCompletionSource<AssetBundle>, ICompleteHandler
+    {
+        readonly AssetBundleCreateRequest request;
+        readonly ICompletionContext context;
+
+        public bool IsComplete => Task.IsCompleted;
+
+        public AssetBundleCompletionSource(
+            AssetBundleCreateRequest request,
+            ICompletionContext context
+        )
+            : base(TaskCreationOptions.RunContinuationsAsynchronously)
+        {
+            this.request = request;
+            this.context = context;
+            request.completed += OnCompleted;
+        }
+
+        public void WaitUntilComplete()
+        {
+            if (IsComplete)
+                return;
+
+            request.priority = 100;
+            OnCompleted(request);
+        }
+
+        void OnCompleted(AsyncOperation _)
+        {
+            try
+            {
+                var bundle = request.assetBundle;
+                if (bundle == null)
+                    throw new Exception("Asset bundle failed to load");
+
+                SetResult(bundle);
+            }
+            catch (Exception e)
+            {
+                TrySetException(e);
+            }
+
+            // A null context means the wait was launched without a completion
+            // context (e.g. TextureBundleLoader.CreateAsync); nobody can block on
+            // it, so there is nothing to unregister.
+            context?.MarkCompleted(this);
+        }
+    }
+
+    /// <summary>
+    /// Wait for an asset bundle to finish loading.
+    /// </summary>
+    /// <param name="handle"></param>
+    /// <returns></returns>
+    public static Task<AssetBundle> WaitFor(AssetBundleCreateRequest handle)
+    {
+        if (!IsMainThread)
+            return LaunchMainThreadTask(() => WaitFor(handle));
+
+        var context = CompletionContext.Current;
+        var tcs = new AssetBundleCompletionSource(handle, context);
+        // Without a completion context the operation can only complete via the
+        // player loop; there is nothing to force it through under a blocking wait.
+        context?.MarkBlockedOn(tcs);
+
+        return tcs.Task;
+    }
+    #endregion
+
+    #region WaitForAsset
+    class AssetCompletionSource<T> : TaskCompletionSource<T>, ICompleteHandler
+        where T : UnityEngine.Object
+    {
+        readonly AssetBundleRequest request;
+        readonly ICompletionContext context;
+
+        public bool IsComplete => Task.IsCompleted;
+
+        public AssetCompletionSource(AssetBundleRequest request, ICompletionContext context)
+            : base(TaskCreationOptions.RunContinuationsAsynchronously)
+        {
+            this.request = request;
+            this.context = context;
+            request.completed += OnCompleted;
+        }
+
+        public void WaitUntilComplete()
+        {
+            if (IsComplete)
+                return;
+
+            request.priority = 100;
+            OnCompleted(request);
+        }
+
+        void OnCompleted(AsyncOperation _)
+        {
+            try
+            {
+                var asset = (T)request.asset;
+                if (asset == null)
+                    throw new Exception("Asset failed to load from asset bundle");
+
+                SetResult(asset);
+            }
+            catch (Exception e)
+            {
+                TrySetException(e);
+            }
+
+            // A null context means the wait was launched without a completion
+            // context (e.g. TextureBundleLoader.CreateAsync); nobody can block on
+            // it, so there is nothing to unregister.
+            context?.MarkCompleted(this);
+        }
+    }
+
+    /// <summary>
+    /// Wait for an asset bundle to finish loading.
+    /// </summary>
+    /// <param name="handle"></param>
+    /// <returns></returns>
+    public static Task<T> WaitFor<T>(AssetBundleRequest handle)
+        where T : UnityEngine.Object
+    {
+        if (!IsMainThread)
+            return LaunchMainThreadTask(() => WaitFor<T>(handle));
+
+        var context = CompletionContext.Current;
+        var tcs = new AssetCompletionSource<T>(handle, context);
+        // Without a completion context the operation can only complete via the
+        // player loop; there is nothing to force it through under a blocking wait.
+        context?.MarkBlockedOn(tcs);
 
         return tcs.Task;
     }

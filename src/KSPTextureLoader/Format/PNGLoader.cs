@@ -68,18 +68,21 @@ internal static class PNGLoader
         };
         var task = FileLoader
             .ReadFileContentsAsync(readInfo)
-            .ContinueWith(task =>
-            {
-                var array = task.Result;
-                try
+            .ContinueWith(
+                task =>
                 {
-                    return array.ToArray();
-                }
-                finally
-                {
-                    Task.Run(() => array.DisposeExt());
-                }
-            });
+                    var array = task.Result;
+                    try
+                    {
+                        return array.ToArray();
+                    }
+                    finally
+                    {
+                        Task.Run(() => array.DisposeExt());
+                    }
+                },
+                TaskScheduler.Default
+            );
 
         using (handle.WithCompleteHandler(new TaskCompleteHandler(task)))
             yield return new WaitUntilTask(task);

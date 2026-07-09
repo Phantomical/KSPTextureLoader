@@ -31,19 +31,30 @@ public partial class TextureLoader
         return handle;
     }
 
+    readonly Dictionary<string, ProfilerMarker> LoadBundleMarkerCache = [];
+
     IEnumerator DoLoadAssetBundle(AssetBundleHandle handle, bool sync)
     {
         // Ensure that the asset bundle handle stays alive while we are loading it.
         using var guard = handle.Acquire();
-        var marker = new ProfilerMarker($"LoadAssetBundle: {handle.Path}");
-        using var coroutine = ExceptionUtils.CatchExceptions(
-            handle,
-            DoLoadAssetBundleInner(handle, sync)
-        );
+
+        if (!LoadBundleMarkerCache.TryGetValue(handle.Path, out var marker))
+        {
+            marker = new ProfilerMarker($"LoadAssetBundle: {handle.Path}");
+            LoadBundleMarkerCache.Add(handle.Path, marker);
+        }
+
+        IEnumerator<object> coroutine;
+        using (CompletionContext.Enter(handle))
+            coroutine = ExceptionUtils.CatchExceptions(
+                handle,
+                DoLoadAssetBundleInner(handle, sync)
+            );
 
         while (true)
         {
             using (var scope = marker.Auto())
+            using (CompletionContext.Enter(handle))
             {
                 if (!coroutine.MoveNext())
                     break;
@@ -64,9 +75,8 @@ public partial class TextureLoader
         // a scene switch to complete.
         if (!sync || PendingSceneSwitch)
         {
-            handle.completeHandler = new AssetBundleCompleteHandler(request);
-            yield return request;
-            handle.completeHandler = null;
+            using (handle.WithCompleteHandler(new AssetBundleCompleteHandler(request)))
+                yield return request;
         }
 
         var bundle = request.assetBundle;

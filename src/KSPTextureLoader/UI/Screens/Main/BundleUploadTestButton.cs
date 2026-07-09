@@ -57,12 +57,7 @@ internal class BundleUploadTestButton : DebugScreenButton
             );
 
             // CreateAsync must be called from a background thread.
-            Texture texture = await Task.Run(() =>
-                TextureBundleLoader.CreateAsync(
-                    request,
-                    new TextureLoadOptions { Hint = TextureLoadHint.Asynchronous }
-                )
-            );
+            Texture texture = await Task.Run(() => TextureBundleLoader.CreateAsync(request));
 
             sw.Stop();
             log.AppendLine($"  loaded in {sw.ElapsedMilliseconds} ms (wall clock)");
