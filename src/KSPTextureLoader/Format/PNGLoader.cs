@@ -66,23 +66,22 @@ internal static class PNGLoader
             length = length,
             offset = 0,
         };
-        var task = FileLoader
-            .ReadFileContentsAsync(readInfo)
-            .ContinueWith(
-                task =>
-                {
-                    var array = task.Result;
-                    try
-                    {
-                        return array.ToArray();
-                    }
-                    finally
-                    {
-                        Task.Run(() => array.DisposeExt());
-                    }
-                },
-                TaskScheduler.Default
-            );
+
+        // This needs to run in the background otherwise it tries to run on
+        // Unity's synchronization context and causes deadlocks.
+        var task = Task.Run(async () =>
+        {
+            var array = await FileLoader.ReadFileContentsAsync(readInfo);
+
+            try
+            {
+                return array.ToArray();
+            }
+            finally
+            {
+                _ = Task.Run(() => array.DisposeExt());
+            }
+        });
 
         using (handle.WithCompleteHandler(new TaskCompleteHandler(task)))
             yield return new WaitUntilTask(task);

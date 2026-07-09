@@ -7,6 +7,8 @@ internal class TextureDisposeGuard(Texture texture) : IDisposable
 {
     public Texture texture = texture;
 
+    public void Set(Texture texture) => this.texture = texture;
+
     public void Clear() => texture = null;
 
     public void Dispose()

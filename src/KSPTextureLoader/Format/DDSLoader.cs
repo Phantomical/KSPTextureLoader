@@ -635,6 +635,7 @@ internal static class DDSLoader
 
         var dataTask = source.TakeData();
         using var dguard = new TaskArrayDisposeGuard(dataTask);
+        var texGuard = new TextureDisposeGuard(null);
         await AsyncUtil.LaunchMainThreadTask(async () =>
         {
             var texture = TextureUtils.CreateUninitializedTexture2D(
@@ -643,7 +644,8 @@ internal static class DDSLoader
                 mipCount,
                 format
             );
-            using var texGuard = new TextureDisposeGuard(texture);
+            using var _guard = texGuard;
+            texGuard.Set(texture);
 
             if (options.Hint == TextureLoadHint.Synchronous)
             {
@@ -941,18 +943,20 @@ internal static class DDSLoader
             return;
         }
 
+        var dataTask = source.TakeData();
+        using var dguard = new TaskArrayDisposeGuard(dataTask);
+        var texGuard = new TextureCleanupGuard(null);
         await AsyncUtil.LaunchMainThreadTask(async () =>
         {
-            var dataTask = source.TakeData();
-            using var dguard = new TaskArrayDisposeGuard(dataTask);
-
             var cubeArray = TextureUtils.CreateUninitializedCubemapArray(
                 width,
                 arraySize / 6,
                 mipCount,
                 format
             );
-            using var texGuard = new TextureCleanupGuard(cubeArray);
+
+            using var _guard = texGuard;
+            texGuard.Update(cubeArray);
 
             if (options.Hint != TextureLoadHint.Synchronous)
             {
@@ -1029,11 +1033,12 @@ internal static class DDSLoader
             return;
         }
 
+        var dataTask = source.TakeData();
+        using var dguard = new TaskArrayDisposeGuard(dataTask);
+        var texGuard = new TextureCleanupGuard();
         await AsyncUtil.LaunchMainThreadTask(async () =>
         {
-            var dataTask = source.TakeData();
-            using var dguard = new TaskArrayDisposeGuard(dataTask);
-
+            using var _guard = texGuard;
             var tex3d = TextureUtils.CreateUninitializedTexture3D(
                 width,
                 height,
@@ -1041,7 +1046,7 @@ internal static class DDSLoader
                 mipCount,
                 format
             );
-            using var texGuard = new TextureCleanupGuard(tex3d);
+            texGuard.Update(tex3d);
 
             if (options.Hint != TextureLoadHint.Synchronous)
             {

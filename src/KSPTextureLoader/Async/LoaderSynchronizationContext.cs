@@ -4,11 +4,14 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using KSPTextureLoader.Utils;
+using Unity.Profiling;
 
 namespace KSPTextureLoader.Async;
 
 internal class LoaderSynchronizationContext : SynchronizationContext
 {
+    static readonly ProfilerMarker InvokeMarker = new("WorkItem.Invoke");
+
     static LoaderSynchronizationContext()
     {
         _ = AllocatorUtil.IsAboveWatermark;
@@ -22,6 +25,8 @@ internal class LoaderSynchronizationContext : SynchronizationContext
 
         public void Invoke()
         {
+            using var scope = InvokeMarker.Auto();
+
             try
             {
                 cb(state);

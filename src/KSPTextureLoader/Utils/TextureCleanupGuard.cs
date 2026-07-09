@@ -3,7 +3,8 @@ using UnityEngine;
 
 namespace KSPTextureLoader.Utils;
 
-internal class TextureCleanupGuard(Texture texture, AssetBundleHandle bundle = null) : IDisposable
+internal class TextureCleanupGuard(Texture texture = null, AssetBundleHandle bundle = null)
+    : IDisposable
 {
     internal AssetBundleHandle bundle = bundle;
     internal Texture texture = texture;

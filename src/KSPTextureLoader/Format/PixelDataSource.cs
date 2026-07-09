@@ -113,24 +113,17 @@ internal sealed class PixelDataSource
 /// <see cref="Bundle.BundleStream"/> payloads, which Unity keeps reading
 /// from until the bundle is unloaded.
 /// </summary>
-internal sealed unsafe class NativeArrayStream : UnmanagedMemoryStream
+internal sealed unsafe class NativeArrayStream(LargeNativeArray<byte> array)
+    : UnmanagedMemoryStream(array.GetUnsafePtr(), array.Length)
 {
-    LargeNativeArray<byte> array;
-    bool freed;
-
-    public NativeArrayStream(LargeNativeArray<byte> array)
-        : base(array.GetUnsafePtr(), array.Length)
-    {
-        this.array = array;
-    }
+    LargeNativeArray<byte> array = array;
 
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        if (freed)
+        if (!array.IsCreated)
             return;
 
-        freed = true;
         array.DisposeExt();
     }
 }

@@ -87,7 +87,8 @@ internal static class VfsReader
             }
 
             using var hguard = handle;
-            await AsyncUtil.WaitFor(handle.JobHandle);
+            using (scope.Suspend())
+                await AsyncUtil.WaitFor(handle.JobHandle);
 
             if (handle.Status != ReadStatus.Complete)
                 throw new IOException(
@@ -180,7 +181,8 @@ internal static class VfsReader
             }
 
             using var hguard = handle;
-            await AsyncUtil.WaitFor(handle.JobHandle);
+            using (scope.Suspend())
+                await AsyncUtil.WaitFor(handle.JobHandle);
 
             if (handle.Status != ReadStatus.Complete)
                 throw new IOException(

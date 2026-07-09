@@ -18,3 +18,8 @@ internal readonly struct ScopeSuspendGuard : IDisposable
         ProfilerMarker.Internal_Begin(scope.m_Ptr);
     }
 }
+
+internal static class AutoScopeExt
+{
+    public static ScopeSuspendGuard Suspend(this ProfilerMarker.AutoScope scope) => new(scope);
+}
