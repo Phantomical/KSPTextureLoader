@@ -40,6 +40,14 @@ internal static class BundleBuilder
         public required Func<(SourceTexture? texture, SkippedTexture? skip)> Decode { get; init; }
     }
 
+    /// <summary>
+    /// A progress update emitted while a bundle is being built. <see cref="Completed"/>
+    /// counts inputs fully processed out of <see cref="Total"/>, and <see cref="CurrentName"/>
+    /// names the input being worked on (or the phase, e.g. "compressing", once every
+    /// input is done).
+    /// </summary>
+    public readonly record struct BuildProgress(int Completed, int Total, string CurrentName);
+
     public sealed class BuildResult
     {
         public int Written;
@@ -76,7 +84,8 @@ internal static class BundleBuilder
         IReadOnlyList<TextureInput> inputs,
         string assetBundleName,
         string outputPath,
-        bool appendCabHash = true
+        bool appendCabHash = true,
+        Action<BuildProgress>? onProgress = null
     )
     {
         // The seed must be loaded from a path; write it to a temp file first.
@@ -85,7 +94,14 @@ internal static class BundleBuilder
 
         try
         {
-            return BuildFromSeedFile(seedTmp, inputs, assetBundleName, outputPath, appendCabHash);
+            return BuildFromSeedFile(
+                seedTmp,
+                inputs,
+                assetBundleName,
+                outputPath,
+                appendCabHash,
+                onProgress
+            );
         }
         finally
         {
@@ -126,7 +142,8 @@ internal static class BundleBuilder
         IReadOnlyList<TextureInput> inputs,
         string assetBundleName,
         string outputPath,
-        bool appendCabHash
+        bool appendCabHash,
+        Action<BuildProgress>? onProgress
     )
     {
         var result = new BuildResult();
@@ -183,8 +200,14 @@ internal static class BundleBuilder
             // Each texture is decoded here, written, then released before the next.
             using (var resS = new FileStream(resTmp, FileMode.Create, FileAccess.Write))
             {
-                foreach (var input in inputs)
+                for (int i = 0; i < inputs.Count; i++)
                 {
+                    var input = inputs[i];
+                    // Report before decoding item i: i inputs are fully processed and
+                    // this one is about to be worked on. Decoding is the slow step, so
+                    // this keeps the displayed name in sync with the actual work.
+                    onProgress?.Invoke(new BuildProgress(i, inputs.Count, input.AddressableName));
+
                     var (tex, skip) = input.Decode();
                     if (tex is null)
                     {
@@ -279,6 +302,9 @@ internal static class BundleBuilder
             bundle.BlockAndDirInfo.DirectoryInfos.Add(serDir);
             bundle.BlockAndDirInfo.DirectoryInfos.Add(resDir);
 
+            // Every input is decoded; the remaining work is one LZ4 compression pass,
+            // which for a large bundle is slow enough to be worth surfacing.
+            onProgress?.Invoke(new BuildProgress(inputs.Count, inputs.Count, "compressing (LZ4)"));
             WriteAndPack(bundle, outputPath);
             return result;
         }

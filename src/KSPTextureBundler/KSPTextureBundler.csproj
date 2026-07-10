@@ -32,6 +32,8 @@
 
     <ItemGroup>
         <PackageReference Include="AssetsTools.NET" Version="3.0.4" />
+        <!-- Live progress bar for `build`, shown only on an interactive terminal. -->
+        <PackageReference Include="ShellProgressBar" Version="5.2.0" />
         <PackageReference Include="System.CommandLine" Version="2.0.9" />
         <!-- Cross-platform PNG decode to RGBA32. -->
         <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />

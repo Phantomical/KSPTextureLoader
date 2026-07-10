@@ -3,6 +3,7 @@ using AssetsTools.NET;
 using AssetsTools.NET.Extra;
 using KSPTextureBundler.Bundle;
 using KSPTextureBundler.Textures;
+using ShellProgressBar;
 
 namespace KSPTextureBundler;
 
@@ -114,7 +115,7 @@ internal static class Commands
             foreach (var pattern in properties.UnmatchedPatterns)
                 Console.WriteLine($"warning: properties entry '{pattern}' matched no input file");
 
-        var build = BundleBuilder.Build(seed, jobInputs, name, output, appendCabHash);
+        var build = BuildWithProgress(seed, jobInputs, name, output, appendCabHash);
 
         foreach (var s in build.Skipped)
             Console.WriteLine($"skip  {Rel(s.SourcePath)}: {s.Reason} ({s.Detail})");
@@ -137,6 +138,43 @@ internal static class Commands
                 + $"bundle name '{build.Identity}'"
         );
         return 0;
+    }
+
+    /// <summary>
+    /// Run <see cref="BundleBuilder.Build(byte[], IReadOnlyList{BundleBuilder.TextureInput}, string, string, bool, Action{BundleBuilder.BuildProgress}?)"/>,
+    /// drawing a live progress bar when stdout is an interactive terminal. When
+    /// stdout is redirected (a file or pipe) no bar is drawn, so logs stay clean.
+    /// </summary>
+    static BundleBuilder.BuildResult BuildWithProgress(
+        byte[] seed,
+        IReadOnlyList<BundleBuilder.TextureInput> jobInputs,
+        string name,
+        string output,
+        bool appendCabHash
+    )
+    {
+        if (Console.IsOutputRedirected)
+            return BundleBuilder.Build(seed, jobInputs, name, output, appendCabHash);
+
+        var options = new ProgressBarOptions
+        {
+            ForegroundColor = ConsoleColor.Cyan,
+            ForegroundColorDone = ConsoleColor.Green,
+            BackgroundColor = ConsoleColor.DarkGray,
+            ProgressCharacter = '─',
+            DisplayTimeInRealTime = true,
+            ShowEstimatedDuration = true,
+        };
+
+        using var bar = new ProgressBar(jobInputs.Count, "Bundling textures", options);
+        return BundleBuilder.Build(
+            seed,
+            jobInputs,
+            name,
+            output,
+            appendCabHash,
+            p => bar.Tick(p.Completed, $"[{p.Completed}/{p.Total}] {p.CurrentName}")
+        );
     }
 
     static void DuplicateKeyCheck(IEnumerable<(string file, string key)> keyed)
