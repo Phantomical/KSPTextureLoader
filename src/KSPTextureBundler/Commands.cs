@@ -119,6 +119,13 @@ internal static class Commands
         foreach (var s in build.Skipped)
             Console.WriteLine($"skip  {Rel(s.SourcePath)}: {s.Reason} ({s.Detail})");
 
+        foreach (var m in build.BlockMisaligned)
+            Console.WriteLine(
+                $"warning: '{Rel(m.SourcePath)}' is {m.Width}x{m.Height} {m.Format} but its "
+                    + $"dimensions are not a multiple of the {m.BlockWidth}x{m.BlockHeight} block "
+                    + "size. This will be less efficient to load in-game."
+            );
+
         if (build.Written == 0)
         {
             Console.Error.WriteLine("error: every input was skipped; nothing to bundle");

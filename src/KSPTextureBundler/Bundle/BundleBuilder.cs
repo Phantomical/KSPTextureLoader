@@ -45,10 +45,30 @@ internal static class BundleBuilder
         public int Written;
         public readonly List<SkippedTexture> Skipped = [];
 
+        /// <summary>Block-compressed textures whose width or height was not a multiple
+        /// of the block size. They were written (stored inline; see
+        /// <see cref="NeedsInlineData"/>) but the misalignment is worth flagging.</summary>
+        public readonly List<BlockMisalignedTexture> BlockMisaligned = [];
+
         /// <summary>The bundle's actual identity (m_Name / m_AssetBundleName): an
         /// explicitly requested name verbatim, or the auto-derived name with the CAB
         /// hash appended for uniqueness.</summary>
         public string Identity = "";
+    }
+
+    /// <summary>
+    /// A block-compressed texture whose dimensions are not a multiple of the block
+    /// size, captured so the caller can warn about it. Such a texture is still
+    /// written, but stored inline rather than streamed (see <see cref="NeedsInlineData"/>).
+    /// </summary>
+    public sealed class BlockMisalignedTexture
+    {
+        public required string SourcePath { get; init; }
+        public required int Width { get; init; }
+        public required int Height { get; init; }
+        public required UnityTextureFormat Format { get; init; }
+        public required int BlockWidth { get; init; }
+        public required int BlockHeight { get; init; }
     }
 
     public static BuildResult Build(
@@ -182,6 +202,18 @@ internal static class BundleBuilder
                     // Store their pixels inline instead, so Unity uploads them during
                     // deserialization rather than through the async pipeline.
                     bool inline = NeedsInlineData(tex);
+                    if (inline)
+                        result.BlockMisaligned.Add(
+                            new BlockMisalignedTexture
+                            {
+                                SourcePath = tex.SourcePath,
+                                Width = tex.Width,
+                                Height = tex.Height,
+                                Format = tex.Format,
+                                BlockWidth = TextureFormatInfo.BlockWidth(tex.Format),
+                                BlockHeight = TextureFormatInfo.BlockHeight(tex.Format),
+                            }
+                        );
 
                     long offset = 0;
                     if (!inline)
