@@ -64,7 +64,8 @@ internal static class Commands
             .Select(f =>
             {
                 string rel = Path.GetRelativePath(f.baseDir, f.file).Replace('\\', '/');
-                return (file: f.file, rel, key: AddressableName(rel, prefix));
+                string display = ContainerPath(rel, prefix);
+                return (file: f.file, rel, key: display.ToLowerInvariant(), display);
             })
             .OrderBy(x => x.key, StringComparer.Ordinal)
             .ToList();
@@ -80,6 +81,7 @@ internal static class Commands
                 return new BundleBuilder.TextureInput
                 {
                     AddressableName = x.key,
+                    DisplayName = x.display,
                     Decode = () =>
                     {
                         var (tex, skip) = DecodeFile(x.file);
@@ -115,17 +117,12 @@ internal static class Commands
             foreach (var pattern in properties.UnmatchedPatterns)
                 Console.WriteLine($"warning: properties entry '{pattern}' matched no input file");
 
+        // Block-misalignment warnings are emitted as each texture is processed (see
+        // BuildWithProgress), so they appear next to the work that produced them.
         var build = BuildWithProgress(seed, jobInputs, name, output, appendCabHash);
 
         foreach (var s in build.Skipped)
             Console.WriteLine($"skip  {Rel(s.SourcePath)}: {s.Reason} ({s.Detail})");
-
-        foreach (var m in build.BlockMisaligned)
-            Console.WriteLine(
-                $"warning: '{Rel(m.SourcePath)}' is {m.Width}x{m.Height} {m.Format} but its "
-                    + $"dimensions are not a multiple of the {m.BlockWidth}x{m.BlockHeight} block "
-                    + "size. This will be less efficient to load in-game."
-            );
 
         if (build.Written == 0)
         {
@@ -154,7 +151,14 @@ internal static class Commands
     )
     {
         if (Console.IsOutputRedirected)
-            return BundleBuilder.Build(seed, jobInputs, name, output, appendCabHash);
+            return BundleBuilder.Build(
+                seed,
+                jobInputs,
+                name,
+                output,
+                appendCabHash,
+                onBlockMisaligned: m => Console.WriteLine(BlockMisalignedWarning(m))
+            );
 
         var options = new ProgressBarOptions
         {
@@ -173,9 +177,16 @@ internal static class Commands
             name,
             output,
             appendCabHash,
-            p => bar.Tick(p.Completed, $"[{p.Completed}/{p.Total}] {p.CurrentName}")
+            p => bar.Tick(p.Completed, $"[{p.Completed}/{p.Total}] {p.CurrentName}"),
+            // Print above the live bar so the warning isn't overwritten on the next tick.
+            m => bar.WriteLine(BlockMisalignedWarning(m))
         );
     }
+
+    static string BlockMisalignedWarning(BundleBuilder.BlockMisalignedTexture m) =>
+        $"warning: '{m.AddressableName}' is {m.Width}x{m.Height} {m.Format} but its "
+        + $"dimensions are not a multiple of the {m.BlockWidth}x{m.BlockHeight} block "
+        + "size. This will be less efficient to load in-game.";
 
     static void DuplicateKeyCheck(IEnumerable<(string file, string key)> keyed)
     {
@@ -195,17 +206,19 @@ internal static class Commands
     }
 
     /// <summary>
-    /// Compute the AssetBundle container key for a file, mirroring the
+    /// Compute the AssetBundle container path for a file, mirroring the
     /// EditorExtensions bundler: the path relative to the input directory it was
     /// found under (<paramref name="rel"/>, already '/'-separated), prefixed with
-    /// <paramref name="prefix"/> and lowercased. The extension is kept.
+    /// <paramref name="prefix"/>. The extension and original case are kept; the
+    /// container key stored in the bundle is this lowercased (see
+    /// <see cref="BundleBuilder.PopulateAssetBundle"/>).
     /// </summary>
-    static string AddressableName(string rel, string? prefix)
+    static string ContainerPath(string rel, string? prefix)
     {
         string combined = string.IsNullOrEmpty(prefix)
             ? rel
             : prefix.TrimEnd('/', '\\') + "/" + rel;
-        return combined.Replace('\\', '/').ToLowerInvariant();
+        return combined.Replace('\\', '/');
     }
 
     static (SourceTexture?, SkippedTexture?) DecodeFile(string file)
@@ -959,8 +972,7 @@ internal static class Commands
             var (tex, _) = DecodeFile(f);
             if (tex is null)
                 continue;
-            byKey[AddressableName(Path.GetRelativePath(baseDir, f).Replace('\\', '/'), prefix)] =
-                tex;
+            byKey[ContainerPath(Path.GetRelativePath(baseDir, f).Replace('\\', '/'), prefix)] = tex;
             byName[tex.Name] = tex;
         }
 

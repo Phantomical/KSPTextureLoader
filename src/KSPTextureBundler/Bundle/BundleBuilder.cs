@@ -37,6 +37,13 @@ internal static class BundleBuilder
     public sealed class TextureInput
     {
         public required string AddressableName { get; init; }
+
+        /// <summary>The container key as it appears before the write-time lowercasing
+        /// (see <see cref="PopulateAssetBundle"/>), used only for diagnostics so
+        /// warnings echo the path the user typed. Falls back to
+        /// <see cref="AddressableName"/> when not set.</summary>
+        public string? DisplayName { get; init; }
+
         public required Func<(SourceTexture? texture, SkippedTexture? skip)> Decode { get; init; }
     }
 
@@ -72,6 +79,10 @@ internal static class BundleBuilder
     public sealed class BlockMisalignedTexture
     {
         public required string SourcePath { get; init; }
+
+        /// <summary>The texture's container key as it will appear in the bundle, before
+        /// the write-time lowercasing and backslash-to-slash canonicalization.</summary>
+        public required string AddressableName { get; init; }
         public required int Width { get; init; }
         public required int Height { get; init; }
         public required UnityTextureFormat Format { get; init; }
@@ -85,7 +96,8 @@ internal static class BundleBuilder
         string assetBundleName,
         string outputPath,
         bool appendCabHash = true,
-        Action<BuildProgress>? onProgress = null
+        Action<BuildProgress>? onProgress = null,
+        Action<BlockMisalignedTexture>? onBlockMisaligned = null
     )
     {
         // The seed must be loaded from a path; write it to a temp file first.
@@ -100,7 +112,8 @@ internal static class BundleBuilder
                 assetBundleName,
                 outputPath,
                 appendCabHash,
-                onProgress
+                onProgress,
+                onBlockMisaligned
             );
         }
         finally
@@ -143,7 +156,8 @@ internal static class BundleBuilder
         string assetBundleName,
         string outputPath,
         bool appendCabHash,
-        Action<BuildProgress>? onProgress
+        Action<BuildProgress>? onProgress,
+        Action<BlockMisalignedTexture>? onBlockMisaligned
     )
     {
         var result = new BuildResult();
@@ -226,17 +240,20 @@ internal static class BundleBuilder
                     // deserialization rather than through the async pipeline.
                     bool inline = NeedsInlineData(tex);
                     if (inline)
-                        result.BlockMisaligned.Add(
-                            new BlockMisalignedTexture
-                            {
-                                SourcePath = tex.SourcePath,
-                                Width = tex.Width,
-                                Height = tex.Height,
-                                Format = tex.Format,
-                                BlockWidth = TextureFormatInfo.BlockWidth(tex.Format),
-                                BlockHeight = TextureFormatInfo.BlockHeight(tex.Format),
-                            }
-                        );
+                    {
+                        var misaligned = new BlockMisalignedTexture
+                        {
+                            SourcePath = tex.SourcePath,
+                            AddressableName = input.DisplayName ?? input.AddressableName,
+                            Width = tex.Width,
+                            Height = tex.Height,
+                            Format = tex.Format,
+                            BlockWidth = TextureFormatInfo.BlockWidth(tex.Format),
+                            BlockHeight = TextureFormatInfo.BlockHeight(tex.Format),
+                        };
+                        result.BlockMisaligned.Add(misaligned);
+                        onBlockMisaligned?.Invoke(misaligned);
+                    }
 
                     long offset = 0;
                     if (!inline)
