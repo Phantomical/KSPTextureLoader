@@ -59,6 +59,20 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!--
+            ILMerged Unity.Burst bundle (intrinsics + Mono software fallbacks),
+            produced by ../KSPTextureLoader.Burst. Private=true so it ships in our
+            Plugins folder; its assembly identity is KSPTextureLoader.Burst, distinct
+            from Unity.Burst, so it never clashes with a KSPBurst-provided Unity.Burst
+            at runtime. Regenerate deps/KSPTextureLoader.Burst.dll when Burst changes.
+        -->
+        <Reference Include="KSPTextureLoader.Burst">
+            <HintPath>$(RepoRootPath)\deps\KSPTextureLoader.Burst.dll</HintPath>
+            <Private>true</Private>
+        </Reference>
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="../KSPTextureLoader.Analyzers/KSPTextureLoader.Analyzers.csproj"
                           OutputItemType="Analyzer"
                           ReferenceOutputAssembly="false" />
