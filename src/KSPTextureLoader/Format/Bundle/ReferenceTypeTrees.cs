@@ -9,7 +9,7 @@ namespace KSPTextureLoader.Format.Bundle;
 /// <summary>
 /// The authoritative serialized type trees for the texture classes and
 /// <c>AssetBundle</c>, loaded once from an embedded reference bundle that the
-/// <c>KSPTextureBundler</c> <c>make-typetree</c> command produces. The reference
+/// <c>ksp-texture-util</c> <c>make-typetree</c> command produces. The reference
 /// bundle is an uncompressed UnityFS bundle whose serialized file carries every
 /// class's type tree (sourced from Unity's own class database) and no objects.
 /// </summary>

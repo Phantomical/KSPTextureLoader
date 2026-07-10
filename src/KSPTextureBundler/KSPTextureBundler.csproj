@@ -13,7 +13,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <RootNamespace>KSPTextureBundler</RootNamespace>
-        <AssemblyName>KSPTextureBundler</AssemblyName>
+        <AssemblyName>ksp-texture-util</AssemblyName>
         <InvariantGlobalization>true</InvariantGlobalization>
 
         <!--

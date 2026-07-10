@@ -76,17 +76,17 @@ jobs:
       - name: Smoke-test the native binary
         shell: bash
         run: |
-          BIN=src/KSPTextureBundler/bin/Release/net10.0/${{ matrix.rid }}/publish/KSPTextureBundler
+          BIN=src/KSPTextureBundler/bin/Release/net10.0/${{ matrix.rid }}/publish/ksp-texture-util
           [ -f "$BIN.exe" ] && BIN="$BIN.exe"
           "$BIN" dev cubemap-test
           "$BIN" dev palette-test
 
       - uses: actions/upload-artifact@v4
         with:
-          name: KSPTextureBundler-${{ matrix.rid }}
-          # The executable is KSPTextureBundler(.exe); the second path only exists
+          name: ksp-texture-util-${{ matrix.rid }}
+          # The executable is ksp-texture-util(.exe); the second path only exists
           # on Windows, so ignore the miss on the other platforms.
           path: |
-            src/KSPTextureBundler/bin/Release/net10.0/${{ matrix.rid }}/publish/KSPTextureBundler
-            src/KSPTextureBundler/bin/Release/net10.0/${{ matrix.rid }}/publish/KSPTextureBundler.exe
+            src/KSPTextureBundler/bin/Release/net10.0/${{ matrix.rid }}/publish/ksp-texture-util
+            src/KSPTextureBundler/bin/Release/net10.0/${{ matrix.rid }}/publish/ksp-texture-util.exe
           if-no-files-found: ignore

@@ -174,7 +174,7 @@ internal static class Program
             Console.WriteLine(dev.Description);
             Console.WriteLine();
             Console.WriteLine("Usage:");
-            Console.WriteLine("  KSPTextureBundler dev <command> [options]");
+            Console.WriteLine("  ksp-texture-util dev <command> [options]");
             Console.WriteLine();
             Console.WriteLine("Commands:");
             int width = dev.Subcommands.Max(c => c.Name.Length);

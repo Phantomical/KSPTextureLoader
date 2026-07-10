@@ -8,7 +8,7 @@ asset bundles without having to import stuff into the unity editor.
 ### Building an asset bundle
 
 ```sh
-KSPTextureLoader build <input-dir> -o output-bundle.unity3d
+ksp-texture-util build <input-dir> -o output-bundle.unity3d
 ```
 
 This command takes a directory a builds an asset bundle with the textures within.
@@ -89,7 +89,7 @@ earlier ones for whichever properties they specify.
 ### Extracting textures from an asset bundle
 
 ```sh
-KSPTextureLoader extract asset-bundle.unity3d --output <outdir>
+ksp-texture-util extract asset-bundle.unity3d --output <outdir>
 ```
 
 This extracts all the textures contained within the asset bundle. Textures that

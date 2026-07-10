@@ -39,7 +39,7 @@
         <!--
             Reference type trees for the texture classes + AssetBundle scaffolding,
             copied verbatim into the bundles the loader generates so they carry type
-            trees. Regenerate with `KSPTextureBundler make-typetree` if the seed or
+            trees. Regenerate with `ksp-texture-util make-typetree` if the seed or
             class data changes.
         -->
         <EmbeddedResource Include="Format/Bundle/typetrees.bundle" />
