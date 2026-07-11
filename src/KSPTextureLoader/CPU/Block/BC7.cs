@@ -574,7 +574,10 @@ internal static class BC7
                     Mode6(ref reader, lo, hi, rgba);
                 break;
             default:
-                Mode7(ref reader, lo, hi, rgba);
+                if (Avx2.IsAvx2Supported)
+                    Mode7Avx(lo, hi, rgba);
+                else
+                    Mode7(ref reader, lo, hi, rgba);
                 break;
         }
     }
@@ -2186,6 +2189,106 @@ internal static class BC7
 
             // Single subset: the gather is a constant that scatters e0,e1 to every texel.
             v256 gather = new(GatherConst);
+
+            v256 resR = mm256_maddubs_epi16(mm256_shuffle_epi8(new(rB), gather), pairs);
+            v256 resG = mm256_maddubs_epi16(mm256_shuffle_epi8(new(gB), gather), pairs);
+            v256 resB = mm256_maddubs_epi16(mm256_shuffle_epi8(new(bB), gather), pairs);
+            v256 resA = mm256_maddubs_epi16(mm256_shuffle_epi8(new(aB), gather), pairs);
+
+            resR = mm256_srli_epi16(mm256_add_epi16(resR, new((ushort)32)), 6);
+            resG = mm256_srli_epi16(mm256_add_epi16(resG, new((ushort)32)), 6);
+            resB = mm256_srli_epi16(mm256_add_epi16(resB, new((ushort)32)), 6);
+            resA = mm256_srli_epi16(mm256_add_epi16(resA, new((ushort)32)), 6);
+
+            // Transpose the four planar channels to interleaved RGBA (real alpha).
+            var rg = mm256_or_si256(resR, mm256_slli_epi16(resG, 8));
+            var ba = mm256_or_si256(resB, mm256_slli_epi16(resA, 8));
+            var rgbaLo = mm256_unpacklo_epi16(rg, ba); // RGBA, pixels {0..3, 8..11}
+            var rgbaHi = mm256_unpackhi_epi16(rg, ba); // RGBA, pixels {4..7, 12..15}
+
+            var output = (v256*)rgba;
+            output[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
+            output[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
+        }
+    }
+    #endregion
+
+    #region Mode 7
+    // BC7 Mode 7
+    //
+    // Mode 7 is laid out like this
+    // | Bit Range | Width | Field
+    // |  0 ..  7  |   8   | mode marker
+    // |  8 .. 13  |   6   | partition index        (0..63)
+    // | 14 .. 33  |  20   | red   endpoints rS0E0,rS0E1,rS1E0,rS1E1 (4 x 5 bits)
+    // | 34 .. 53  |  20   | green endpoints                         (4 x 5 bits)
+    // | 54 .. 73  |  20   | blue  endpoints                         (4 x 5 bits)
+    // | 74 .. 93  |  20   | alpha endpoints                         (4 x 5 bits)
+    // | 94 .. 97  |   4   | P-bits pb0..pb3 (unique, one per endpoint)
+    // | 98 .. 127 |  30   | colour indices (2-bit, 16 texels, 2 anchors)
+    //
+    // Mode 7 decoding should work like this:
+    //   - The 6-bit partition splits the 16 texels into 2 subsets (PartitionTable2), exactly like
+    //     Modes 1 and 3, so the endpoint gather is Mode1Gather and the 2-bit index scatter masks
+    //     are Mode 3's — both reused directly, Mode 7 adds no tables.
+    //   - Each subset has two endpoints per channel; every endpoint is 5 bits plus its own p-bit
+    //     (pb0->s0e0, pb1->s0e1, pb2->s1e0, pb3->s1e1), forming a 6-bit value unquantized 6->8 as
+    //     (v << 2) | (v >> 4). Unlike Mode 3 (7+1=8) the unquantize is needed here.
+    //   - This is the first two-subset mode with a real alpha: alpha is a fourth interpolated
+    //     channel rather than a constant 255.
+    //   - Each texel carries a 2-bit colour index (anchor texels are 1 bit with an implied high
+    //     bit of 0: subset 0's anchor is texel 0, subset 1 uses the fixed anchor table).
+    //   - Texel i's colour is, per channel, interpolate(e0, e1, w) = (e0*(64-w) + e1*w + 32) >> 6,
+    //     where e0/e1 are the two endpoints of that texel's subset and w is its weight.
+    //
+    // R and G endpoints lie in lo; B straddles the lo/hi boundary (bits 54..63 in lo, 64..73 in
+    // hi); A, the p-bits and the index stream are wholly in hi.
+    static unsafe void Mode7Avx(ulong lo, ulong hi, byte* rgba)
+    {
+        if (IsAvx2Supported)
+        {
+            const ulong DepMask = 0x1F1F1F1Ful << 1; // 5-bit endpoint at bits 1..5, bit 0 free
+            const ulong PbtMask = 0x01010101ul; // 4 unique p-bits, one per endpoint byte
+
+            // Four endpoints per channel into byte lanes 0..3. R and G are in lo; B straddles the
+            // lo/hi boundary; A is wholly in hi.
+            int partition = (int)((lo >> 8) & 0x3F);
+            ulong rB = pdep_u64(lo >> 14, DepMask);
+            ulong gB = pdep_u64(lo >> 34, DepMask);
+            ulong bB = pdep_u64((lo >> 54) | (hi << 10), DepMask);
+            ulong aB = pdep_u64(hi >> 10, DepMask);
+
+            // Four unique p-bits (pb0->s0e0, pb1->s0e1, pb2->s1e0, pb3->s1e1) into bit 0 of each
+            // endpoint lane.
+            ulong pB = pdep_u64(hi >> 30, PbtMask);
+            rB |= pB;
+            gB |= pB;
+            bB |= pB;
+            aB |= pB;
+
+            // 5 bits + p-bit = 6 bits, so unquantize 6->8 as (v << 2) | (v >> 4).
+            rB = (rB << 2) | ((rB >> 4) & 0x03030303ul);
+            gB = (gB << 2) | ((gB >> 4) & 0x03030303ul);
+            bB = (bB << 2) | ((bB >> 4) & 0x03030303ul);
+            aB = (aB << 2) | ((aB >> 4) & 0x03030303ul);
+
+            // Index stream is bit-identical to Mode 3's (2-bit, 2 subsets, anchors {0, anchor1}),
+            // so its per-partition scatter masks are reused.
+            ulong idata = hi >> (98 - 64);
+            ulong ilo = pdep_u64(idata, Mode3IndexMaskLo[partition]);
+            ulong ihi = pdep_u64(idata >> Mode3IndexLoBits[partition], Mode3IndexMaskHi[partition]);
+
+            v128 w = shuffle_epi8(Weights2Vec, new(ilo, ihi));
+            v128 invw = sub_epi8(new((byte)64), w); // 64 - w
+            v256 pairs = new(unpacklo_epi8(invw, w), unpackhi_epi8(invw, w));
+
+            // Two-subset endpoint gather, shared with Modes 1 and 3 (PartitionTable2 layout).
+            v256 gather = new(
+                Mode1Gather[partition * 4 + 0],
+                Mode1Gather[partition * 4 + 1],
+                Mode1Gather[partition * 4 + 2],
+                Mode1Gather[partition * 4 + 3]
+            );
 
             v256 resR = mm256_maddubs_epi16(mm256_shuffle_epi8(new(rB), gather), pairs);
             v256 resG = mm256_maddubs_epi16(mm256_shuffle_epi8(new(gB), gather), pairs);
