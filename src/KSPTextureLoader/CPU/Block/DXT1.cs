@@ -9,28 +9,20 @@ namespace KSPTextureLoader.CPU.Block;
 /// <summary>
 /// SIMD-accelerated DXT1 (BC1) block decompression.
 ///
-/// A DXT1 block is a single ulong:
-///   bits[0:16]  = c0 (RGB565)
-///   bits[16:32] = c1 (RGB565)
-///   bits[32:64] = 16 x 2-bit palette indices (pixel i at bit 32 + i*2, row-major)
+/// A DXT1 block is a single 64-bit little-endian value laid out like this
+/// | Bit Range | Width | Field
+/// |  0 .. 15  |  16   | c0 (RGB565)
+/// | 16 .. 31  |  16   | c1 (RGB565)
+/// | 32 .. 63  |  32   | 16 x 2-bit palette indices (texel i at bit 32 + i*2, row-major)
 ///
-/// If c0 > c1 the block is in 4-color mode (palette entries 2,3 are the 2/3 and 1/3
-/// lerps and every pixel is opaque). Otherwise the block is in 3-color mode: palette
-/// entry 2 is the midpoint and palette entry 3 is transparent black (rgba = 0).
-///
-/// The intrinsic path packs both endpoints' 5/6/5 channels into byte lanes with a single
-/// <c>Bmi2.pdep_u64</c>: RGB565 stores each endpoint as b(5)/g(6)/r(5) from the low bit,
-/// so the block's low 32 bits are already b0,g0,r0,b1,g1,r1 laid end to end. One pdep with
-/// mask <c>0x001F_3F1F_001F_3F1F</c> scatters b0,g0,r0 into bytes 0..2 and b1,g1,r1 into
-/// bytes 4..6, and the two alpha bytes are OR'd to 1. All eight bytes are then widened in
-/// one <c>mm256_cvtepu8_epi32</c>/<c>mm256_cvtepi32_ps</c> so a single <c>float8</c> holds
-/// both endpoints (lanes 0..3 = c0, 4..7 = c1); <c>mm256_permute_ps</c> swaps b&lt;-&gt;r to
-/// r,g,b,a order and a scale maps 5/6/5 to [0,1]. Swapping the two 128-bit halves gives
-/// [e1 | e0], so one fused multiply-add produces both interpolated entries at once
-/// (low half = palette[2], high half = palette[3]), and the two <c>float8</c>s store
-/// straight into the 64-byte palette. <c>Bmi2.pdep_u64</c> likewise scatters the packed
-/// 2-bit indices so each lands in its own byte lane for the gather. A scalar fallback
-/// produces equivalent results.
+/// DXT1 decoding works like this:
+///   - The two endpoints c0 and c1 are RGB565, each storing b(5)/g(6)/r(5) from its low
+///     bit. Comparing them as 16-bit values selects the palette mode: c0 &gt; c1 is 4-color,
+///     otherwise 3-color.
+///   - Palette entries 0 and 1 are the endpoints themselves. In 4-color mode entries 2 and 3
+///     are the 2/3 and 1/3 lerps of the endpoints and every texel is opaque. In 3-color mode
+///     entry 2 is the endpoint midpoint and entry 3 is transparent black (rgba = 0).
+///   - Each texel's 2-bit index selects one of the four palette entries.
 /// </summary>
 [BurstCompile]
 internal static class DXT1
@@ -96,10 +88,6 @@ internal static class DXT1
 
         return output;
     }
-
-    [BurstCompile]
-    internal static void DecodeBlock32(ulong block, out FixedArray16<Color32> output) =>
-        output = DecodeBlock32(block);
 
     /// <summary>
     /// Decodes an entire DXT1 block into 16 <see cref="Color32"/> values in row-major

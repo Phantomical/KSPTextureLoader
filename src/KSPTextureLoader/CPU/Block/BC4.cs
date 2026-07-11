@@ -1,7 +1,6 @@
 using KSPTextureLoader.Utils;
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
-using Unity.Mathematics;
 using static Unity.Burst.Intrinsics.X86;
 
 namespace KSPTextureLoader.CPU.Block;
@@ -9,20 +8,20 @@ namespace KSPTextureLoader.CPU.Block;
 /// <summary>
 /// SIMD-accelerated BC4 (single-channel, BCn) block decompression.
 ///
-/// A BC4 block is a single <see cref="ulong"/>:
-///   bits[0:8]   = endpoint e0 (byte)
-///   bits[8:16]  = endpoint e1 (byte)
-///   bits[16:64] = 16 x 3-bit palette indices (pixel i at bit 16 + i*3)
+/// A BC4 block is a single 64-bit little-endian value laid out like this
+/// | Bit Range | Width | Field
+/// |  0 ..  7  |   8   | endpoint e0 (byte)
+/// |  8 .. 15  |   8   | endpoint e1 (byte)
+/// | 16 .. 63  |  48   | 16 x 3-bit palette indices (texel i at bit 16 + i*3)
 ///
-/// If e0 &gt; e1 the palette is 8 values interpolated e0..e1 (weights /7).
-/// Otherwise it is 6 interpolated values plus code 6 = 0.0 and code 7 = 1.0
-/// (weights /5). Endpoints are normalised as byte/255; output is 0..1 float.
-///
-/// The fast path uses BMI2 <c>pdep</c> to scatter the packed 3-bit indices into
-/// individual byte lanes and AVX2 <c>permutevar8x32_ps</c> to gather the palette
-/// for eight pixels at a time. The palette itself is built with SIMD, computing
-/// all interpolated lanes in a single 8-wide AVX <c>mul</c>/<c>add</c>/<c>mul</c>.
-/// A scalar fallback yields identical results.
+/// BC4 decoding works like this:
+///   - The two endpoints e0 and e1 are single bytes, normalised as byte/255 to a [0,1] float.
+///     Comparing them selects the palette mode: e0 &gt; e1 is the 8-value mode, otherwise the
+///     6-value mode.
+///   - Palette entries 0 and 1 are the endpoints themselves. In 8-value mode entries 2..7 are
+///     six evenly spaced interpolations of e0..e1 (weights k/7). In 6-value mode entries 2..5
+///     are four interpolations (weights k/5) and entries 6 and 7 are the constants 0.0 and 1.0.
+///   - Each texel's 3-bit index selects one of the eight palette entries.
 /// </summary>
 [BurstCompile]
 internal static class BC4

@@ -13,16 +13,6 @@ namespace KSPTextureLoader.CPU.Block;
 
 /// <summary>
 /// SIMD-accelerated BC7 block decoder.
-///
-/// The block is treated as a 128-bit little-endian value split into
-/// <c>lo</c> (bits 0..63) and <c>hi</c> (bits 64..127). When AVX2 is available (which, under
-/// Burst, implies BMI2), each mode is decoded entirely with intrinsics: <c>pdep</c> scatters
-/// the endpoint and index bit-fields into their byte lanes, a <c>pshufb</c> maps palette
-/// indices to interpolation weights, and a <c>pmaddubs</c> interpolates all 16 pixels at once.
-/// Otherwise a scalar fallback parses the block with a small bit reader (identical to the
-/// reference decoder in <c>CPU/Format/BC7.cs</c>).
-///
-/// Both paths produce bit-identical results.
 /// </summary>
 [BurstCompile]
 internal static class BC7
