@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using KSPTextureLoader.Utils;
-using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using UnityEngine;
 using static Unity.Burst.Intrinsics.X86;
@@ -15,7 +14,6 @@ namespace KSPTextureLoader.CPU.Block;
 /// <summary>
 /// SIMD-accelerated BC7 block decoder.
 /// </summary>
-[BurstCompile]
 internal static class BC7
 {
     #region Lookup tables and constants
@@ -241,14 +239,6 @@ internal static class BC7
         DecodeBlock(lo, hi, rgba);
         return BytesToColors(rgba);
     }
-
-    [BurstCompile]
-    internal static void DecodeBlock32Burst(ulong lo, ulong hi, out FixedArray16<Color32> colors) =>
-        colors = DecodeBlock32(lo, hi);
-
-    [BurstCompile]
-    internal static void DecodeBlockBurst(ulong lo, ulong hi, out FixedArray16<Color> colors) =>
-        colors = DecodeBlock(lo, hi);
 
     #endregion
 

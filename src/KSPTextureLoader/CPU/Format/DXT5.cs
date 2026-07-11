@@ -46,7 +46,7 @@ partial class CPUTexture2D
         {
             GetBlockIndex(Width, Height, x, y, mipLevel, out int blockIndex, out int pixelIndex);
             Block block = data[blockIndex];
-            float alpha = CPU.Block.BC4.DecodeChannel(block.alpha, pixelIndex);
+            float alpha = CPU.Block.BC4.DecodePixel(block.alpha, pixelIndex);
             Color rgb = CPU.Block.DXT1.DecodePixel(block.color, pixelIndex);
             return new Color(rgb.r, rgb.g, rgb.b, alpha);
         }

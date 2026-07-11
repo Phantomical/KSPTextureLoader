@@ -1,5 +1,4 @@
 using KSPTextureLoader.Utils;
-using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using UnityEngine;
 using static Unity.Burst.Intrinsics.X86;
@@ -24,7 +23,6 @@ namespace KSPTextureLoader.CPU.Block;
 ///     entry 2 is the endpoint midpoint and entry 3 is transparent black (rgba = 0).
 ///   - Each texel's 2-bit index selects one of the four palette entries.
 /// </summary>
-[BurstCompile]
 internal static class DXT1
 {
     /// <summary>
@@ -45,10 +43,6 @@ internal static class DXT1
     /// </summary>
     internal static Color32 DecodePixel32(ulong block, int pixelIndex) =>
         DecodePixel(block, pixelIndex);
-
-    [BurstCompile]
-    internal static void DecodeBlock(ulong block, out FixedArray16<Color> output) =>
-        output = DecodeBlock(block);
 
     /// <summary>
     /// Decodes an entire DXT1 block into 16 Color values in row-major order

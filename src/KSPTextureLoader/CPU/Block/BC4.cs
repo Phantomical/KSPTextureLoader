@@ -1,5 +1,4 @@
 using KSPTextureLoader.Utils;
-using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using static Unity.Burst.Intrinsics.X86;
 
@@ -23,7 +22,6 @@ namespace KSPTextureLoader.CPU.Block;
 ///     are four interpolations (weights k/5) and entries 6 and 7 are the constants 0.0 and 1.0.
 ///   - Each texel's 3-bit index selects one of the eight palette entries.
 /// </summary>
-[BurstCompile]
 internal static class BC4
 {
     // Reciprocal constants kept as fields so the scalar and SIMD palette
@@ -35,28 +33,14 @@ internal static class BC4
     /// <summary>
     /// Decodes a single channel value for one pixel of a BC4 block.
     /// </summary>
-    internal static float DecodeChannel(ulong block, int pixelIndex)
+    internal static float DecodePixel(ulong block, int pixel)
     {
-        int shift = 16 + pixelIndex * 3;
-
-        int code;
-        if (Bmi2.IsBmi2Supported)
-        {
-            // Pull the 3-bit index for this pixel down to the low bits.
-            code = (int)Bmi2.pext_u64(block, 0x7UL << shift);
-        }
-        else
-        {
-            code = (int)((block >> shift) & 0x7);
-        }
+        int shift = 16 + pixel * 3;
+        int code = (int)((block >> shift) & 0x7);
 
         var palette = BuildPalette(block);
         return palette[code];
     }
-
-    [BurstCompile]
-    internal static void DecodeBlock(ulong block, out FixedArray16<float> output) =>
-        output = DecodeBlock(block);
 
     /// <summary>
     /// Decodes an entire BC4 block into 16 float channel values in row-major

@@ -1,4 +1,3 @@
-using System;
 using KSPTextureLoader.Utils;
 using Unity.Burst.Intrinsics;
 using UnityEngine;
