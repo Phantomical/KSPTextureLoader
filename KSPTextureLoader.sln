@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KSPTextureLoader.Analyzers.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KSPTextureBundler", "src\KSPTextureBundler\KSPTextureBundler.csproj", "{AB440249-5B0F-4DD2-BBB5-E09F46AD7692}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KSPTextureLoader.Burst", "src\KSPTextureLoader.Burst\KSPTextureLoader.Burst.csproj", "{78CFD653-3AFF-4974-8202-2578CFDDD2E3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -85,6 +87,18 @@ Global
 		{AB440249-5B0F-4DD2-BBB5-E09F46AD7692}.Release|x64.Build.0 = Release|Any CPU
 		{AB440249-5B0F-4DD2-BBB5-E09F46AD7692}.Release|x86.ActiveCfg = Release|Any CPU
 		{AB440249-5B0F-4DD2-BBB5-E09F46AD7692}.Release|x86.Build.0 = Release|Any CPU
+		{78CFD653-3AFF-4974-8202-2578CFDDD2E3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{78CFD653-3AFF-4974-8202-2578CFDDD2E3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{78CFD653-3AFF-4974-8202-2578CFDDD2E3}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{78CFD653-3AFF-4974-8202-2578CFDDD2E3}.Debug|x64.Build.0 = Debug|Any CPU
+		{78CFD653-3AFF-4974-8202-2578CFDDD2E3}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{78CFD653-3AFF-4974-8202-2578CFDDD2E3}.Debug|x86.Build.0 = Debug|Any CPU
+		{78CFD653-3AFF-4974-8202-2578CFDDD2E3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{78CFD653-3AFF-4974-8202-2578CFDDD2E3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{78CFD653-3AFF-4974-8202-2578CFDDD2E3}.Release|x64.ActiveCfg = Release|Any CPU
+		{78CFD653-3AFF-4974-8202-2578CFDDD2E3}.Release|x64.Build.0 = Release|Any CPU
+		{78CFD653-3AFF-4974-8202-2578CFDDD2E3}.Release|x86.ActiveCfg = Release|Any CPU
+		{78CFD653-3AFF-4974-8202-2578CFDDD2E3}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -95,6 +109,7 @@ Global
 		{0B8199AC-3125-44A8-A6AA-9BF7F62202B5} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{48B81212-F605-49E9-8D2A-C34D6F2F31C4} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{AB440249-5B0F-4DD2-BBB5-E09F46AD7692} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{78CFD653-3AFF-4974-8202-2578CFDDD2E3} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {D9B233F0-AFF7-419E-A4EE-04E26A75F140}

@@ -1,8 +1,15 @@
 <!--
     This project produces KSPTextureLoader.Burst.dll: an ILRepack bundle of
-    Unity.Burst.dll, its private dependency Unity.Burst.Unsafe.dll, and
-    Unity.Mathematics.dll, merged INTO this project's own (otherwise empty) output
-    assembly.
+    Unity.Burst.dll, its private dependency Unity.Burst.Unsafe.dll,
+    Unity.Mathematics.dll, and the two support assemblies KSPBurst ships alongside
+    them that Burst/Mathematics reference at runtime — System.Runtime.dll and
+    System.Runtime.CompilerServices.Unsafe.dll — merged INTO this project's own
+    (otherwise empty) output assembly.
+
+    Those two System.* assemblies MUST be folded in: they are not part of KSP's
+    Mono runtime, so were they left as external references the merged bundle would
+    only resolve them if KSPBurst happened to be installed (a FileNotFound/TypeLoad
+    at runtime otherwise). Merging them keeps the bundle self-contained.
 
     The point is to let KSPTextureLoader use Burst intrinsics (v128/v256/X86.* and
     their Mono software fallbacks) and the Unity.Mathematics types
@@ -12,27 +19,33 @@
     so they resolve regardless of whether the player has KSPBurst, and never clash
     with a KSPBurst-provided copy at runtime.
 
-    This is a STANDALONE REGENERATION TOOL, deliberately NOT part of the solution:
-    the main build references a committed, prebuilt copy at deps/KSPTextureLoader.Burst.dll,
-    so building the mod (and CI) needs neither this project nor a KSPBurst install.
-    You only build this project by hand when the bundled Burst/Mathematics version
-    changes: it writes the merged DLL to its own bin, and you then copy that output
-    over deps/KSPTextureLoader.Burst.dll and commit it (see CONTRIBUTING.md).
+    The main build does NOT consume this project's output directly: it references a
+    committed, prebuilt copy at deps/KSPTextureLoader.Burst.dll, so building the mod
+    (and CI) needs no KSPBurst install. This project is part of the solution only so
+    it builds/restores alongside everything else and stays discoverable; the ILRepack
+    merge below is GATED on a KSPBurst install being present (see the ILRepackBurst
+    target's Condition). On CI and fresh clones — where there is no KSPBurst — the
+    merge is skipped and this project emits only its empty stub assembly, which
+    nothing references; the committed deps/ copy is what actually ships.
 
-    Building it requires a KSPBurst (or KSPBurst-Lite) install: the source DLLs are
-    read from GameData/000_KSPBurst/Plugins in the KSP directory pointed at by
-    ReferencePath (KSPTextureLoader.props.user). ILRepack is a cross-platform
-    (Mono.Cecil) merger, so unlike ILMerge this regeneration runs on Windows, Linux
-    and macOS alike.
+    Regenerating the bundle: build with a KSPBurst (or KSPBurst-Lite) install present
+    (the merge inputs are read from GameData/000_KSPBurst/Plugins in the KSP directory
+    pointed at by ReferencePath in KSPTextureLoader.props.user). The merge writes the
+    DLL to this project's own bin; copy that over deps/KSPTextureLoader.Burst.dll and
+    commit it to update the shipped binary. ILRepack is a cross-platform (Mono.Cecil)
+    merger, so unlike ILMerge this runs on Windows, Linux and macOS alike.
+
+    NOTE: the sibling ILRepack.targets file disables the ILRepack NuGet package's own
+    automatic (and here, broken) post-build merge — see that file for details.
 -->
 
 <Project Sdk="Microsoft.NET.Sdk">
     <!--
         Import ReferencePath (the KSP install root) from the repo-root props.user, the
-        same value KSPBuildTools uses. This project is built standalone, not through
-        the solution, so we resolve props.user by a path relative to this file rather
-        than via $(SolutionDir) (which isn't set outside a solution build). MUST come
-        before the PropertyGroup below, which derives the KSPBurst/Managed paths from it.
+        same value KSPBuildTools uses. We resolve props.user by a path relative to this
+        file rather than via $(SolutionDir) so it also works when the project is built
+        on its own (outside the solution). MUST come before the PropertyGroup below,
+        which derives the KSPBurst/Managed paths from it.
     -->
     <Import
         Condition=" Exists('$(MSBuildThisFileDirectory)..\..\KSPTextureLoader.props.user') "
@@ -85,7 +98,10 @@
     <ItemGroup>
         <!--
             Cross-platform ILMerge replacement (Mono.Cecil based); provides the
-            <ILRepack> MSBuild task. Build-time only.
+            <ILRepack> MSBuild task. Build-time only. NOTE: this package also ships an
+            automatic post-build merge target that misbehaves for us — the sibling
+            ILRepack.targets file disables it (see that file). We drive <ILRepack>
+            ourselves from the ILRepackBurst target below.
         -->
         <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.45">
             <PrivateAssets>all</PrivateAssets>
@@ -112,17 +128,24 @@
         output dir but the merged DLL, which you then copy over
         deps/KSPTextureLoader.Burst.dll and commit.
     -->
-    <Target Name="ILRepackBurst" AfterTargets="AfterBuild">
-        <Error
-            Condition=" !Exists('$(BurstPluginsDir)/Unity.Burst.dll') "
-            Text="KSPBurst assemblies not found under $(BurstPluginsDir). Install KSPBurst or KSPBurst-Lite into the referenced KSP install so the Burst/Mathematics bundle can be built (local dev: point ReferencePath in KSPTextureLoader.props.user at a KSP install that has KSPBurst; CI: the install-dependencies step handles this)." />
-
+    <!--
+        Runs only when a KSPBurst install is present — i.e. a maintainer regenerating
+        the bundle. On CI and fresh clones there is no KSPBurst, so the merge is
+        skipped, this project emits only its empty stub assembly, and the mod builds
+        against the committed deps/KSPTextureLoader.Burst.dll instead.
+    -->
+    <Target Name="ILRepackBurst" AfterTargets="AfterBuild"
+            Condition=" Exists('$(BurstPluginsDir)/Unity.Burst.dll') ">
         <ItemGroup>
             <!-- Primary first, then the assemblies to fold in. -->
             <BurstMergeInput Include="$(TargetPath)" />
             <BurstMergeInput Include="$(BurstPluginsDir)/Unity.Burst.dll" />
             <BurstMergeInput Include="$(BurstPluginsDir)/Unity.Burst.Unsafe.dll" />
             <BurstMergeInput Include="$(BurstPluginsDir)/Unity.Mathematics.dll" />
+            <!-- Support assemblies Burst/Mathematics reference but KSP's Mono runtime
+                 doesn't provide; fold them in so the bundle needs no KSPBurst install. -->
+            <BurstMergeInput Include="$(BurstPluginsDir)/System.Runtime.dll" />
+            <BurstMergeInput Include="$(BurstPluginsDir)/System.Runtime.CompilerServices.Unsafe.dll" />
 
             <!-- Search paths for external references ILRepack must resolve: KSP's
                  Unity/System assemblies, plus the net48 reference assemblies for

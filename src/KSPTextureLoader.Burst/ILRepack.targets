@@ -1,0 +1,26 @@
+<!--
+    This file exists solely to DISABLE the automatic post-build merge that ships
+    inside the ILRepack.Lib.MSBuild.Task NuGet package.
+
+    That package's build/ILRepack.Lib.MSBuild.Task.targets defines an "ILRepack"
+    target with:
+
+        AfterTargets="Build"
+        Condition="$(Configuration.Contains('Release')) and !Exists('$(ProjectDir)ILRepack.targets')"
+
+    i.e. in any Release build it re-merges $(OutputPath)*.dll into the primary
+    output with NO LibraryPath. For us that spurious second pass runs right after
+    our own ILRepackBurst target has already produced the correct merged assembly,
+    and it dies with "Failed to resolve assembly: 'UnityEngine.CoreModule'" because
+    it has no search path for KSP's Unity assemblies. (Debug builds never triggered
+    it, which is why it only bit once the project was built in Release / via the
+    solution.)
+
+    The package keys its auto-target off the ABSENCE of this file: because
+    $(ProjectDir)ILRepack.targets now exists, that target's condition is false and it
+    never runs. The package still <Import>s this file, so it must be a valid (empty)
+    project. We keep doing the actual merge ourselves in ILRepackBurst over in the
+    .csproj, with the correct inputs and LibraryPath.
+-->
+<Project>
+</Project>

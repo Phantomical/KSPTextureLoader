@@ -64,13 +64,15 @@
             software fallbacks + float4/int4/math.* types).
 
             This is a committed, prebuilt binary: the KSPTextureLoader.Burst project
-            (deliberately kept OUT of the solution) produces it, and its output is
-            copied into deps/ and committed. We reference that committed file directly,
+            produces it, and its output is copied into deps/ and committed. We
+            reference that committed file directly rather than via a ProjectReference,
             so nothing here depends on KSPBurst being installed to build — CI and a
             fresh clone both just compile against the checked-in DLL, and the editor
             loads it straight from disk so IntelliSense sees the Burst/Mathematics
-            types. Regenerate deps/KSPTextureLoader.Burst.dll (see CONTRIBUTING.md) when
-            the bundled Burst/Mathematics version changes.
+            types. The KSPTextureLoader.Burst project is in the solution (so it
+            builds/restores alongside the rest), but its ILRepack merge only runs when
+            a KSPBurst install is present; regenerate deps/KSPTextureLoader.Burst.dll
+            (see CONTRIBUTING.md) when the bundled Burst/Mathematics version changes.
 
             Private=true copies the merged DLL into our output so it ships in Plugins.
             Its assembly identity is KSPTextureLoader.Burst, distinct from
