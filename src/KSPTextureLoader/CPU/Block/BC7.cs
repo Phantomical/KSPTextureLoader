@@ -439,11 +439,12 @@ internal static class BC7
         {
             float8* vout = (float8*)&output;
 
-            float8 inv = new(1f / 255f);
+            // rgba is a 2-element v256 buffer (64 bytes = 16 Color32); the two halves are
+            // rgba[0] (pixels 0..7) and rgba[1] (pixels 8..15). Index by k, not 32*k — the
+            // latter reads far out of bounds and corrupts the second half of the block.
             for (int k = 0; k < 2; k++)
             {
-                v256 bytes = mm256_loadu_si256(&rgba[32 * k]);
-                v256 lo = mm256_permute4x64_epi64(bytes, 0xF5); // _MM_SHUFFLE(3, 3, 1, 1)
+                v256 bytes = mm256_loadu_si256(&rgba[k]);
 
                 var c0 = Convert(bytes);
                 var c1 = Convert(mm256_permute4x64_epi64(bytes, 1));

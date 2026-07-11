@@ -300,52 +300,59 @@ internal static class BC6H
         int baseI
     )
     {
-        v256 c32 = Avx.mm256_set1_epi32(32);
-        v256 comp = Avx2.mm256_sub_epi32(Avx.mm256_set1_epi32(64), wv);
-
-        v256 rr = Avx2.mm256_srai_epi32(
-            Avx2.mm256_add_epi32(
-                Avx2.mm256_add_epi32(
-                    Avx2.mm256_mullo_epi32(comp, Avx.mm256_set1_epi32(loR)),
-                    Avx2.mm256_mullo_epi32(wv, Avx.mm256_set1_epi32(hiR))
-                ),
-                c32
-            ),
-            6
-        );
-        v256 gg = Avx2.mm256_srai_epi32(
-            Avx2.mm256_add_epi32(
-                Avx2.mm256_add_epi32(
-                    Avx2.mm256_mullo_epi32(comp, Avx.mm256_set1_epi32(loG)),
-                    Avx2.mm256_mullo_epi32(wv, Avx.mm256_set1_epi32(hiG))
-                ),
-                c32
-            ),
-            6
-        );
-        v256 bb = Avx2.mm256_srai_epi32(
-            Avx2.mm256_add_epi32(
-                Avx2.mm256_add_epi32(
-                    Avx2.mm256_mullo_epi32(comp, Avx.mm256_set1_epi32(loB)),
-                    Avx2.mm256_mullo_epi32(wv, Avx.mm256_set1_epi32(hiB))
-                ),
-                c32
-            ),
-            6
-        );
-
-        int* tr = stackalloc int[8];
-        int* tg = stackalloc int[8];
-        int* tb = stackalloc int[8];
-        Avx.mm256_storeu_ps((float*)tr, rr);
-        Avx.mm256_storeu_ps((float*)tg, gg);
-        Avx.mm256_storeu_ps((float*)tb, bb);
-
-        for (int k = 0; k < 8; k++)
+        // Burst compiles this helper for the SSE2 baseline in addition to AVX2, and it requires
+        // the capability guard in the same method as the intrinsics — matching the per-method
+        // `if (IsAvx2Supported)` wrapping every other AVX path in this assembly. The only caller
+        // (BuildPalette) already gates on AVX2, so the guard is never false at runtime.
+        if (Avx2.IsAvx2Supported)
         {
-            palR[baseI + k] = FinishUnquantize(tr[k], signed);
-            palG[baseI + k] = FinishUnquantize(tg[k], signed);
-            palB[baseI + k] = FinishUnquantize(tb[k], signed);
+            v256 c32 = Avx.mm256_set1_epi32(32);
+            v256 comp = Avx2.mm256_sub_epi32(Avx.mm256_set1_epi32(64), wv);
+
+            v256 rr = Avx2.mm256_srai_epi32(
+                Avx2.mm256_add_epi32(
+                    Avx2.mm256_add_epi32(
+                        Avx2.mm256_mullo_epi32(comp, Avx.mm256_set1_epi32(loR)),
+                        Avx2.mm256_mullo_epi32(wv, Avx.mm256_set1_epi32(hiR))
+                    ),
+                    c32
+                ),
+                6
+            );
+            v256 gg = Avx2.mm256_srai_epi32(
+                Avx2.mm256_add_epi32(
+                    Avx2.mm256_add_epi32(
+                        Avx2.mm256_mullo_epi32(comp, Avx.mm256_set1_epi32(loG)),
+                        Avx2.mm256_mullo_epi32(wv, Avx.mm256_set1_epi32(hiG))
+                    ),
+                    c32
+                ),
+                6
+            );
+            v256 bb = Avx2.mm256_srai_epi32(
+                Avx2.mm256_add_epi32(
+                    Avx2.mm256_add_epi32(
+                        Avx2.mm256_mullo_epi32(comp, Avx.mm256_set1_epi32(loB)),
+                        Avx2.mm256_mullo_epi32(wv, Avx.mm256_set1_epi32(hiB))
+                    ),
+                    c32
+                ),
+                6
+            );
+
+            int* tr = stackalloc int[8];
+            int* tg = stackalloc int[8];
+            int* tb = stackalloc int[8];
+            Avx.mm256_storeu_ps((float*)tr, rr);
+            Avx.mm256_storeu_ps((float*)tg, gg);
+            Avx.mm256_storeu_ps((float*)tb, bb);
+
+            for (int k = 0; k < 8; k++)
+            {
+                palR[baseI + k] = FinishUnquantize(tr[k], signed);
+                palG[baseI + k] = FinishUnquantize(tg[k], signed);
+                palB[baseI + k] = FinishUnquantize(tb[k], signed);
+            }
         }
     }
 
