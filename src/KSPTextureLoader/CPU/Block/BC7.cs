@@ -15,19 +15,14 @@ namespace KSPTextureLoader.CPU.Block;
 /// SIMD-accelerated BC7 block decoder.
 ///
 /// The block is treated as a 128-bit little-endian value split into
-/// <c>lo</c> (bits 0..63) and <c>hi</c> (bits 64..127). Endpoints and p-bits are
-/// parsed with a small scalar bit reader (identical to the reference decoder in
-/// <c>CPU/Format/BC7.cs</c>), and the 16 per-pixel palette indices are pulled out
-/// of the block with BMI2 <c>pext</c>/<c>pdep</c>:
-///   * <c>pext</c> pulls the variable-width contiguous index run out of the
-///     (possibly lo/hi-straddling) 128-bit value into a packed integer, and
-///   * <c>pdep</c> scatters that packed run so each index lands right-aligned in
-///     its own byte lane (anchor pixels, which carry one fewer index bit, get a
-///     zero MSB for free).
-/// Final byte->float conversion of the 16 RGBA pixels is done with AVX2.
+/// <c>lo</c> (bits 0..63) and <c>hi</c> (bits 64..127). When AVX2 is available (which, under
+/// Burst, implies BMI2), each mode is decoded entirely with intrinsics: <c>pdep</c> scatters
+/// the endpoint and index bit-fields into their byte lanes, a <c>pshufb</c> maps palette
+/// indices to interpolation weights, and a <c>pmaddubs</c> interpolates all 16 pixels at once.
+/// Otherwise a scalar fallback parses the block with a small bit reader (identical to the
+/// reference decoder in <c>CPU/Format/BC7.cs</c>).
 ///
-/// Every intrinsic path is guarded and has a scalar fallback that produces
-/// bit-identical results.
+/// Both paths produce bit-identical results.
 /// </summary>
 [BurstCompile]
 internal static class BC7
@@ -213,26 +208,16 @@ internal static class BC7
         15,15,15,15, 3,15,15, 8,
     ];
 
-    static readonly byte[] Weights2 = [0, 21, 43, 64];
-    static readonly byte[] Weights3 = [0, 9, 18, 27, 37, 46, 55, 64];
-    static readonly byte[] Weights4 = [0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64];
-
-    // Vector-constant forms of the interpolation weight tables, laid out so lane i
+    // Interpolation weight tables in vector-constant form, laid out so lane i
     // holds table[i]. A single pshufb (Ssse3.shuffle_epi8) then translates 16
     // in-range indices to their 16 weights at once. Palette indices are always in
-    // range (0..15 for Weights4, 0..7 for Weights3, 0..3 for Weights2), so the high
-    // bit of every shuffle-control lane is clear and pshufb never zeroes a lane.
+    // range (0..15 for Weights4, 0..7 for Weights3, 0..3 for Weights2), so the
+    // high bit of every shuffle-control lane is clear and pshufb never zeroes a lane.
     // Unused high lanes are filled with 0 and are never selected. set_epi8 takes
-    // e15..e0 (e0 -> lane 0), so the argument order below is reversed from the array.
-    static readonly v128 Weights2Vec = Sse2.set_epi8(
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 43, 21, 0
-    );
-    static readonly v128 Weights3Vec = Sse2.set_epi8(
-        0, 0, 0, 0, 0, 0, 0, 0, 64, 55, 46, 37, 27, 18, 9, 0
-    );
-    static readonly v128 Weights4Vec = Sse2.set_epi8(
-        64, 60, 55, 51, 47, 43, 38, 34, 30, 26, 21, 17, 13, 9, 4, 0
-    );
+    // e15..e0 (e0 -> lane 0), so the argument order below is reversed from the weight order.
+    static readonly v128 Weights2 = set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 43, 21, 0);
+    static readonly v128 Weights3 = set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 64, 55, 46, 37, 27, 18, 9, 0);
+    static readonly v128 Weights4 = set_epi8(64, 60, 55, 51, 47, 43, 38, 34, 30, 26, 21, 17, 13, 9, 4, 0);
     // csharpier-ignore-end
 
     #endregion
@@ -254,7 +239,7 @@ internal static class BC7
         return BytesToColors(rgba);
     }
 
-    // [BurstCompile]
+    [BurstCompile]
     internal static unsafe void DecodeBlock(ulong lo, ulong hi, Color32* colors) =>
         DecodeBytes(lo, hi, (byte*)colors);
 
@@ -349,7 +334,7 @@ internal static class BC7
 
     #endregion
 
-    #region Bit-run extraction / index scatter (BMI2 pext/pdep + scalar fallback)
+    #region Bit-run extraction / index scatter (scalar fallback path)
 
     /// <summary>
     /// Reads <paramref name="count"/> bits (LSB-first) starting at absolute bit
@@ -371,111 +356,54 @@ internal static class BC7
     }
 
     /// <summary>
-    /// Pulls the contiguous <paramref name="count"/>-bit run at <paramref name="start"/>
-    /// out of the 128-bit value into a packed integer. Uses <c>pext</c> across the
-    /// lo/hi boundary when BMI2 is available, otherwise a funnel shift. count &lt;= 64.
+    /// Extracts and returns the 16 palette indices for one index set. Each pixel carries
+    /// <paramref name="width"/> bits, except pixels flagged in <paramref name="anchorBits"/>
+    /// which carry <paramref name="width"/>-1 bits (their missing MSB reads as 0).
     /// </summary>
-    static ulong PullRun(ulong lo, ulong hi, int start, int count)
-    {
-        if (count == 0)
-            return 0;
-
-        if (Bmi2.IsBmi2Supported)
-        {
-            if (start >= 64)
-            {
-                ulong mask = count >= 64 ? ~0ul : ((1ul << count) - 1);
-                return Bmi2.pext_u64(hi, mask << (start - 64));
-            }
-
-            int loBits = 64 - start;
-            if (count <= loBits)
-            {
-                ulong mask = ((count >= 64 ? ~0ul : ((1ul << count) - 1)) << start);
-                return Bmi2.pext_u64(lo, mask);
-            }
-
-            ulong loMask = ~0ul << start; // bits [start, 64)
-            ulong loPart = Bmi2.pext_u64(lo, loMask);
-            int rem = count - loBits;
-            ulong hiMask = rem >= 64 ? ~0ul : ((1ul << rem) - 1);
-            ulong hiPart = Bmi2.pext_u64(hi, hiMask);
-            return loPart | (hiPart << loBits);
-        }
-
-        return ReadWindow(lo, hi, start, count);
-    }
-
-    /// <summary>
-    /// Extracts the 16 palette indices for one index set into byte lanes
-    /// <paramref name="outIdx"/>[0..15]. Each pixel carries <paramref name="width"/>
-    /// bits, except pixels flagged in <paramref name="anchorBits"/> which carry
-    /// <paramref name="width"/>-1 bits (their missing MSB reads as 0).
-    /// </summary>
-    static unsafe void ExtractIndices(
+    static FixedArray16<byte> ExtractIndices(
         ulong lo,
         ulong hi,
         int start,
         int width,
-        int anchorBits,
-        byte* outIdx
+        int anchorBits
     )
     {
-        if (Bmi2.IsBmi2Supported)
-        {
-            ulong maskLo = 0,
-                maskHi = 0;
-            int loCount = 0,
-                hiCount = 0;
-            for (int i = 0; i < 16; i++)
-            {
-                int w = ((anchorBits >> i) & 1) != 0 ? width - 1 : width;
-                ulong laneMask = (1ul << w) - 1;
-                if (i < 8)
-                {
-                    maskLo |= laneMask << (8 * i);
-                    loCount += w;
-                }
-                else
-                {
-                    maskHi |= laneMask << (8 * (i - 8));
-                    hiCount += w;
-                }
-            }
+        FixedArray16<byte> outIdx = default;
 
-            ulong packed = PullRun(lo, hi, start, loCount + hiCount);
-            *(ulong*)outIdx = Bmi2.pdep_u64(packed, maskLo);
-            *(ulong*)(outIdx + 8) = Bmi2.pdep_u64(packed >> loCount, maskHi);
-        }
-        else
+        int pos = start;
+        for (int i = 0; i < 16; i++)
         {
-            int pos = start;
-            for (int i = 0; i < 16; i++)
-            {
-                int w = ((anchorBits >> i) & 1) != 0 ? width - 1 : width;
-                outIdx[i] = (byte)ReadWindow(lo, hi, pos, w);
-                pos += w;
-            }
+            int w = ((anchorBits >> i) & 1) != 0 ? width - 1 : width;
+            outIdx[i] = (byte)ReadWindow(lo, hi, pos, w);
+            pos += w;
         }
+
+        return outIdx;
     }
 
     /// <summary>
     /// Translates the 16 palette indices in <paramref name="idx"/>[0..15] to their
-    /// interpolation weights in <paramref name="outW"/>[0..15] with a single
-    /// <c>pshufb</c> against the vector weight table <paramref name="tableVec"/>.
-    /// Falls back to a scalar lookup in <paramref name="tableScalar"/> when SSSE3 is
-    /// unavailable; both paths are bit-identical because every index is in range.
+    /// interpolation weights with a single <c>pshufb</c> against the vector weight table
+    /// <paramref name="tableVec"/>. Falls back to a scalar lookup that recovers the table from
+    /// <paramref name="tableVec"/> when SSSE3 is unavailable; both paths are bit-identical
+    /// because every index is in range.
     /// </summary>
-    static unsafe void MapWeights(byte* idx, v128 tableVec, byte[] tableScalar, byte* outW)
+    static unsafe FixedArray16<byte> MapWeights(byte* idx, v128 tableVec)
     {
-        if (Ssse3.IsSsse3Supported && Sse2.IsSse2Supported)
+        if (IsSsse3Supported)
         {
-            Sse2.storeu_si128(outW, Ssse3.shuffle_epi8(tableVec, Sse2.loadu_si128(idx)));
+            v128 result = shuffle_epi8(tableVec, loadu_si128(idx));
+            return *(FixedArray16<byte>*)&result;
         }
         else
         {
+            FixedArray16<byte> outW = default;
+
+            byte* table = (byte*)&tableVec;
             for (int i = 0; i < 16; i++)
-                outW[i] = tableScalar[idx[i]];
+                outW[i] = table[idx[i]];
+
+            return outW;
         }
     }
 
@@ -486,18 +414,18 @@ internal static class BC7
     static unsafe FixedArray16<Color> BytesToColors(byte* rgba)
     {
         FixedArray16<Color> output = default;
-        float* tmp = stackalloc float[64];
+        float* tmp = (float*)&output;
 
-        if (Avx2.IsAvx2Supported && Avx.IsAvxSupported)
+        if (IsAvx2Supported)
         {
-            v256 inv = Avx.mm256_set1_ps(1f / 255f);
+            v256 inv = new(1f / 255f);
             for (int k = 0; k < 64; k += 8)
             {
                 // Load 8 bytes -> 8 u8 -> 8 i32 -> 8 f32, scale by 1/255, store.
-                v128 bytes = Sse2.cvtsi64x_si128(*(long*)(rgba + k));
-                v256 ints = Avx2.mm256_cvtepu8_epi32(bytes);
-                v256 fl = Avx.mm256_mul_ps(Avx.mm256_cvtepi32_ps(ints), inv);
-                Avx.mm256_storeu_ps(tmp + k, fl);
+                v128 bytes = cvtsi64x_si128(*(long*)(rgba + k));
+                v256 ints = mm256_cvtepu8_epi32(bytes);
+                v256 fl = mm256_mul_ps(mm256_cvtepi32_ps(ints), inv);
+                mm256_storeu_ps(&tmp[k], fl);
             }
         }
         else
@@ -507,8 +435,6 @@ internal static class BC7
                 tmp[k] = rgba[k] * invs;
         }
 
-        for (int i = 0; i < 16; i++)
-            output[i] = new Color(tmp[i * 4 + 0], tmp[i * 4 + 1], tmp[i * 4 + 2], tmp[i * 4 + 3]);
         return output;
     }
 
@@ -518,13 +444,13 @@ internal static class BC7
 
     static unsafe void DecodeBytes(ulong lo, ulong hi, byte* rgba)
     {
-        int mode = CountTrailingZeros((byte)(lo & 0xFF));
-        if (mode >= 8)
+        if (IsAvx2Supported)
         {
-            for (int i = 0; i < 64; i++)
-                rgba[i] = 0;
+            DecodeBytesAvx(lo, hi, rgba);
             return;
         }
+
+        int mode = CountTrailingZeros((byte)(lo & 0xFF));
 
         var reader = new BitReader(lo, hi);
         reader.SkipBits(mode + 1);
@@ -532,52 +458,31 @@ internal static class BC7
         switch (mode)
         {
             case 0:
-                if (Avx2.IsAvx2Supported)
-                    Mode0Avx(lo, hi, rgba);
-                else
-                    Mode0(ref reader, lo, hi, rgba);
+                Mode0(ref reader, lo, hi, rgba);
                 break;
             case 1:
-                if (Avx2.IsAvx2Supported)
-                    Mode1Avx(lo, hi, rgba);
-                else
-                    Mode1(ref reader, lo, hi, rgba);
+                Mode1(ref reader, lo, hi, rgba);
                 break;
             case 2:
-                if (Avx2.IsAvx2Supported)
-                    Mode2Avx(lo, hi, rgba);
-                else
-                    Mode2(ref reader, lo, hi, rgba);
+                Mode2(ref reader, lo, hi, rgba);
                 break;
             case 3:
-                if (Avx2.IsAvx2Supported)
-                    Mode3Avx(lo, hi, rgba);
-                else
-                    Mode3(ref reader, lo, hi, rgba);
+                Mode3(ref reader, lo, hi, rgba);
                 break;
             case 4:
-                if (Avx2.IsAvx2Supported)
-                    Mode4Avx(lo, hi, rgba);
-                else
-                    Mode4(ref reader, lo, hi, rgba);
+                Mode4(ref reader, lo, hi, rgba);
                 break;
             case 5:
-                if (Avx2.IsAvx2Supported)
-                    Mode5Avx(lo, hi, rgba);
-                else
-                    Mode5(ref reader, lo, hi, rgba);
+                Mode5(ref reader, lo, hi, rgba);
                 break;
             case 6:
-                if (Avx2.IsAvx2Supported)
-                    Mode6Avx(lo, hi, rgba);
-                else
-                    Mode6(ref reader, lo, hi, rgba);
+                Mode6(ref reader, lo, hi, rgba);
+                break;
+            case 7:
+                Mode7(ref reader, lo, hi, rgba);
                 break;
             default:
-                if (Avx2.IsAvx2Supported)
-                    Mode7Avx(lo, hi, rgba);
-                else
-                    Mode7(ref reader, lo, hi, rgba);
+                *(FixedArray16<byte>*)rgba = default;
                 break;
         }
     }
@@ -590,8 +495,6 @@ internal static class BC7
         rgba[o + 2] = (byte)b;
         rgba[o + 3] = (byte)a;
     }
-
-    #region Mode 0
 
     // Mode 0: 3 subsets, 4-bit RGB endpoints, unique p-bit per endpoint, 3-bit indices.
     static unsafe void Mode0(ref BitReader reader, ulong lo, ulong hi, byte* rgba)
@@ -647,11 +550,9 @@ internal static class BC7
         int anchor2 = AnchorIndex3_2[partition];
         int anchorBits = 1 | (1 << anchor1) | (1 << anchor2);
 
-        byte* idx = stackalloc byte[16];
-        ExtractIndices(lo, hi, reader.BitPos, 3, anchorBits, idx);
+        var idx = ExtractIndices(lo, hi, reader.BitPos, 3, anchorBits);
 
-        byte* weights = stackalloc byte[16];
-        MapWeights(idx, Weights3Vec, Weights3, weights);
+        var weights = MapWeights((byte*)&idx, Weights3);
 
         for (int i = 0; i < 16; i++)
         {
@@ -681,8 +582,6 @@ internal static class BC7
             Write(rgba, i, ri, gi, bi, 255);
         }
     }
-
-    #endregion
 
     // Mode 1: 2 subsets, 6-bit RGB endpoints, shared p-bit per subset, 3-bit indices.
     static unsafe void Mode1(ref BitReader reader, ulong lo, ulong hi, byte* rgba)
@@ -721,11 +620,9 @@ internal static class BC7
         int anchor1 = AnchorIndex2_1[partition];
         int anchorBits = 1 | (1 << anchor1);
 
-        byte* idx = stackalloc byte[16];
-        ExtractIndices(lo, hi, reader.BitPos, 3, anchorBits, idx);
+        var idx = ExtractIndices(lo, hi, reader.BitPos, 3, anchorBits);
 
-        byte* weights = stackalloc byte[16];
-        MapWeights(idx, Weights3Vec, Weights3, weights);
+        var weights = MapWeights((byte*)&idx, Weights3);
 
         for (int i = 0; i < 16; i++)
         {
@@ -797,11 +694,9 @@ internal static class BC7
         int anchor2 = AnchorIndex3_2[partition];
         int anchorBits = 1 | (1 << anchor1) | (1 << anchor2);
 
-        byte* idx = stackalloc byte[16];
-        ExtractIndices(lo, hi, reader.BitPos, 2, anchorBits, idx);
+        var idx = ExtractIndices(lo, hi, reader.BitPos, 2, anchorBits);
 
-        byte* weights = stackalloc byte[16];
-        MapWeights(idx, Weights2Vec, Weights2, weights);
+        var weights = MapWeights((byte*)&idx, Weights2);
 
         for (int i = 0; i < 16; i++)
         {
@@ -871,11 +766,9 @@ internal static class BC7
         int anchor1 = AnchorIndex2_1[partition];
         int anchorBits = 1 | (1 << anchor1);
 
-        byte* idx = stackalloc byte[16];
-        ExtractIndices(lo, hi, reader.BitPos, 2, anchorBits, idx);
+        var idx = ExtractIndices(lo, hi, reader.BitPos, 2, anchorBits);
 
-        byte* weights = stackalloc byte[16];
-        MapWeights(idx, Weights2Vec, Weights2, weights);
+        var weights = MapWeights((byte*)&idx, Weights2);
 
         for (int i = 0; i < 16; i++)
         {
@@ -926,18 +819,14 @@ internal static class BC7
 
         // First index set: 2 bits (pixel 0 anchored to 1 bit).
         int start2 = reader.BitPos;
-        byte* idx2 = stackalloc byte[16];
-        ExtractIndices(lo, hi, start2, 2, 1, idx2);
+        var idx2 = ExtractIndices(lo, hi, start2, 2, 1);
 
         // Second index set: 3 bits (pixel 0 anchored to 2 bits), directly after set 1.
         int start3 = start2 + (16 * 2 - 1);
-        byte* idx3 = stackalloc byte[16];
-        ExtractIndices(lo, hi, start3, 3, 1, idx3);
+        var idx3 = ExtractIndices(lo, hi, start3, 3, 1);
 
-        byte* w2 = stackalloc byte[16];
-        MapWeights(idx2, Weights2Vec, Weights2, w2);
-        byte* w3 = stackalloc byte[16];
-        MapWeights(idx3, Weights3Vec, Weights3, w3);
+        var w2 = MapWeights((byte*)&idx2, Weights2);
+        var w3 = MapWeights((byte*)&idx3, Weights3);
 
         for (int i = 0; i < 16; i++)
         {
@@ -988,17 +877,13 @@ internal static class BC7
             ua1 = Unquantize(a1, 8);
 
         int startC = reader.BitPos;
-        byte* cIdx = stackalloc byte[16];
-        ExtractIndices(lo, hi, startC, 2, 1, cIdx);
+        var cIdx = ExtractIndices(lo, hi, startC, 2, 1);
 
         int startA = startC + (16 * 2 - 1);
-        byte* aIdx = stackalloc byte[16];
-        ExtractIndices(lo, hi, startA, 2, 1, aIdx);
+        var aIdx = ExtractIndices(lo, hi, startA, 2, 1);
 
-        byte* cw2 = stackalloc byte[16];
-        MapWeights(cIdx, Weights2Vec, Weights2, cw2);
-        byte* aw2 = stackalloc byte[16];
-        MapWeights(aIdx, Weights2Vec, Weights2, aw2);
+        var cw2 = MapWeights((byte*)&cIdx, Weights2);
+        var aw2 = MapWeights((byte*)&aIdx, Weights2);
 
         for (int i = 0; i < 16; i++)
         {
@@ -1038,11 +923,9 @@ internal static class BC7
         int ua0 = Unquantize((a0 << 1) | pb0, 8),
             ua1 = Unquantize((a1 << 1) | pb1, 8);
 
-        byte* idx = stackalloc byte[16];
-        ExtractIndices(lo, hi, reader.BitPos, 4, 1, idx);
+        var idx = ExtractIndices(lo, hi, reader.BitPos, 4, 1);
 
-        byte* weights = stackalloc byte[16];
-        MapWeights(idx, Weights4Vec, Weights4, weights);
+        var weights = MapWeights((byte*)&idx, Weights4);
 
         for (int i = 0; i < 16; i++)
         {
@@ -1105,11 +988,9 @@ internal static class BC7
         int anchor1 = AnchorIndex2_1[partition];
         int anchorBits = 1 | (1 << anchor1);
 
-        byte* idx = stackalloc byte[16];
-        ExtractIndices(lo, hi, reader.BitPos, 2, anchorBits, idx);
+        var idx = ExtractIndices(lo, hi, reader.BitPos, 2, anchorBits);
 
-        byte* weights = stackalloc byte[16];
-        MapWeights(idx, Weights2Vec, Weights2, weights);
+        var weights = MapWeights((byte*)&idx, Weights2);
 
         for (int i = 0; i < 16; i++)
         {
@@ -1140,6 +1021,44 @@ internal static class BC7
     #endregion
 
     #region AVX2 / BMI2-accelerated per-mode decoders
+
+    // Dispatches to the AVX2/BMI2 fast path for the given mode. These decoders parse lo/hi
+    // directly, so unlike the scalar path no BitReader is needed.
+    static unsafe void DecodeBytesAvx(ulong lo, ulong hi, byte* rgba)
+    {
+        int mode = CountTrailingZeros((byte)(lo & 0xFF));
+
+        switch (mode)
+        {
+            case 0:
+                Mode0Avx(lo, hi, rgba);
+                break;
+            case 1:
+                Mode1Avx(lo, hi, rgba);
+                break;
+            case 2:
+                Mode2Avx(lo, hi, rgba);
+                break;
+            case 3:
+                Mode3Avx(lo, hi, rgba);
+                break;
+            case 4:
+                Mode4Avx(lo, hi, rgba);
+                break;
+            case 5:
+                Mode5Avx(lo, hi, rgba);
+                break;
+            case 6:
+                Mode6Avx(lo, hi, rgba);
+                break;
+            case 7:
+                Mode7Avx(lo, hi, rgba);
+                break;
+            default:
+                *(FixedArray16<byte>*)rgba = default;
+                break;
+        }
+    }
 
     #region Mode 0
     // The Mode 0 index stream starts at bit 83 (1 mode terminator + 4 partition + 18*4
@@ -1247,7 +1166,7 @@ internal static class BC7
             ulong ilo = pdep_u64(idata, Mode0IndexMaskLo[partition]);
             ulong ihi = pdep_u64(idata >> Mode0IndexLoBits[partition], Mode0IndexMaskHi[partition]);
 
-            v128 w = shuffle_epi8(Weights3Vec, new(ilo, ihi));
+            v128 w = shuffle_epi8(Weights3, new(ilo, ihi));
             v128 invw = sub_epi8(new((byte)64), w); // 64 - w
 
             // Interleave (64-w, w) so we can use a pmaddubs to compute e0*(64-w) + e1*w
@@ -1479,7 +1398,7 @@ internal static class BC7
             ulong ilo = pdep_u64(idata, Mode1IndexMaskLo[partition]);
             ulong ihi = pdep_u64(idata >> Mode1IndexLoBits[partition], Mode1IndexMaskHi[partition]);
 
-            v128 w = shuffle_epi8(Weights3Vec, new(ilo, ihi));
+            v128 w = shuffle_epi8(Weights3, new(ilo, ihi));
             v128 invw = sub_epi8(new((byte)64), w); // 64 - w
 
             // Interleave (64-w, w) so we can use a pmaddubs to compute e0*(64-w) + e1*w
@@ -1695,7 +1614,7 @@ internal static class BC7
             ulong ilo = pdep_u64(idata, Mode2IndexMaskLo[partition]);
             ulong ihi = pdep_u64(idata >> Mode2IndexLoBits[partition], Mode2IndexMaskHi[partition]);
 
-            v128 w = shuffle_epi8(Weights2Vec, new(ilo, ihi));
+            v128 w = shuffle_epi8(Weights2, new(ilo, ihi));
             v128 invw = sub_epi8(new((byte)64), w); // 64 - w
 
             // Interleave (64-w, w) so we can use a pmaddubs to compute e0*(64-w) + e1*w
@@ -1846,7 +1765,7 @@ internal static class BC7
             ulong ilo = pdep_u64(idata, Mode3IndexMaskLo[partition]);
             ulong ihi = pdep_u64(idata >> Mode3IndexLoBits[partition], Mode3IndexMaskHi[partition]);
 
-            v128 w = shuffle_epi8(Weights2Vec, new(ilo, ihi));
+            v128 w = shuffle_epi8(Weights2, new(ilo, ihi));
             v128 invw = sub_epi8(new((byte)64), w); // 64 - w
 
             // Interleave (64-w, w) so we can use a pmaddubs to compute e0*(64-w) + e1*w
@@ -1944,13 +1863,13 @@ internal static class BC7
             ulong idata2 = (lo >> 50) | (hi << 14);
             ulong ilo2 = pdep_u64(idata2, Idx2MaskLo);
             ulong ihi2 = pdep_u64(idata2 >> Idx2LoBits, Idx2MaskHi);
-            v128 w2 = shuffle_epi8(Weights2Vec, new(ilo2, ihi2));
+            v128 w2 = shuffle_epi8(Weights2, new(ilo2, ihi2));
 
             // Index set B: 3-bit, starts at bit 81 and lies wholly in hi.
             ulong idata3 = hi >> (81 - 64);
             ulong ilo3 = pdep_u64(idata3, Idx3MaskLo);
             ulong ihi3 = pdep_u64(idata3 >> Idx3LoBits, Idx3MaskHi);
-            v128 w3 = shuffle_epi8(Weights3Vec, new(ilo3, ihi3));
+            v128 w3 = shuffle_epi8(Weights3, new(ilo3, ihi3));
 
             // idxMode chooses which set weights colour vs. alpha.
             v128 wColor = idxMode == 0 ? w2 : w3;
@@ -2062,13 +1981,13 @@ internal static class BC7
             ulong idataC = hi >> (66 - 64);
             ulong iloC = pdep_u64(idataC, IdxMaskLo);
             ulong ihiC = pdep_u64(idataC >> IdxLoBits, IdxMaskHi);
-            v128 wColor = shuffle_epi8(Weights2Vec, new(iloC, ihiC));
+            v128 wColor = shuffle_epi8(Weights2, new(iloC, ihiC));
 
             // Alpha index set: 2-bit, starts at bit 97 (hi bit 33), wholly in hi.
             ulong idataA = hi >> (97 - 64);
             ulong iloA = pdep_u64(idataA, IdxMaskLo);
             ulong ihiA = pdep_u64(idataA >> IdxLoBits, IdxMaskHi);
-            v128 wAlpha = shuffle_epi8(Weights2Vec, new(iloA, ihiA));
+            v128 wAlpha = shuffle_epi8(Weights2, new(iloA, ihiA));
 
             v128 invC = sub_epi8(new((byte)64), wColor); // 64 - w
             v256 pairsColor = new(unpacklo_epi8(invC, wColor), unpackhi_epi8(invC, wColor));
@@ -2182,7 +2101,7 @@ internal static class BC7
             ulong idata = hi >> (65 - 64);
             ulong ilo = pdep_u64(idata, IdxMaskLo);
             ulong ihi = pdep_u64(idata >> IdxLoBits, IdxMaskHi);
-            v128 w = shuffle_epi8(Weights4Vec, new(ilo, ihi));
+            v128 w = shuffle_epi8(Weights4, new(ilo, ihi));
 
             v128 invw = sub_epi8(new((byte)64), w); // 64 - w
             v256 pairs = new(unpacklo_epi8(invw, w), unpackhi_epi8(invw, w));
@@ -2278,7 +2197,7 @@ internal static class BC7
             ulong ilo = pdep_u64(idata, Mode3IndexMaskLo[partition]);
             ulong ihi = pdep_u64(idata >> Mode3IndexLoBits[partition], Mode3IndexMaskHi[partition]);
 
-            v128 w = shuffle_epi8(Weights2Vec, new(ilo, ihi));
+            v128 w = shuffle_epi8(Weights2, new(ilo, ihi));
             v128 invw = sub_epi8(new((byte)64), w); // 64 - w
             v256 pairs = new(unpacklo_epi8(invw, w), unpackhi_epi8(invw, w));
 
