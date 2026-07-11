@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using KSPTextureLoader.Utils;
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
@@ -214,28 +215,44 @@ internal static class BC7
 
     #region Public API
 
-    internal static unsafe Color32 DecodePixel(ulong lo, ulong hi, int pixelIndex)
+    internal static Color DecodePixel(ulong lo, ulong hi, int pixel) =>
+        (Color)DecodePixel32(lo, hi, pixel);
+
+    internal static unsafe Color32 DecodePixel32(ulong lo, ulong hi, int pixel)
     {
-        byte* rgba = stackalloc byte[64];
-        DecodeBytes(lo, hi, rgba);
-        int i = pixelIndex * 4;
-        return new Color32(rgba[i + 0], rgba[i + 1], rgba[i + 2], rgba[i + 3]);
+        if ((uint)pixel >= 16)
+            return default;
+
+        v256* rgba = stackalloc v256[2];
+        DecodeBlock(lo, hi, rgba);
+        return ((Color32*)rgba)[pixel];
+    }
+
+    internal static unsafe FixedArray16<Color32> DecodeBlock32(ulong lo, ulong hi)
+    {
+        v256* rgba = stackalloc v256[2];
+        DecodeBlock(lo, hi, rgba);
+        return *(FixedArray16<Color32>*)rgba;
     }
 
     internal static unsafe FixedArray16<Color> DecodeBlock(ulong lo, ulong hi)
     {
-        byte* rgba = stackalloc byte[64];
-        DecodeBytes(lo, hi, rgba);
+        v256* rgba = stackalloc v256[2];
+        DecodeBlock(lo, hi, rgba);
         return BytesToColors(rgba);
     }
 
     [BurstCompile]
-    internal static unsafe void DecodeBlock(ulong lo, ulong hi, Color32* colors) =>
-        DecodeBytes(lo, hi, (byte*)colors);
+    internal static void DecodeBlock32Burst(ulong lo, ulong hi, out FixedArray16<Color32> colors) =>
+        colors = DecodeBlock32(lo, hi);
+
+    [BurstCompile]
+    internal static void DecodeBlockBurst(ulong lo, ulong hi, out FixedArray16<Color> colors) =>
+        colors = DecodeBlock(lo, hi);
 
     #endregion
 
-    #region Bit reader (scalar header parse — matches the reference decoder)
+    #region Bit reader
 
     struct BitReader
     {
@@ -324,7 +341,7 @@ internal static class BC7
 
     #endregion
 
-    #region Bit-run extraction / index scatter (scalar fallback path)
+    #region Bit-run extraction / index scatter
 
     /// <summary>
     /// Reads <paramref name="count"/> bits (LSB-first) starting at absolute bit
@@ -399,30 +416,52 @@ internal static class BC7
 
     #endregion
 
-    #region Byte → Color float conversion (AVX2 + scalar fallback)
+    #region Byte → Color float conversion
 
-    static unsafe FixedArray16<Color> BytesToColors(byte* rgba)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static unsafe FixedArray16<Color> BytesToColors(v256* rgba)
     {
+        static float8 Convert(v256 vals)
+        {
+            if (IsAvx2Supported)
+            {
+                return mm256_cvtepi32_ps(mm256_cvtepu8_epi32(mm256_extracti128_si256(vals, 0)))
+                    * new float8(1f / 255f);
+            }
+
+            return default;
+        }
+
         FixedArray16<Color> output = default;
         float* tmp = (float*)&output;
 
         if (IsAvx2Supported)
         {
-            v256 inv = new(1f / 255f);
-            for (int k = 0; k < 64; k += 8)
+            float8* vout = (float8*)&output;
+
+            float8 inv = new(1f / 255f);
+            for (int k = 0; k < 2; k++)
             {
-                // Load 8 bytes -> 8 u8 -> 8 i32 -> 8 f32, scale by 1/255, store.
-                v128 bytes = cvtsi64x_si128(*(long*)(rgba + k));
-                v256 ints = mm256_cvtepu8_epi32(bytes);
-                v256 fl = mm256_mul_ps(mm256_cvtepi32_ps(ints), inv);
-                mm256_storeu_ps(&tmp[k], fl);
+                v256 bytes = mm256_loadu_si256(&rgba[32 * k]);
+                v256 lo = mm256_permute4x64_epi64(bytes, 0xF5); // _MM_SHUFFLE(3, 3, 1, 1)
+
+                var c0 = Convert(bytes);
+                var c1 = Convert(mm256_permute4x64_epi64(bytes, 1));
+                var c2 = Convert(mm256_permute4x64_epi64(bytes, 2));
+                var c3 = Convert(mm256_permute4x64_epi64(bytes, 3));
+
+                vout[4 * k + 0] = c0;
+                vout[4 * k + 1] = c1;
+                vout[4 * k + 2] = c2;
+                vout[4 * k + 3] = c3;
             }
         }
         else
         {
+            var bytes = (byte*)rgba;
             const float invs = 1f / 255f;
             for (int k = 0; k < 64; k++)
-                tmp[k] = rgba[k] * invs;
+                tmp[k] = bytes[k] * invs;
         }
 
         return output;
@@ -430,17 +469,18 @@ internal static class BC7
 
     #endregion
 
-    #region Scalar per-mode byte decoders (fill 64 bytes = 16 RGBA pixels)
+    #region Scalar per-mode byte decoders
 
-    static unsafe void DecodeBytes(ulong lo, ulong hi, byte* rgba)
+    static unsafe void DecodeBlock(ulong lo, ulong hi, v256* rgba)
     {
         if (IsAvx2Supported)
         {
-            DecodeBytesAvx(lo, hi, rgba);
+            DecodeBlockAvx(lo, hi, rgba);
             return;
         }
 
         int mode = CountTrailingZeros((byte)(lo & 0xFF));
+        var bytes = (byte*)rgba;
 
         var reader = new BitReader(lo, hi);
         reader.SkipBits(mode + 1);
@@ -448,28 +488,28 @@ internal static class BC7
         switch (mode)
         {
             case 0:
-                Mode0(ref reader, lo, hi, rgba);
+                Mode0(ref reader, lo, hi, bytes);
                 break;
             case 1:
-                Mode1(ref reader, lo, hi, rgba);
+                Mode1(ref reader, lo, hi, bytes);
                 break;
             case 2:
-                Mode2(ref reader, lo, hi, rgba);
+                Mode2(ref reader, lo, hi, bytes);
                 break;
             case 3:
-                Mode3(ref reader, lo, hi, rgba);
+                Mode3(ref reader, lo, hi, bytes);
                 break;
             case 4:
-                Mode4(ref reader, lo, hi, rgba);
+                Mode4(ref reader, lo, hi, bytes);
                 break;
             case 5:
-                Mode5(ref reader, lo, hi, rgba);
+                Mode5(ref reader, lo, hi, bytes);
                 break;
             case 6:
-                Mode6(ref reader, lo, hi, rgba);
+                Mode6(ref reader, lo, hi, bytes);
                 break;
             case 7:
-                Mode7(ref reader, lo, hi, rgba);
+                Mode7(ref reader, lo, hi, bytes);
                 break;
             default:
                 *(FixedArray16<byte>*)rgba = default;
@@ -1014,7 +1054,7 @@ internal static class BC7
 
     // Dispatches to the AVX2/BMI2 fast path for the given mode. These decoders parse lo/hi
     // directly, so unlike the scalar path no BitReader is needed.
-    static unsafe void DecodeBytesAvx(ulong lo, ulong hi, byte* rgba)
+    static unsafe void DecodeBlockAvx(ulong lo, ulong hi, v256* rgba)
     {
         int mode = CountTrailingZeros((byte)(lo & 0xFF));
 
@@ -1131,7 +1171,7 @@ internal static class BC7
     //   - Texel i's colour is, per channel, interpolate(e0, e1, w) = (e0*(64-w) + e1*w + 32) >> 6,
     //     where e0/e1 are the two endpoints of that texel's subset and w is its weight.
     //   - Alpha has no bits in this mode and is always opaque (255).
-    static unsafe void Mode0Avx(ulong lo, ulong hi, byte* rgba)
+    static unsafe void Mode0Avx(ulong lo, ulong hi, v256* rgba)
     {
         static ulong Unquantize(ulong v) => (v << 3) | ((v >> 2) & 0x070707070707);
 
@@ -1195,9 +1235,8 @@ internal static class BC7
             var rgbaLo = mm256_unpacklo_epi16(rg, ba); // RGBA, pixels {0..3, 8..11}
             var rgbaHi = mm256_unpackhi_epi16(rg, ba); // RGBA, pixels {4..7, 12..15}
 
-            var output = (v256*)rgba;
-            output[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
-            output[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
+            rgba[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
+            rgba[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
         }
     }
     #endregion
@@ -1358,7 +1397,7 @@ internal static class BC7
     //   - Texel i's colour is, per channel, interpolate(e0, e1, w) = (e0*(64-w) + e1*w + 32) >> 6,
     //     where e0/e1 are the two endpoints of that texel's subset and w is its weight.
     //   - Alpha has no bits in this mode and is always opaque (255).
-    static unsafe void Mode1Avx(ulong lo, ulong hi, byte* rgba)
+    static unsafe void Mode1Avx(ulong lo, ulong hi, v256* rgba)
     {
         static ulong Unquantize(ulong v) => (v << 1) | ((v >> 6) & 0x01010101);
 
@@ -1419,9 +1458,8 @@ internal static class BC7
             var rgbaLo = mm256_unpacklo_epi16(rg, ba); // RGBA, pixels {0..3, 8..11}
             var rgbaHi = mm256_unpackhi_epi16(rg, ba); // RGBA, pixels {4..7, 12..15}
 
-            var output = (v256*)rgba;
-            output[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
-            output[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
+            rgba[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
+            rgba[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
         }
     }
     #endregion
@@ -1580,7 +1618,7 @@ internal static class BC7
     //   - Texel i's colour is, per channel, interpolate(e0, e1, w) = (e0*(64-w) + e1*w + 32) >> 6,
     //     where e0/e1 are the two endpoints of that texel's subset and w is its weight.
     //   - Alpha has no bits in this mode and is always opaque (255).
-    static unsafe void Mode2Avx(ulong lo, ulong hi, byte* rgba)
+    static unsafe void Mode2Avx(ulong lo, ulong hi, v256* rgba)
     {
         static ulong Unquantize(ulong v) => (v << 3) | ((v >> 2) & 0x070707070707);
 
@@ -1635,9 +1673,8 @@ internal static class BC7
             var rgbaLo = mm256_unpacklo_epi16(rg, ba); // RGBA, pixels {0..3, 8..11}
             var rgbaHi = mm256_unpackhi_epi16(rg, ba); // RGBA, pixels {4..7, 12..15}
 
-            var output = (v256*)rgba;
-            output[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
-            output[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
+            rgba[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
+            rgba[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
         }
     }
     #endregion
@@ -1727,7 +1764,7 @@ internal static class BC7
     //   - Texel i's colour is, per channel, interpolate(e0, e1, w) = (e0*(64-w) + e1*w + 32) >> 6,
     //     where e0/e1 are the two endpoints of that texel's subset and w is its weight.
     //   - Alpha has no bits in this mode and is always opaque (255).
-    static unsafe void Mode3Avx(ulong lo, ulong hi, byte* rgba)
+    static unsafe void Mode3Avx(ulong lo, ulong hi, v256* rgba)
     {
         if (IsAvx2Supported)
         {
@@ -1787,9 +1824,8 @@ internal static class BC7
             var rgbaLo = mm256_unpacklo_epi16(rg, ba); // RGBA, pixels {0..3, 8..11}
             var rgbaHi = mm256_unpackhi_epi16(rg, ba); // RGBA, pixels {4..7, 12..15}
 
-            var output = (v256*)rgba;
-            output[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
-            output[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
+            rgba[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
+            rgba[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
         }
     }
     #endregion
@@ -1823,7 +1859,7 @@ internal static class BC7
     //
     // Because there is a single subset and a single anchor at a fixed position, the endpoint gather
     // and both index-scatter masks are compile-time constants — Mode 4 adds no lookup tables.
-    static unsafe void Mode4Avx(ulong lo, ulong hi, byte* rgba)
+    static unsafe void Mode4Avx(ulong lo, ulong hi, v256* rgba)
     {
         if (IsAvx2Supported)
         {
@@ -1911,9 +1947,8 @@ internal static class BC7
             var rgbaLo = mm256_unpacklo_epi16(rg, ba); // RGBA, pixels {0..3, 8..11}
             var rgbaHi = mm256_unpackhi_epi16(rg, ba); // RGBA, pixels {4..7, 12..15}
 
-            var output = (v256*)rgba;
-            output[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
-            output[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
+            rgba[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
+            rgba[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
         }
     }
     #endregion
@@ -1946,7 +1981,7 @@ internal static class BC7
     // A1 is the one endpoint that straddles the lo/hi boundary (low 6 bits in lo, top 2 in hi).
     // As in Mode 4, the single subset and fixed anchor make the gather and index masks constant, so
     // Mode 5 adds no lookup tables.
-    static unsafe void Mode5Avx(ulong lo, ulong hi, byte* rgba)
+    static unsafe void Mode5Avx(ulong lo, ulong hi, v256* rgba)
     {
         if (IsAvx2Supported)
         {
@@ -2024,9 +2059,8 @@ internal static class BC7
             var rgbaLo = mm256_unpacklo_epi16(rg, ba); // RGBA, pixels {0..3, 8..11}
             var rgbaHi = mm256_unpackhi_epi16(rg, ba); // RGBA, pixels {4..7, 12..15}
 
-            var output = (v256*)rgba;
-            output[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
-            output[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
+            rgba[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
+            rgba[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
         }
     }
     #endregion
@@ -2058,7 +2092,7 @@ internal static class BC7
     // Only pb1 and the index stream lie in hi; all eight endpoints and pb0 are in lo, so no
     // endpoint straddles. The single subset and fixed anchor keep the gather and index mask
     // constant, so Mode 6 adds no lookup tables.
-    static unsafe void Mode6Avx(ulong lo, ulong hi, byte* rgba)
+    static unsafe void Mode6Avx(ulong lo, ulong hi, v256* rgba)
     {
         if (IsAvx2Supported)
         {
@@ -2115,9 +2149,8 @@ internal static class BC7
             var rgbaLo = mm256_unpacklo_epi16(rg, ba); // RGBA, pixels {0..3, 8..11}
             var rgbaHi = mm256_unpackhi_epi16(rg, ba); // RGBA, pixels {4..7, 12..15}
 
-            var output = (v256*)rgba;
-            output[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
-            output[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
+            rgba[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
+            rgba[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
         }
     }
     #endregion
@@ -2152,7 +2185,7 @@ internal static class BC7
     //
     // R and G endpoints lie in lo; B straddles the lo/hi boundary (bits 54..63 in lo, 64..73 in
     // hi); A, the p-bits and the index stream are wholly in hi.
-    static unsafe void Mode7Avx(ulong lo, ulong hi, byte* rgba)
+    static unsafe void Mode7Avx(ulong lo, ulong hi, v256* rgba)
     {
         if (IsAvx2Supported)
         {
@@ -2215,9 +2248,8 @@ internal static class BC7
             var rgbaLo = mm256_unpacklo_epi16(rg, ba); // RGBA, pixels {0..3, 8..11}
             var rgbaHi = mm256_unpackhi_epi16(rg, ba); // RGBA, pixels {4..7, 12..15}
 
-            var output = (v256*)rgba;
-            output[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
-            output[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
+            rgba[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
+            rgba[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
         }
     }
     #endregion
