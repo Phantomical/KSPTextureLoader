@@ -3,6 +3,11 @@ using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using UnityEngine;
 using static Unity.Burst.Intrinsics.X86;
+using static Unity.Burst.Intrinsics.X86.Avx;
+using static Unity.Burst.Intrinsics.X86.Avx2;
+using static Unity.Burst.Intrinsics.X86.Bmi2;
+using static Unity.Burst.Intrinsics.X86.Sse2;
+using static Unity.Burst.Intrinsics.X86.Ssse3;
 
 namespace KSPTextureLoader.CPU.Block;
 
@@ -249,7 +254,7 @@ internal static class BC7
         return BytesToColors(rgba);
     }
 
-    [BurstCompile]
+    // [BurstCompile]
     internal static unsafe void DecodeBlock(ulong lo, ulong hi, Color32* colors) =>
         DecodeBytes(lo, hi, (byte*)colors);
 
@@ -527,7 +532,7 @@ internal static class BC7
         switch (mode)
         {
             case 0:
-                if (Bmi2.IsBmi2Supported)
+                if (Avx2.IsAvx2Supported)
                     Mode0Avx(lo, hi, rgba);
                 else
                     Mode0(ref reader, lo, hi, rgba);
@@ -564,6 +569,8 @@ internal static class BC7
         rgba[o + 2] = (byte)b;
         rgba[o + 3] = (byte)a;
     }
+
+    #region Mode 0
 
     // Mode 0: 3 subsets, 4-bit RGB endpoints, unique p-bit per endpoint, 3-bit indices.
     static unsafe void Mode0(ref BitReader reader, ulong lo, ulong hi, byte* rgba)
@@ -653,6 +660,8 @@ internal static class BC7
             Write(rgba, i, ri, gi, bi, 255);
         }
     }
+
+    #endregion
 
     // Mode 1: 2 subsets, 6-bit RGB endpoints, shared p-bit per subset, 3-bit indices.
     static unsafe void Mode1(ref BitReader reader, ulong lo, ulong hi, byte* rgba)
@@ -1111,82 +1120,157 @@ internal static class BC7
 
     #region AVX2 / BMI2-accelerated per-mode decoders
 
-    // Absolute bit offset of the Mode 0 index stream: 1 mode terminator + 4 partition
-    // + 18*4 endpoint + 6 p-bit = 83. The Mode 0 header is fixed-size, so this is a
-    // constant rather than a running bit position.
-    const int Mode0IndexStart = 83;
+    #region Mode 0
+    // The Mode 0 index stream starts at bit 83 (1 mode terminator + 4 partition + 18*4
+    // endpoint + 6 p-bit) and is always exactly 45 bits (16*3 minus the 3 anchor MSBs), so
+    // it lies entirely in hi (bits 19..63) and right-aligns with a single shift — no pext
+    // needed.
+    //
+    // Per-partition pdep scatter masks for the Mode 0 index stream. The partition is only
+    // 4 bits, so all 16 layouts are precomputed here instead of rebuilt per block: lane i
+    // takes pixel i's 3-bit index, except the 3 anchor lanes which take 2 bits so their
+    // forced-zero MSB falls out for free. Mode0IndexLoBits[p] = popcount(maskLo[p]) is how
+    // far to shift the packed run before depositing lanes 8..15. Derived directly from
+    // AnchorIndex3_1/AnchorIndex3_2 with width 3 (identical layout to ExtractIndices).
+    // csharpier-ignore-start
+    static readonly ulong[] Mode0IndexMaskLo =
+    [
+        0x0707070703070703UL, 0x0707070703070703UL, 0x0707070707070703UL, 0x0707070703070703UL,
+        0x0707070707070703UL, 0x0707070703070703UL, 0x0707070703070703UL, 0x0707070707070703UL,
+        0x0707070707070703UL, 0x0707070707070703UL, 0x0703070707070703UL, 0x0703070707070703UL,
+        0x0703070707070703UL, 0x0707030707070703UL, 0x0707070703070703UL, 0x0707070703070703UL,
+    ];
+    static readonly ulong[] Mode0IndexMaskHi =
+    [
+        0x0307070707070707UL, 0x0707070707070703UL, 0x0307070707070703UL, 0x0307070707070707UL,
+        0x0307070707070703UL, 0x0307070707070707UL, 0x0307070707070707UL, 0x0307070707070703UL,
+        0x0307070707070703UL, 0x0307070707070703UL, 0x0307070707070707UL, 0x0307070707070707UL,
+        0x0307070707070707UL, 0x0307070707070707UL, 0x0307070707070707UL, 0x0707070707070703UL,
+    ];
+    static readonly byte[] Mode0IndexLoBits =
+    [
+        22, 22, 23, 22, 23, 22, 22, 23, 23, 23, 22, 22, 22, 22, 22, 22,
+    ];
 
-    // Mode 0 (BMI2 fast path). The fixed-size header is parsed by pulling each
-    // contiguous field straight out of the 128-bit block and scattering the packed
-    // 4-bit endpoints / 1-bit p-bits into individual byte lanes with pdep, replacing the
-    // per-field scalar BitReader. Index extraction, weight mapping and the interpolation
-    // loop are shared with the scalar Mode0 and stay bit-identical.
+    // Per-partition endpoint-gather control for the interpolation stage: 16 pixels x
+    // (e0, e1) byte selectors = 32 lanes, packed as 4 ulongs per partition. Lane 2i / 2i+1
+    // hold 2*subset[i] / 2*subset[i]+1 — the [e0 e1] pair for pixel i's subset — and feed
+    // mm256_shuffle_epi8 to pull each pixel's endpoint pair out of the 8-byte lane vector.
+    static readonly ulong[] Mode0Gather =
+    [
+        0x0302030201000100UL, 0x0302030201000100UL, 0x0302050405040100UL, 0x0504050405040504UL, // p0
+        0x0302010001000100UL, 0x0302030201000100UL, 0x0302030205040504UL, 0x0302050405040504UL, // p1
+        0x0100010001000100UL, 0x0302010001000504UL, 0x0302030205040504UL, 0x0302030205040504UL, // p2
+        0x0504050405040100UL, 0x0504050401000100UL, 0x0302030201000100UL, 0x0302030203020100UL, // p3
+        0x0100010001000100UL, 0x0100010001000100UL, 0x0504050403020302UL, 0x0504050403020302UL, // p4
+        0x0302030201000100UL, 0x0302030201000100UL, 0x0504050401000100UL, 0x0504050401000100UL, // p5
+        0x0504050401000100UL, 0x0504050401000100UL, 0x0302030203020302UL, 0x0302030203020302UL, // p6
+        0x0302030201000100UL, 0x0302030201000100UL, 0x0302030205040504UL, 0x0302030205040504UL, // p7
+        0x0100010001000100UL, 0x0100010001000100UL, 0x0302030203020302UL, 0x0504050405040504UL, // p8
+        0x0100010001000100UL, 0x0302030203020302UL, 0x0302030203020302UL, 0x0504050405040504UL, // p9
+        0x0100010001000100UL, 0x0302030203020302UL, 0x0504050405040504UL, 0x0504050405040504UL, // p10
+        0x0504030201000100UL, 0x0504030201000100UL, 0x0504030201000100UL, 0x0504030201000100UL, // p11
+        0x0504030203020100UL, 0x0504030203020100UL, 0x0504030203020100UL, 0x0504030203020100UL, // p12
+        0x0504050403020100UL, 0x0504050403020100UL, 0x0504050403020100UL, 0x0504050403020100UL, // p13
+        0x0302030201000100UL, 0x0504030203020100UL, 0x0504050403020302UL, 0x0504050405040302UL, // p14
+        0x0302030201000100UL, 0x0302010001000504UL, 0x0100010005040504UL, 0x0100050405040504UL, // p15
+    ];
+    // csharpier-ignore-end
+
+    // BC7 Mode 0
+    //
+    // Mode 0 is laid out like this
+    // | Bit Range | Width | Field
+    // |  0        |   1   | mode marker
+    // |  1 .. 4   |   4   | partition index        (0..15)
+    // |  5 .. 28  |  24   | red   endpoints R0..R5 (6 x 4 bits)
+    // | 29 .. 52  |  24   | green endpoints G0..G5 (6 x 4 bits)
+    // | 53 .. 76  |  24   | blue  endpoints B0..B5 (6 x 4 bits)
+    // | 77 .. 82  |   6   | P-bits                 (6 x 1 bits)
+    // | 83 .. 127 |  45   | colour indices         (16 texels, 2/3 bits each)
+    //
+    // Mode 0 decoding should work like this:
+    //   - The 4-bit partition index selects one of 16 fixed patterns (see the partition table)
+    //     that splits the 16 texels into 3 subsets, assigning each texel a subset 0/1/2.
+    //   - Each subset has two RGB endpoints; every endpoint is 4 bits per channel plus one
+    //     shared p-bit, forming a 5-bit value unquantized to 8 bits as (v << 3) | (v >> 2).
+    //   - Each texel carries a colour index selecting an interpolation weight from the 3-bit
+    //     weight table. Indices are 3 bits, except the anchor texel of each subset, which is
+    //     2 bits with an implied high bit of 0 (subset 0's anchor is texel 0; subsets 1 and 2
+    //     use the fixed anchor tables).
+    //   - Texel i's colour is, per channel, interpolate(e0, e1, w) = (e0*(64-w) + e1*w + 32) >> 6,
+    //     where e0/e1 are the two endpoints of that texel's subset and w is its weight.
+    //   - Alpha has no bits in this mode and is always opaque (255).
     static unsafe void Mode0Avx(ulong lo, ulong hi, byte* rgba)
     {
-        int partition = (int)((lo >> 1) & 0xF);
+        static ulong Unquantize(ulong v) => (v << 3) | ((v >> 2) & 0x070707070707);
 
-        // The three 24-bit endpoint runs (6 nibbles each) plus the 6-bit p-bit run.
-        // R and G lie wholly in lo; B straddles the lo/hi boundary; the p-bits are in hi.
-        ulong rRun = (lo >> 5) & 0xFFFFFF;
-        ulong gRun = (lo >> 29) & 0xFFFFFF;
-        ulong bRun = ((lo >> 53) | (hi << 11)) & 0xFFFFFF;
-        ulong pRun = (hi >> 13) & 0x3F;
-
-        // Scatter each 4-bit endpoint into its own byte lane and each p-bit into bit 0 of
-        // its lane. Lane 2s+e then holds subset s, endpoint e (matching the scalar order).
-        const ulong NibbleLanes = 0x0F0F0F0F0F0Ful;
-        const ulong PbitLanes = 0x010101010101ul;
-        ulong rN = Bmi2.pdep_u64(rRun, NibbleLanes);
-        ulong gN = Bmi2.pdep_u64(gRun, NibbleLanes);
-        ulong bN = Bmi2.pdep_u64(bRun, NibbleLanes);
-        ulong pB = Bmi2.pdep_u64(pRun, PbitLanes);
-
-        // endpoint5 = (nibble << 1) | pbit, then unquantize 5 -> 8 bits, all lanes at once.
-        byte* ur = stackalloc byte[8];
-        byte* ug = stackalloc byte[8];
-        byte* ub = stackalloc byte[8];
-        *(ulong*)ur = Unquantize5x8((rN << 1) | pB);
-        *(ulong*)ug = Unquantize5x8((gN << 1) | pB);
-        *(ulong*)ub = Unquantize5x8((bN << 1) | pB);
-
-        int anchor1 = AnchorIndex3_1[partition];
-        int anchor2 = AnchorIndex3_2[partition];
-        int anchorBits = 1 | (1 << anchor1) | (1 << anchor2);
-
-        byte* idx = stackalloc byte[16];
-        ExtractIndices(lo, hi, Mode0IndexStart, 3, anchorBits, idx);
-
-        byte* weights = stackalloc byte[16];
-        MapWeights(idx, Weights3Vec, Weights3, weights);
-
-        for (int i = 0; i < 16; i++)
+        if (IsAvx2Supported)
         {
-            int subset = PartitionTable3[partition * 16 + i];
-            int w = weights[i];
-            int e0 = subset * 2;
-            Write(
-                rgba,
-                i,
-                Interpolate(ur[e0], ur[e0 + 1], w),
-                Interpolate(ug[e0], ug[e0 + 1], w),
-                Interpolate(ub[e0], ub[e0 + 1], w),
-                255
+            const ulong DepMask = 0x0F0F0F0F0F0Ful << 1;
+            const ulong PbtMask = 0x010101010101ul;
+
+            // Extract partition and endpoints
+            int partition = (int)((lo >> 1) & 0xF);
+            ulong rB = pdep_u64(lo >> 5, DepMask);
+            ulong gB = pdep_u64(lo >> 29, DepMask);
+            ulong bB = pdep_u64((lo >> 53) | (hi << 11), DepMask);
+            ulong pB = pdep_u64(hi >> 13, PbtMask);
+
+            // Unquantize: replicate top 3 bits to the bottom, shift by 5
+            rB = Unquantize(rB | pB);
+            gB = Unquantize(gB | pB);
+            bB = Unquantize(bB | pB);
+
+            ulong idata = hi >> (83 - 64);
+            ulong ilo = pdep_u64(idata, Mode0IndexMaskLo[partition]);
+            ulong ihi = pdep_u64(idata >> Mode0IndexLoBits[partition], Mode0IndexMaskHi[partition]);
+
+            v128 w = shuffle_epi8(Weights3Vec, new(ilo, ihi));
+            v128 invw = sub_epi8(new((byte)64), w); // 64 - w
+
+            // Interleave (64-w, w) so we can use a pmaddubs to compute e0*(64-w) + e1*w
+            v256 pairs = new(unpacklo_epi8(invw, w), unpackhi_epi8(invw, w));
+
+            // Endpoint gather control for this partition
+            v256 gather = new(
+                Mode0Gather[partition * 4 + 0],
+                Mode0Gather[partition * 4 + 1],
+                Mode0Gather[partition * 4 + 2],
+                Mode0Gather[partition * 4 + 3]
             );
+
+            // e0*(64-w) + e1*w
+            v256 resR = mm256_maddubs_epi16(mm256_shuffle_epi8(new(rB), gather), pairs);
+            v256 resG = mm256_maddubs_epi16(mm256_shuffle_epi8(new(gB), gather), pairs);
+            v256 resB = mm256_maddubs_epi16(mm256_shuffle_epi8(new(bB), gather), pairs);
+
+            // (res + 32) >> 6
+            resR = mm256_srli_epi16(mm256_add_epi16(resR, new((ushort)32)), 6);
+            resG = mm256_srli_epi16(mm256_add_epi16(resG, new((ushort)32)), 6);
+            resB = mm256_srli_epi16(mm256_add_epi16(resB, new((ushort)32)), 6);
+
+            // We now need to transpose from
+            // resR = 0R0R0R0R0R0R0R0R
+            // resB = 0B0B0B0B0B0B0B0B
+            // resG = 0G0G0G0G0G0G0G0G
+            // resA = 0A0A0A0A0A0A0A0A
+            //
+            // to
+            // lo = RGBARGBARGBARGBA
+            // hi = RGBARGBARGBARGBA
+
+            var rg = mm256_or_si256(resR, mm256_slli_epi16(resG, 8));
+            var ba = mm256_or_si256(resB, new((ushort)0xFF00));
+            var rgbaLo = mm256_unpacklo_epi16(rg, ba); // RGBA, pixels {0..3, 8..11}
+            var rgbaHi = mm256_unpackhi_epi16(rg, ba); // RGBA, pixels {4..7, 12..15}
+
+            var output = (v256*)rgba;
+            output[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
+            output[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
         }
     }
-
-    /// <summary>
-    /// Unquantizes eight independent 5-bit values (one per byte lane) to 8 bits, matching
-    /// the scalar <c>Unquantize(v, 5)</c> (<c>v &lt;&lt;= 3; v |= v &gt;&gt; 5</c>) per lane.
-    /// Each lane's value is &lt;= 0x1F so the byte-wide <c>&lt;&lt; 3</c> never overflows its
-    /// lane, and the <c>0x07</c> mask keeps the <c>&gt;&gt; 5</c> from pulling neighbouring
-    /// lanes' low bits into a lane's high bits.
-    /// </summary>
-    static ulong Unquantize5x8(ulong five)
-    {
-        ulong q = (five & 0x1F1F1F1F1F1F1F1Ful) << 3;
-        return q | ((q >> 5) & 0x0707070707070707ul);
-    }
+    #endregion
 
     #endregion
 }
