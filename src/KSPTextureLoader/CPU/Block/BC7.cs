@@ -550,7 +550,10 @@ internal static class BC7
                     Mode2(ref reader, lo, hi, rgba);
                 break;
             case 3:
-                Mode3(ref reader, lo, hi, rgba);
+                if (Avx2.IsAvx2Supported)
+                    Mode3Avx(lo, hi, rgba);
+                else
+                    Mode3(ref reader, lo, hi, rgba);
                 break;
             case 4:
                 Mode4(ref reader, lo, hi, rgba);
@@ -1706,6 +1709,158 @@ internal static class BC7
 
             // Transpose the three planar channels (+ constant opaque alpha) to interleaved
             // RGBA, exactly as in Mode 0/1.
+            var rg = mm256_or_si256(resR, mm256_slli_epi16(resG, 8));
+            var ba = mm256_or_si256(resB, new((ushort)0xFF00));
+            var rgbaLo = mm256_unpacklo_epi16(rg, ba); // RGBA, pixels {0..3, 8..11}
+            var rgbaHi = mm256_unpackhi_epi16(rg, ba); // RGBA, pixels {4..7, 12..15}
+
+            var output = (v256*)rgba;
+            output[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
+            output[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
+        }
+    }
+    #endregion
+
+    #region Mode 3
+    // The Mode 3 index stream starts at bit 98 (4 mode terminator + 6 partition + 12*7
+    // endpoint + 4 p-bit) and is always exactly 30 bits (16*2 minus the 2 anchor MSBs), so
+    // it lies entirely in hi (bits 34..63) and right-aligns with a single shift.
+    //
+    // Per-partition pdep scatter masks for the Mode 3 index stream, precomputed for all 64
+    // partitions: lane i takes pixel i's 2-bit index, except the 2 anchor lanes which take
+    // 1 bit so their forced-zero MSB falls out for free. Mode3IndexLoBits[p] = popcount of
+    // maskLo is how far to shift the packed run before depositing lanes 8..15. Derived from
+    // AnchorIndex2_1 (subset 1's anchor; subset 0's is always pixel 0) with width 2.
+    //
+    // The endpoint-gather control is identical to Mode 1's (both split the block into two
+    // subsets by indexing PartitionTable2), so Mode1Gather is reused directly below.
+    // csharpier-ignore-start
+    static readonly ulong[] Mode3IndexMaskLo =
+    [
+        0x0303030303030301UL, 0x0303030303030301UL, 0x0303030303030301UL, 0x0303030303030301UL,
+        0x0303030303030301UL, 0x0303030303030301UL, 0x0303030303030301UL, 0x0303030303030301UL,
+        0x0303030303030301UL, 0x0303030303030301UL, 0x0303030303030301UL, 0x0303030303030301UL,
+        0x0303030303030301UL, 0x0303030303030301UL, 0x0303030303030301UL, 0x0303030303030301UL,
+        0x0303030303030301UL, 0x0303030303010301UL, 0x0303030303030301UL, 0x0303030303010301UL,
+        0x0303030303010301UL, 0x0303030303030301UL, 0x0303030303030301UL, 0x0303030303030301UL,
+        0x0303030303010301UL, 0x0303030303030301UL, 0x0303030303010301UL, 0x0303030303010301UL,
+        0x0303030303030301UL, 0x0303030303030301UL, 0x0303030303010301UL, 0x0303030303010301UL,
+        0x0303030303030301UL, 0x0303030303030301UL, 0x0301030303030301UL, 0x0303030303030301UL,
+        0x0303030303010301UL, 0x0303030303030301UL, 0x0303030303030301UL, 0x0303030303030301UL,
+        0x0303030303010301UL, 0x0303030303030301UL, 0x0303030303010301UL, 0x0303030303010301UL,
+        0x0303030303010301UL, 0x0303030303030301UL, 0x0303030303030301UL, 0x0301030303030301UL,
+        0x0301030303030301UL, 0x0303030303010301UL, 0x0301030303030301UL, 0x0303030303030301UL,
+        0x0303030303030301UL, 0x0303030303030301UL, 0x0303030303010301UL, 0x0303030303010301UL,
+        0x0303030303030301UL, 0x0303030303030301UL, 0x0303030303030301UL, 0x0303030303030301UL,
+        0x0303030303030301UL, 0x0303030303010301UL, 0x0303030303010301UL, 0x0303030303030301UL,
+    ];
+    static readonly ulong[] Mode3IndexMaskHi =
+    [
+        0x0103030303030303UL, 0x0103030303030303UL, 0x0103030303030303UL, 0x0103030303030303UL,
+        0x0103030303030303UL, 0x0103030303030303UL, 0x0103030303030303UL, 0x0103030303030303UL,
+        0x0103030303030303UL, 0x0103030303030303UL, 0x0103030303030303UL, 0x0103030303030303UL,
+        0x0103030303030303UL, 0x0103030303030303UL, 0x0103030303030303UL, 0x0103030303030303UL,
+        0x0103030303030303UL, 0x0303030303030303UL, 0x0303030303030301UL, 0x0303030303030303UL,
+        0x0303030303030303UL, 0x0303030303030301UL, 0x0303030303030301UL, 0x0103030303030303UL,
+        0x0303030303030303UL, 0x0303030303030301UL, 0x0303030303030303UL, 0x0303030303030303UL,
+        0x0303030303030301UL, 0x0303030303030301UL, 0x0303030303030303UL, 0x0303030303030303UL,
+        0x0103030303030303UL, 0x0103030303030303UL, 0x0303030303030303UL, 0x0303030303030301UL,
+        0x0303030303030303UL, 0x0303030303030301UL, 0x0103030303030303UL, 0x0103030303030303UL,
+        0x0303030303030303UL, 0x0303030303030301UL, 0x0303030303030303UL, 0x0303030303030303UL,
+        0x0303030303030303UL, 0x0103030303030303UL, 0x0103030303030303UL, 0x0303030303030303UL,
+        0x0303030303030303UL, 0x0303030303030303UL, 0x0303030303030303UL, 0x0303030303030301UL,
+        0x0103030303030303UL, 0x0103030303030303UL, 0x0303030303030303UL, 0x0303030303030303UL,
+        0x0103030303030303UL, 0x0103030303030303UL, 0x0103030303030303UL, 0x0103030303030303UL,
+        0x0103030303030303UL, 0x0303030303030303UL, 0x0303030303030303UL, 0x0103030303030303UL,
+    ];
+    static readonly byte[] Mode3IndexLoBits =
+    [
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 14, 15, 14, 14, 15, 15, 15, 14, 15, 14, 14, 15, 15, 14, 14,
+        15, 15, 14, 15, 14, 15, 15, 15, 14, 15, 14, 14, 14, 15, 15, 14,
+        14, 14, 14, 15, 15, 15, 14, 14, 15, 15, 15, 15, 15, 14, 14, 15,
+    ];
+    // csharpier-ignore-end
+
+    // BC7 Mode 3
+    //
+    // Mode 3 is laid out like this
+    // | Bit Range | Width | Field
+    // |  0 ..  3  |   4   | mode marker
+    // |  4 ..  9  |   6   | partition index        (0..63)
+    // | 10 .. 37  |  28   | red   endpoints R0..R3 (4 x 7 bits)
+    // | 38 .. 65  |  28   | green endpoints G0..G3 (4 x 7 bits)
+    // | 66 .. 93  |  28   | blue  endpoints B0..B3 (4 x 7 bits)
+    // | 94 .. 97  |   4   | P-bits                 (4 x 1 bits, one per endpoint)
+    // | 98 .. 127 |  30   | colour indices         (16 texels, 1/2 bits each)
+    //
+    // Mode 3 decoding should work like this:
+    //   - The 6-bit partition index selects one of 64 fixed patterns (see the partition table)
+    //     that splits the 16 texels into 2 subsets, assigning each texel a subset 0/1.
+    //   - Each subset has two RGB endpoints; every endpoint is 7 bits per channel plus its own
+    //     p-bit, forming a full 8-bit value directly — no unquantization is needed.
+    //   - Each texel carries a colour index selecting an interpolation weight from the 2-bit
+    //     weight table. Indices are 2 bits, except the anchor texel of each subset, which is
+    //     1 bit with an implied high bit of 0 (subset 0's anchor is texel 0; subset 1 uses the
+    //     fixed anchor table).
+    //   - Texel i's colour is, per channel, interpolate(e0, e1, w) = (e0*(64-w) + e1*w + 32) >> 6,
+    //     where e0/e1 are the two endpoints of that texel's subset and w is its weight.
+    //   - Alpha has no bits in this mode and is always opaque (255).
+    static unsafe void Mode3Avx(ulong lo, ulong hi, byte* rgba)
+    {
+        if (IsAvx2Supported)
+        {
+            const ulong DepMask = 0x7F7F7F7Ful << 1; // 7-bit endpoint at bits 1..7, bit 0 free
+            const ulong PbtMask = 0x01010101ul; // 4 unique p-bits, one per endpoint byte
+
+            // Extract partition and endpoints. R lies wholly in lo, B wholly in hi; G straddles
+            // the lo/hi boundary at bit 64 (G0..G2 and G3's low 5 bits in lo, G3's top 2 in hi).
+            int partition = (int)((lo >> 4) & 0x3F);
+            ulong rB = pdep_u64(lo >> 10, DepMask);
+            ulong gB = pdep_u64((lo >> 38) | (hi << 26), DepMask);
+            ulong bB = pdep_u64(hi >> 2, DepMask);
+
+            // Four unique p-bits, one per endpoint (pb0->s0e0, pb1->s0e1, pb2->s1e0, pb3->s1e1),
+            // deposited into bit 0 of each endpoint's byte lane.
+            ulong pB = pdep_u64(hi >> 30, PbtMask);
+
+            // 7 bits + p-bit exactly fills a byte, so the merged value is already the final
+            // 8-bit channel — unlike Modes 0-2 there is no unquantize step.
+            rB |= pB;
+            gB |= pB;
+            bB |= pB;
+
+            ulong idata = hi >> (98 - 64);
+            ulong ilo = pdep_u64(idata, Mode3IndexMaskLo[partition]);
+            ulong ihi = pdep_u64(idata >> Mode3IndexLoBits[partition], Mode3IndexMaskHi[partition]);
+
+            v128 w = shuffle_epi8(Weights2Vec, new(ilo, ihi));
+            v128 invw = sub_epi8(new((byte)64), w); // 64 - w
+
+            // Interleave (64-w, w) so we can use a pmaddubs to compute e0*(64-w) + e1*w
+            v256 pairs = new(unpacklo_epi8(invw, w), unpackhi_epi8(invw, w));
+
+            // Endpoint gather control for this partition (shared with Mode 1: same 2-subset
+            // PartitionTable2 layout, selectors in {0..3}).
+            v256 gather = new(
+                Mode1Gather[partition * 4 + 0],
+                Mode1Gather[partition * 4 + 1],
+                Mode1Gather[partition * 4 + 2],
+                Mode1Gather[partition * 4 + 3]
+            );
+
+            // e0*(64-w) + e1*w
+            v256 resR = mm256_maddubs_epi16(mm256_shuffle_epi8(new(rB), gather), pairs);
+            v256 resG = mm256_maddubs_epi16(mm256_shuffle_epi8(new(gB), gather), pairs);
+            v256 resB = mm256_maddubs_epi16(mm256_shuffle_epi8(new(bB), gather), pairs);
+
+            // (res + 32) >> 6
+            resR = mm256_srli_epi16(mm256_add_epi16(resR, new((ushort)32)), 6);
+            resG = mm256_srli_epi16(mm256_add_epi16(resG, new((ushort)32)), 6);
+            resB = mm256_srli_epi16(mm256_add_epi16(resB, new((ushort)32)), 6);
+
+            // Transpose the three planar channels (+ constant opaque alpha) to interleaved
+            // RGBA, exactly as in Mode 0/1/2.
             var rg = mm256_or_si256(resR, mm256_slli_epi16(resG, 8));
             var ba = mm256_or_si256(resB, new((ushort)0xFF00));
             var rgbaLo = mm256_unpacklo_epi16(rg, ba); // RGBA, pixels {0..3, 8..11}
