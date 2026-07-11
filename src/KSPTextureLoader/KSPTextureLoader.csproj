@@ -60,19 +60,28 @@
 
     <ItemGroup>
         <!--
-            ILMerged Unity.Burst bundle (intrinsics + Mono software fallbacks),
-            produced by ../KSPTextureLoader.Burst. Private=true so it ships in our
-            Plugins folder; its assembly identity is KSPTextureLoader.Burst, distinct
-            from Unity.Burst, so it never clashes with a KSPBurst-provided Unity.Burst
-            at runtime. Regenerate deps/KSPTextureLoader.Burst.dll when Burst changes.
+            ILRepacked Unity.Burst + Unity.Mathematics bundle (intrinsics + Mono
+            software fallbacks + float4/int4/math.* types).
+
+            This is a committed, prebuilt binary: the KSPTextureLoader.Burst project
+            (deliberately kept OUT of the solution) produces it, and its output is
+            copied into deps/ and committed. We reference that committed file directly,
+            so nothing here depends on KSPBurst being installed to build — CI and a
+            fresh clone both just compile against the checked-in DLL, and the editor
+            loads it straight from disk so IntelliSense sees the Burst/Mathematics
+            types. Regenerate deps/KSPTextureLoader.Burst.dll (see CONTRIBUTING.md) when
+            the bundled Burst/Mathematics version changes.
+
+            Private=true copies the merged DLL into our output so it ships in Plugins.
+            Its assembly identity is KSPTextureLoader.Burst, distinct from
+            Unity.Burst/Unity.Mathematics, so it never clashes with a KSPBurst-provided
+            copy at runtime.
         -->
         <Reference Include="KSPTextureLoader.Burst">
             <HintPath>$(RepoRootPath)\deps\KSPTextureLoader.Burst.dll</HintPath>
             <Private>true</Private>
         </Reference>
-    </ItemGroup>
 
-    <ItemGroup>
         <ProjectReference Include="../KSPTextureLoader.Analyzers/KSPTextureLoader.Analyzers.csproj"
                           OutputItemType="Analyzer"
                           ReferenceOutputAssembly="false" />

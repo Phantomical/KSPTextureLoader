@@ -1,64 +1,102 @@
 <!--
-    This project produces KSPTextureLoader.Burst.dll: an ILMerged bundle of
-    Unity.Burst.dll and its private dependency Unity.Burst.Unsafe.dll.
+    This project produces KSPTextureLoader.Burst.dll: an ILRepack bundle of
+    Unity.Burst.dll, its private dependency Unity.Burst.Unsafe.dll, and
+    Unity.Mathematics.dll, merged INTO this project's own (otherwise empty) output
+    assembly.
 
-    The point is to let KSPTextureLoader use Burst intrinsics (v128/v256/X86.*
-    and their Mono software fallbacks) WITHOUT taking a hard dependency on
-    KSPBurst being installed alongside us. We pack the intrinsics into our own
-    assembly so they resolve regardless of whether the player has KSPBurst.
+    The point is to let KSPTextureLoader use Burst intrinsics (v128/v256/X86.* and
+    their Mono software fallbacks) and the Unity.Mathematics types
+    (float4/int4/math.*) WITHOUT taking a hard dependency on KSPBurst being installed
+    alongside us. We pack the intrinsics and math types into our own assembly —
+    identity KSPTextureLoader.Burst, distinct from Unity.Burst / Unity.Mathematics —
+    so they resolve regardless of whether the player has KSPBurst, and never clash
+    with a KSPBurst-provided copy at runtime.
 
-    Modeled on BackgroundResourceProcessing.System.Memory. The source DLLs are
-    read from the KSPBurst install in the reference KSP directory, so this only
-    does real work on a Windows dev machine that has KSPBurst installed (ILMerge
-    is a Windows-only .NET Framework tool). On Linux/CI the References and the
-    ILMerge step drop out and the committed deps/KSPTextureLoader.Burst.dll is
-    used as-is. Regenerate + commit that DLL when the bundled Burst changes.
+    This is a STANDALONE REGENERATION TOOL, deliberately NOT part of the solution:
+    the main build references a committed, prebuilt copy at deps/KSPTextureLoader.Burst.dll,
+    so building the mod (and CI) needs neither this project nor a KSPBurst install.
+    You only build this project by hand when the bundled Burst/Mathematics version
+    changes: it writes the merged DLL to its own bin, and you then copy that output
+    over deps/KSPTextureLoader.Burst.dll and commit it (see CONTRIBUTING.md).
+
+    Building it requires a KSPBurst (or KSPBurst-Lite) install: the source DLLs are
+    read from GameData/000_KSPBurst/Plugins in the KSP directory pointed at by
+    ReferencePath (KSPTextureLoader.props.user). ILRepack is a cross-platform
+    (Mono.Cecil) merger, so unlike ILMerge this regeneration runs on Windows, Linux
+    and macOS alike.
 -->
 
 <Project Sdk="Microsoft.NET.Sdk">
     <!--
-        Import ReferencePath the same way KSPBuildTools does. This MUST come before
-        the PropertyGroup below, since that group derives BurstPluginsDir /
-        CanRunILMerge from ReferencePath and MSBuild expands imports in place.
+        Import ReferencePath (the KSP install root) from the repo-root props.user, the
+        same value KSPBuildTools uses. This project is built standalone, not through
+        the solution, so we resolve props.user by a path relative to this file rather
+        than via $(SolutionDir) (which isn't set outside a solution build). MUST come
+        before the PropertyGroup below, which derives the KSPBurst/Managed paths from it.
     -->
     <Import
-        Condition=" '$(SolutionDir)' != '' And Exists('$(SolutionDir)$(SolutionName).props.user') "
-        Project="$(SolutionDir)$(SolutionName).props.user" />
+        Condition=" Exists('$(MSBuildThisFileDirectory)..\..\KSPTextureLoader.props.user') "
+        Project="$(MSBuildThisFileDirectory)..\..\KSPTextureLoader.props.user" />
 
     <PropertyGroup>
-        <Description>ILMerged Unity.Burst bundle for KSPTextureLoader</Description>
+        <Description>ILRepacked Unity.Burst + Unity.Mathematics bundle for KSPTextureLoader</Description>
         <TargetFramework>net48</TargetFramework>
 
-        <!-- This project only repackages Burst; it has no sources of its own. -->
+        <!--
+            This project has no sources of its own; it only repackages Burst. Its
+            empty compiled output is the PRIMARY assembly ILRepack merges into, which
+            is what gives the merged DLL the identity KSPTextureLoader.Burst.
+        -->
         <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
         <!-- CS2008: "no source files" — expected, this project compiles nothing. -->
         <NoWarn>CS2008</NoWarn>
         <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
         <GenerateDocumentationFile>false</GenerateDocumentationFile>
-        <DebugType>portable</DebugType>
+        <!-- The Burst bundle is third-party merged code we never debug into; skip
+             PDBs entirely to avoid cross-platform portable-PDB merge snags. -->
+        <DebugType>none</DebugType>
 
-        <!-- Where KSPBurst ships the assemblies we merge. -->
-        <BurstPluginsDir>$(ReferencePath)/GameData/000_KSPBurst/Plugins</BurstPluginsDir>
-        <!-- KSP's Managed dir; ILMerge searches here to resolve (not merge)
-             external references like UnityEngine.CoreModule. -->
-        <KSPManagedDir>$(ReferencePath)/KSP_x64_Data/Managed</KSPManagedDir>
-        <!-- The final merged output that the main project consumes. -->
-        <BurstMergedOutput>$(SolutionDir)deps/KSPTextureLoader.Burst.dll</BurstMergedOutput>
+        <!--
+            A ProjectReference to us must bind against the MERGED implementation
+            assembly, not an auto-generated reference assembly built from our (empty)
+            sources — that would expose none of the Burst/Mathematics types. Turn off
+            ref-assembly generation so consumers compile against $(TargetPath) after
+            ILRepack has rewritten it.
+        -->
+        <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
 
-        <!-- Only usable when ILMerge (a Windows exe) can run and the source DLLs exist. -->
-        <CanRunILMerge Condition=" '$(CanRunILMerge)' == '' ">false</CanRunILMerge>
-        <CanRunILMerge
-            Condition=" $([MSBuild]::IsOsPlatform('Windows')) And Exists('$(BurstPluginsDir)/Unity.Burst.dll') ">true</CanRunILMerge>
+        <!--
+            Locate the KSP install we read the merge inputs from. Local dev sets
+            ReferencePath (via props.user) to the KSP root; KSPBuildTools' CI compile
+            action instead passes KSPBT_ManagedPath (=<ksproot>/KSP_x64_Data/Managed),
+            so derive the root from that when ReferencePath is absent.
+        -->
+        <KspRoot Condition=" '$(ReferencePath)' != '' ">$(ReferencePath)</KspRoot>
+        <KspRoot
+            Condition=" '$(KspRoot)' == '' And '$(KSPBT_ManagedPath)' != '' ">$([System.IO.Path]::GetFullPath('$(KSPBT_ManagedPath)/../..'))</KspRoot>
+
+        <!-- Where KSPBurst / KSPBurst-Lite ship the assemblies we merge. -->
+        <BurstPluginsDir>$(KspRoot)/GameData/000_KSPBurst/Plugins</BurstPluginsDir>
+        <!-- KSP's Managed dir; ILRepack searches here to resolve (not merge) external
+             references like UnityEngine.CoreModule and System. -->
+        <KSPManagedDir>$(KspRoot)/KSP_x64_Data/Managed</KSPManagedDir>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="ILMerge" Version="3.0.41" />
+        <!--
+            Cross-platform ILMerge replacement (Mono.Cecil based); provides the
+            <ILRepack> MSBuild task. Build-time only.
+        -->
+        <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.45">
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
         <!--
             This project does not use KSPBuildTools, so it does not inherit the trick
             of resolving net48 references from KSP's Managed folder. Pull in the .NET
             Framework reference assemblies so restore/build works on any platform
-            (notably Linux CI, where there is no targeting pack), even when the ILMerge
-            step below is skipped.
+            (notably Linux CI, where there is no targeting pack). This also gives
+            ILRepack a search path for framework references (mscorlib/System/...) via
+            $(FrameworkPathOverride).
         -->
         <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
             <PrivateAssets>all</PrivateAssets>
@@ -66,34 +104,43 @@
     </ItemGroup>
 
     <!--
-        The DLLs to merge. Private=true so they get copied into TargetDir where
-        ILMerge picks them up. Guarded on existence so a checkout without KSPBurst
-        (e.g. Linux CI) still restores and "builds" this project into an empty
-        assembly instead of failing to resolve the references.
+        Merge the KSPBurst DLLs into our own output assembly. Our empty compiled
+        output ($(TargetPath)) is listed FIRST so it is ILRepack's primary assembly:
+        the merged result keeps its identity (KSPTextureLoader.Burst) while the
+        Unity.Burst/Unsafe/Mathematics types are folded in. Inputs are read straight
+        from the KSPBurst install rather than copied local, so nothing lands in our
+        output dir but the merged DLL, which you then copy over
+        deps/KSPTextureLoader.Burst.dll and commit.
     -->
-    <ItemGroup Condition=" '$(CanRunILMerge)' == 'true' ">
-        <Reference Include="Unity.Burst">
-            <HintPath>$(BurstPluginsDir)/Unity.Burst.dll</HintPath>
-            <Private>true</Private>
-        </Reference>
-        <Reference Include="Unity.Burst.Unsafe">
-            <HintPath>$(BurstPluginsDir)/Unity.Burst.Unsafe.dll</HintPath>
-            <Private>true</Private>
-        </Reference>
-    </ItemGroup>
+    <Target Name="ILRepackBurst" AfterTargets="AfterBuild">
+        <Error
+            Condition=" !Exists('$(BurstPluginsDir)/Unity.Burst.dll') "
+            Text="KSPBurst assemblies not found under $(BurstPluginsDir). Install KSPBurst or KSPBurst-Lite into the referenced KSP install so the Burst/Mathematics bundle can be built (local dev: point ReferencePath in KSPTextureLoader.props.user at a KSP install that has KSPBurst; CI: the install-dependencies step handles this)." />
 
-    <Target Name="ILPack" AfterTargets="AfterBuild" Condition=" '$(CanRunILMerge)' == 'true' ">
-        <MakeDir Directories="$(SolutionDir)deps" />
+        <ItemGroup>
+            <!-- Primary first, then the assemblies to fold in. -->
+            <BurstMergeInput Include="$(TargetPath)" />
+            <BurstMergeInput Include="$(BurstPluginsDir)/Unity.Burst.dll" />
+            <BurstMergeInput Include="$(BurstPluginsDir)/Unity.Burst.Unsafe.dll" />
+            <BurstMergeInput Include="$(BurstPluginsDir)/Unity.Mathematics.dll" />
 
-        <!--
-            Unity.Burst is listed first so it is the "primary" assembly; the merged
-            output takes its name from /out (KSPTextureLoader.Burst). /allowDup lets
-            the compiler-injected attributes (EmbeddedAttribute, IsReadOnlyAttribute,
-            ...) that appear in both inputs collapse into one instead of erroring.
-        -->
-        <Exec
-            Command="&quot;$(ILMergeConsolePath)&quot; /target:library /allowDup /lib:&quot;$(KSPManagedDir)&quot; /out:&quot;$(BurstMergedOutput)&quot; &quot;$(TargetDir)Unity.Burst.dll&quot; &quot;$(TargetDir)Unity.Burst.Unsafe.dll&quot;" />
+            <!-- Search paths for external references ILRepack must resolve: KSP's
+                 Unity/System assemblies, plus the net48 reference assemblies for
+                 mscorlib/System on platforms without a targeting pack. -->
+            <BurstLibPath Include="$(KSPManagedDir)" />
+            <BurstLibPath Include="$(FrameworkPathOverride)" Condition=" '$(FrameworkPathOverride)' != '' " />
+        </ItemGroup>
 
-        <Message Importance="high" Text="ILMerge -> $(BurstMergedOutput)" />
+        <ILRepack
+            Parallel="true"
+            Internalize="false"
+            DebugInfo="false"
+            InputAssemblies="@(BurstMergeInput)"
+            LibraryPath="@(BurstLibPath)"
+            TargetKind="Dll"
+            OutputFile="$(TargetPath)" />
+
+        <Message Importance="high" Text="ILRepack -> $(TargetPath)" />
+        <Message Importance="high" Text="Now copy this over deps\KSPTextureLoader.Burst.dll and commit it to update the bundled binary." />
     </Target>
 </Project>
