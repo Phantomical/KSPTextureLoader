@@ -568,7 +568,10 @@ internal static class BC7
                     Mode5(ref reader, lo, hi, rgba);
                 break;
             case 6:
-                Mode6(ref reader, lo, hi, rgba);
+                if (Avx2.IsAvx2Supported)
+                    Mode6Avx(lo, hi, rgba);
+                else
+                    Mode6(ref reader, lo, hi, rgba);
                 break;
             default:
                 Mode7(ref reader, lo, hi, rgba);
@@ -2106,6 +2109,97 @@ internal static class BC7
             // Transpose the four planar channels to interleaved RGBA (real alpha).
             var rg = mm256_or_si256(chR, mm256_slli_epi16(chG, 8));
             var ba = mm256_or_si256(chB, mm256_slli_epi16(chA, 8));
+            var rgbaLo = mm256_unpacklo_epi16(rg, ba); // RGBA, pixels {0..3, 8..11}
+            var rgbaHi = mm256_unpackhi_epi16(rg, ba); // RGBA, pixels {4..7, 12..15}
+
+            var output = (v256*)rgba;
+            output[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
+            output[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
+        }
+    }
+    #endregion
+
+    #region Mode 6
+    // BC7 Mode 6
+    //
+    // Mode 6 is laid out like this
+    // | Bit Range | Width | Field
+    // |  0 ..  6  |   7   | mode marker
+    // |  7 .. 20  |  14   | red   endpoints R0,R1 (2 x 7 bits)
+    // | 21 .. 34  |  14   | green endpoints G0,G1 (2 x 7 bits)
+    // | 35 .. 48  |  14   | blue  endpoints B0,B1 (2 x 7 bits)
+    // | 49 .. 62  |  14   | alpha endpoints A0,A1 (2 x 7 bits)
+    // | 63 .. 64  |   2   | P-bits pb0,pb1 (pb0 -> every e0, pb1 -> every e1)
+    // | 65 .. 127 |  63   | RGBA indices (4-bit, 16 texels, texel 0 anchored to 3 bits)
+    //
+    // Mode 6 decoding should work like this:
+    //   - There is a single subset, so there is no partition and no per-pixel endpoint gather —
+    //     every texel selects (e0, e1) through the same constant [0, 1] control.
+    //   - Every endpoint is 7 bits per channel plus a shared p-bit — pb0 for all four e0 channels,
+    //     pb1 for all four e1 channels — forming a full 8-bit value directly, so no unquantization
+    //     is needed (as in Mode 3).
+    //   - A single 4-bit index set drives all four channels (no rotation, no idxMode). Texel 0 is
+    //     the sole anchor (3 bits, implied high bit 0); the rest are 4 bits.
+    //   - Texel i's channel value is interpolate(e0, e1, w) = (e0*(64-w) + e1*w + 32) >> 6, with w
+    //     from the 4-bit weight table.
+    //
+    // Only pb1 and the index stream lie in hi; all eight endpoints and pb0 are in lo, so no
+    // endpoint straddles. The single subset and fixed anchor keep the gather and index mask
+    // constant, so Mode 6 adds no lookup tables.
+    static unsafe void Mode6Avx(ulong lo, ulong hi, byte* rgba)
+    {
+        if (IsAvx2Supported)
+        {
+            const ulong DepMask = 0x7F7Ful << 1; // 7-bit endpoint at bits 1..7, bit 0 free
+            const ulong PbtMask = 0x0101ul; // pb0 -> byte 0 bit 0, pb1 -> byte 1 bit 0
+            const ulong GatherConst = 0x0100010001000100ul; // broadcast: selects e0,e1 per texel
+            const ulong IdxMaskLo = 0x0F0F0F0F0F0F0F07ul; // 4-bit set: byte 0 = 3 bits (anchor)
+            const ulong IdxMaskHi = 0x0F0F0F0F0F0F0F0Ful;
+            const int IdxLoBits = 31; // 3 + 7*4
+
+            // All eight endpoints lie in lo; deposit each channel's two 7-bit values into byte
+            // lanes 0,1 leaving bit 0 for the p-bit.
+            ulong rB = pdep_u64(lo >> 7, DepMask);
+            ulong gB = pdep_u64(lo >> 21, DepMask);
+            ulong bB = pdep_u64(lo >> 35, DepMask);
+            ulong aB = pdep_u64(lo >> 49, DepMask);
+
+            // Two p-bits: pb0 (bit 63, in lo) and pb1 (bit 64, in hi). pb0 fills bit 0 of every
+            // e0 lane, pb1 bit 0 of every e1 lane.
+            ulong pB = pdep_u64(((lo >> 63) | (hi << 1)) & 0x3ul, PbtMask);
+
+            // 7 bits + p-bit exactly fills a byte, so the merged value is already the final 8-bit
+            // channel — no unquantize.
+            rB |= pB;
+            gB |= pB;
+            bB |= pB;
+            aB |= pB;
+
+            // Single 4-bit index set, starts at bit 65 (hi bit 1), drives all four channels.
+            ulong idata = hi >> (65 - 64);
+            ulong ilo = pdep_u64(idata, IdxMaskLo);
+            ulong ihi = pdep_u64(idata >> IdxLoBits, IdxMaskHi);
+            v128 w = shuffle_epi8(Weights4Vec, new(ilo, ihi));
+
+            v128 invw = sub_epi8(new((byte)64), w); // 64 - w
+            v256 pairs = new(unpacklo_epi8(invw, w), unpackhi_epi8(invw, w));
+
+            // Single subset: the gather is a constant that scatters e0,e1 to every texel.
+            v256 gather = new(GatherConst);
+
+            v256 resR = mm256_maddubs_epi16(mm256_shuffle_epi8(new(rB), gather), pairs);
+            v256 resG = mm256_maddubs_epi16(mm256_shuffle_epi8(new(gB), gather), pairs);
+            v256 resB = mm256_maddubs_epi16(mm256_shuffle_epi8(new(bB), gather), pairs);
+            v256 resA = mm256_maddubs_epi16(mm256_shuffle_epi8(new(aB), gather), pairs);
+
+            resR = mm256_srli_epi16(mm256_add_epi16(resR, new((ushort)32)), 6);
+            resG = mm256_srli_epi16(mm256_add_epi16(resG, new((ushort)32)), 6);
+            resB = mm256_srli_epi16(mm256_add_epi16(resB, new((ushort)32)), 6);
+            resA = mm256_srli_epi16(mm256_add_epi16(resA, new((ushort)32)), 6);
+
+            // Transpose the four planar channels to interleaved RGBA (real alpha).
+            var rg = mm256_or_si256(resR, mm256_slli_epi16(resG, 8));
+            var ba = mm256_or_si256(resB, mm256_slli_epi16(resA, 8));
             var rgbaLo = mm256_unpacklo_epi16(rg, ba); // RGBA, pixels {0..3, 8..11}
             var rgbaHi = mm256_unpackhi_epi16(rg, ba); // RGBA, pixels {4..7, 12..15}
 
