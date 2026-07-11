@@ -43,7 +43,7 @@ partial class CPUTexture2D
         public Color GetPixel(int x, int y, int mipLevel = 0)
         {
             GetBlockIndex(Width, Height, x, y, mipLevel, out int blockIndex, out int pixelIndex);
-            float red = DecodeBC4Channel(data[blockIndex].bits, pixelIndex);
+            float red = CPU.Block.BC4.DecodeChannel(data[blockIndex].bits, pixelIndex);
             return new Color(red, 0f, 0f, 0f);
         }
 
@@ -89,7 +89,7 @@ partial class CPUTexture2D
 
             public FixedArray16<Color> DecodeBlock(int blockIdx)
             {
-                var values = DecodeBC4Block(blocks[blockIdx].bits);
+                var values = CPU.Block.BC4.DecodeBlock(blocks[blockIdx].bits);
 
                 FixedArray16<Color> colors = default;
                 for (int i = 0; i < values.Length; ++i)

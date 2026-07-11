@@ -43,10 +43,14 @@ partial class CPUTexture2D
         public Color GetPixel(int x, int y, int mipLevel = 0)
         {
             GetBlockIndex(Width, Height, x, y, mipLevel, out int blockIndex, out int pixelIndex);
-            return DecodeDXT1Color(data[blockIndex].bits, pixelIndex);
+            return CPU.Block.DXT1.DecodePixel(data[blockIndex].bits, pixelIndex);
         }
 
-        public Color32 GetPixel32(int x, int y, int mipLevel = 0) => GetPixel(x, y, mipLevel);
+        public Color32 GetPixel32(int x, int y, int mipLevel = 0)
+        {
+            GetBlockIndex(Width, Height, x, y, mipLevel, out int blockIndex, out int pixelIndex);
+            return CPU.Block.DXT1.DecodePixel32(data[blockIndex].bits, pixelIndex);
+        }
 
         public Color GetPixelBilinear(float u, float v, int mipLevel = 0) =>
             CPUTexture2D.GetPixelBilinear(in this, u, v, mipLevel);
@@ -88,7 +92,7 @@ partial class CPUTexture2D
 
             public FixedArray16<Color> DecodeBlock(int blockIdx)
             {
-                return DecodeDXT1Block(blocks[blockIdx].bits);
+                return CPU.Block.DXT1.DecodeBlock(blocks[blockIdx].bits);
             }
         }
     }
