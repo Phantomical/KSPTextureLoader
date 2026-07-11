@@ -538,7 +538,10 @@ internal static class BC7
                     Mode0(ref reader, lo, hi, rgba);
                 break;
             case 1:
-                Mode1(ref reader, lo, hi, rgba);
+                if (Avx2.IsAvx2Supported)
+                    Mode1Avx(lo, hi, rgba);
+                else
+                    Mode1(ref reader, lo, hi, rgba);
                 break;
             case 2:
                 Mode2(ref reader, lo, hi, rgba);
@@ -1260,6 +1263,230 @@ internal static class BC7
             // lo = RGBARGBARGBARGBA
             // hi = RGBARGBARGBARGBA
 
+            var rg = mm256_or_si256(resR, mm256_slli_epi16(resG, 8));
+            var ba = mm256_or_si256(resB, new((ushort)0xFF00));
+            var rgbaLo = mm256_unpacklo_epi16(rg, ba); // RGBA, pixels {0..3, 8..11}
+            var rgbaHi = mm256_unpackhi_epi16(rg, ba); // RGBA, pixels {4..7, 12..15}
+
+            var output = (v256*)rgba;
+            output[0] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x20); // pixels 0..7
+            output[1] = mm256_permute2x128_si256(rgbaLo, rgbaHi, 0x31); // pixels 8..15
+        }
+    }
+    #endregion
+
+    #region Mode 1
+    // The Mode 1 index stream starts at bit 82 (2 mode terminator + 6 partition + 12*6
+    // endpoint + 2 p-bit) and is always exactly 46 bits (16*3 minus the 2 anchor MSBs), so
+    // it lies entirely in hi (bits 18..63) and right-aligns with a single shift.
+    //
+    // Per-partition pdep scatter masks for the Mode 1 index stream, precomputed for all 64
+    // partitions: lane i takes pixel i's 3-bit index, except the 2 anchor lanes which take
+    // 2 bits so their forced-zero MSB falls out for free. Mode1IndexLoBits[p] = popcount of
+    // maskLo is how far to shift the packed run before depositing lanes 8..15. Derived from
+    // AnchorIndex2_1 (subset 1's anchor; subset 0's is always pixel 0) with width 3.
+    // csharpier-ignore-start
+    static readonly ulong[] Mode1IndexMaskLo =
+    [
+        0x0707070707070703UL, 0x0707070707070703UL, 0x0707070707070703UL, 0x0707070707070703UL,
+        0x0707070707070703UL, 0x0707070707070703UL, 0x0707070707070703UL, 0x0707070707070703UL,
+        0x0707070707070703UL, 0x0707070707070703UL, 0x0707070707070703UL, 0x0707070707070703UL,
+        0x0707070707070703UL, 0x0707070707070703UL, 0x0707070707070703UL, 0x0707070707070703UL,
+        0x0707070707070703UL, 0x0707070707030703UL, 0x0707070707070703UL, 0x0707070707030703UL,
+        0x0707070707030703UL, 0x0707070707070703UL, 0x0707070707070703UL, 0x0707070707070703UL,
+        0x0707070707030703UL, 0x0707070707070703UL, 0x0707070707030703UL, 0x0707070707030703UL,
+        0x0707070707070703UL, 0x0707070707070703UL, 0x0707070707030703UL, 0x0707070707030703UL,
+        0x0707070707070703UL, 0x0707070707070703UL, 0x0703070707070703UL, 0x0707070707070703UL,
+        0x0707070707030703UL, 0x0707070707070703UL, 0x0707070707070703UL, 0x0707070707070703UL,
+        0x0707070707030703UL, 0x0707070707070703UL, 0x0707070707030703UL, 0x0707070707030703UL,
+        0x0707070707030703UL, 0x0707070707070703UL, 0x0707070707070703UL, 0x0703070707070703UL,
+        0x0703070707070703UL, 0x0707070707030703UL, 0x0703070707070703UL, 0x0707070707070703UL,
+        0x0707070707070703UL, 0x0707070707070703UL, 0x0707070707030703UL, 0x0707070707030703UL,
+        0x0707070707070703UL, 0x0707070707070703UL, 0x0707070707070703UL, 0x0707070707070703UL,
+        0x0707070707070703UL, 0x0707070707030703UL, 0x0707070707030703UL, 0x0707070707070703UL,
+    ];
+    static readonly ulong[] Mode1IndexMaskHi =
+    [
+        0x0307070707070707UL, 0x0307070707070707UL, 0x0307070707070707UL, 0x0307070707070707UL,
+        0x0307070707070707UL, 0x0307070707070707UL, 0x0307070707070707UL, 0x0307070707070707UL,
+        0x0307070707070707UL, 0x0307070707070707UL, 0x0307070707070707UL, 0x0307070707070707UL,
+        0x0307070707070707UL, 0x0307070707070707UL, 0x0307070707070707UL, 0x0307070707070707UL,
+        0x0307070707070707UL, 0x0707070707070707UL, 0x0707070707070703UL, 0x0707070707070707UL,
+        0x0707070707070707UL, 0x0707070707070703UL, 0x0707070707070703UL, 0x0307070707070707UL,
+        0x0707070707070707UL, 0x0707070707070703UL, 0x0707070707070707UL, 0x0707070707070707UL,
+        0x0707070707070703UL, 0x0707070707070703UL, 0x0707070707070707UL, 0x0707070707070707UL,
+        0x0307070707070707UL, 0x0307070707070707UL, 0x0707070707070707UL, 0x0707070707070703UL,
+        0x0707070707070707UL, 0x0707070707070703UL, 0x0307070707070707UL, 0x0307070707070707UL,
+        0x0707070707070707UL, 0x0707070707070703UL, 0x0707070707070707UL, 0x0707070707070707UL,
+        0x0707070707070707UL, 0x0307070707070707UL, 0x0307070707070707UL, 0x0707070707070707UL,
+        0x0707070707070707UL, 0x0707070707070707UL, 0x0707070707070707UL, 0x0707070707070703UL,
+        0x0307070707070707UL, 0x0307070707070707UL, 0x0707070707070707UL, 0x0707070707070707UL,
+        0x0307070707070707UL, 0x0307070707070707UL, 0x0307070707070707UL, 0x0307070707070707UL,
+        0x0307070707070707UL, 0x0707070707070707UL, 0x0707070707070707UL, 0x0307070707070707UL,
+    ];
+    static readonly byte[] Mode1IndexLoBits =
+    [
+        23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+        23, 22, 23, 22, 22, 23, 23, 23, 22, 23, 22, 22, 23, 23, 22, 22,
+        23, 23, 22, 23, 22, 23, 23, 23, 22, 23, 22, 22, 22, 23, 23, 22,
+        22, 22, 22, 23, 23, 23, 22, 22, 23, 23, 23, 23, 23, 22, 22, 23,
+    ];
+
+    // Per-partition endpoint-gather control for the interpolation stage: 16 pixels x
+    // (e0, e1) byte selectors = 32 lanes, packed as 4 ulongs per partition. Lane 2i / 2i+1
+    // hold 2*subset[i] / 2*subset[i]+1 — the [e0 e1] pair for pixel i's subset (subset in
+    // {0,1}, so selectors in {0..3}) — and feed mm256_shuffle_epi8 to pull each pixel's
+    // endpoint pair out of the 8-byte lane vector.
+    static readonly ulong[] Mode1Gather =
+    [
+        0x0302030201000100UL, 0x0302030201000100UL, 0x0302030201000100UL, 0x0302030201000100UL, // p0
+        0x0302010001000100UL, 0x0302010001000100UL, 0x0302010001000100UL, 0x0302010001000100UL, // p1
+        0x0302030203020100UL, 0x0302030203020100UL, 0x0302030203020100UL, 0x0302030203020100UL, // p2
+        0x0302010001000100UL, 0x0302030201000100UL, 0x0302030201000100UL, 0x0302030203020100UL, // p3
+        0x0100010001000100UL, 0x0302010001000100UL, 0x0302010001000100UL, 0x0302030201000100UL, // p4
+        0x0302030201000100UL, 0x0302030203020100UL, 0x0302030203020100UL, 0x0302030203020302UL, // p5
+        0x0302010001000100UL, 0x0302030201000100UL, 0x0302030203020100UL, 0x0302030203020302UL, // p6
+        0x0100010001000100UL, 0x0302010001000100UL, 0x0302030201000100UL, 0x0302030203020100UL, // p7
+        0x0100010001000100UL, 0x0100010001000100UL, 0x0302010001000100UL, 0x0302030201000100UL, // p8
+        0x0302030201000100UL, 0x0302030203020100UL, 0x0302030203020302UL, 0x0302030203020302UL, // p9
+        0x0100010001000100UL, 0x0302010001000100UL, 0x0302030203020100UL, 0x0302030203020302UL, // p10
+        0x0100010001000100UL, 0x0100010001000100UL, 0x0302010001000100UL, 0x0302030203020100UL, // p11
+        0x0302010001000100UL, 0x0302030203020100UL, 0x0302030203020302UL, 0x0302030203020302UL, // p12
+        0x0100010001000100UL, 0x0100010001000100UL, 0x0302030203020302UL, 0x0302030203020302UL, // p13
+        0x0100010001000100UL, 0x0302030203020302UL, 0x0302030203020302UL, 0x0302030203020302UL, // p14
+        0x0100010001000100UL, 0x0100010001000100UL, 0x0100010001000100UL, 0x0302030203020302UL, // p15
+        0x0100010001000100UL, 0x0100010001000302UL, 0x0100030203020302UL, 0x0302030203020302UL, // p16
+        0x0302030203020100UL, 0x0302010001000100UL, 0x0100010001000100UL, 0x0100010001000100UL, // p17
+        0x0100010001000100UL, 0x0100010001000100UL, 0x0100010001000302UL, 0x0100030203020302UL, // p18
+        0x0302030203020100UL, 0x0302030201000100UL, 0x0302010001000100UL, 0x0100010001000100UL, // p19
+        0x0302030201000100UL, 0x0302010001000100UL, 0x0100010001000100UL, 0x0100010001000100UL, // p20
+        0x0100010001000100UL, 0x0100010001000302UL, 0x0100010003020302UL, 0x0100030203020302UL, // p21
+        0x0100010001000100UL, 0x0100010001000100UL, 0x0100010001000302UL, 0x0100010003020302UL, // p22
+        0x0302030203020100UL, 0x0302030201000100UL, 0x0302030201000100UL, 0x0302010001000100UL, // p23
+        0x0302030201000100UL, 0x0302010001000100UL, 0x0302010001000100UL, 0x0100010001000100UL, // p24
+        0x0100010001000100UL, 0x0100010001000302UL, 0x0100010001000302UL, 0x0100010003020302UL, // p25
+        0x0100030203020100UL, 0x0100030203020100UL, 0x0100030203020100UL, 0x0100030203020100UL, // p26
+        0x0302030201000100UL, 0x0100030203020100UL, 0x0100030203020100UL, 0x0100010003020302UL, // p27
+        0x0302010001000100UL, 0x0302030203020100UL, 0x0100030203020302UL, 0x0100010001000302UL, // p28
+        0x0100010001000100UL, 0x0302030203020302UL, 0x0302030203020302UL, 0x0100010001000100UL, // p29
+        0x0302030203020100UL, 0x0302010001000100UL, 0x0100010001000302UL, 0x0100030203020302UL, // p30
+        0x0302030201000100UL, 0x0302010001000302UL, 0x0302010001000302UL, 0x0100010003020302UL, // p31
+        0x0302010003020100UL, 0x0302010003020100UL, 0x0302010003020100UL, 0x0302010003020100UL, // p32
+        0x0100010001000100UL, 0x0302030203020302UL, 0x0100010001000100UL, 0x0302030203020302UL, // p33
+        0x0302010003020100UL, 0x0100030201000302UL, 0x0302010003020100UL, 0x0100030201000302UL, // p34
+        0x0302030201000100UL, 0x0302030201000100UL, 0x0100010003020302UL, 0x0100010003020302UL, // p35
+        0x0302030201000100UL, 0x0100010003020302UL, 0x0302030201000100UL, 0x0100010003020302UL, // p36
+        0x0302010003020100UL, 0x0302010003020100UL, 0x0100030201000302UL, 0x0100030201000302UL, // p37
+        0x0100030203020100UL, 0x0302010001000302UL, 0x0100030203020100UL, 0x0302010001000302UL, // p38
+        0x0302010003020100UL, 0x0100030201000302UL, 0x0100030201000302UL, 0x0302010003020100UL, // p39
+        0x0302030203020100UL, 0x0302030201000100UL, 0x0100010003020302UL, 0x0100030203020302UL, // p40
+        0x0302010001000100UL, 0x0302030201000100UL, 0x0100010003020302UL, 0x0100010001000302UL, // p41
+        0x0302030201000100UL, 0x0100030201000100UL, 0x0100010003020100UL, 0x0100010003020302UL, // p42
+        0x0302030201000100UL, 0x0302030201000302UL, 0x0302010003020302UL, 0x0100010003020302UL, // p43
+        0x0100030203020100UL, 0x0302010001000302UL, 0x0302010001000302UL, 0x0100030203020100UL, // p44
+        0x0302030201000100UL, 0x0100010003020302UL, 0x0100010003020302UL, 0x0302030201000100UL, // p45
+        0x0100030203020100UL, 0x0100030203020100UL, 0x0302010001000302UL, 0x0302010001000302UL, // p46
+        0x0100010001000100UL, 0x0100030203020100UL, 0x0100030203020100UL, 0x0100010001000100UL, // p47
+        0x0100010003020100UL, 0x0100030203020302UL, 0x0100010003020100UL, 0x0100010001000100UL, // p48
+        0x0100030201000100UL, 0x0302030203020100UL, 0x0100030201000100UL, 0x0100010001000100UL, // p49
+        0x0100010001000100UL, 0x0100030201000100UL, 0x0302030203020100UL, 0x0100030201000100UL, // p50
+        0x0100010001000100UL, 0x0100010003020100UL, 0x0100030203020302UL, 0x0100010003020100UL, // p51
+        0x0100030203020100UL, 0x0100010003020302UL, 0x0302010001000302UL, 0x0302030201000100UL, // p52
+        0x0302030201000100UL, 0x0100030203020100UL, 0x0100010003020302UL, 0x0302010001000302UL, // p53
+        0x0100030203020100UL, 0x0302030201000100UL, 0x0302010001000302UL, 0x0100010003020302UL, // p54
+        0x0302030201000100UL, 0x0302010001000302UL, 0x0100010003020302UL, 0x0100030203020100UL, // p55
+        0x0100030203020100UL, 0x0100010003020302UL, 0x0100010003020302UL, 0x0302010001000302UL, // p56
+        0x0100030203020100UL, 0x0302030201000100UL, 0x0302030201000100UL, 0x0302010001000302UL, // p57
+        0x0302030203020100UL, 0x0100030203020302UL, 0x0100010001000302UL, 0x0302010001000100UL, // p58
+        0x0302010001000100UL, 0x0100010001000302UL, 0x0100030203020302UL, 0x0302030203020100UL, // p59
+        0x0100010001000100UL, 0x0302030203020302UL, 0x0302030201000100UL, 0x0302030201000100UL, // p60
+        0x0302030201000100UL, 0x0302030201000100UL, 0x0302030203020302UL, 0x0100010001000100UL, // p61
+        0x0100030201000100UL, 0x0100030201000100UL, 0x0100030203020302UL, 0x0100030203020302UL, // p62
+        0x0100010003020100UL, 0x0100010003020100UL, 0x0302030203020100UL, 0x0302030203020100UL, // p63
+    ];
+    // csharpier-ignore-end
+
+    // BC7 Mode 1
+    //
+    // Mode 1 is laid out like this
+    // | Bit Range | Width | Field
+    // |  0 ..  1  |   2   | mode marker
+    // |  2 ..  7  |   6   | partition index        (0..63)
+    // |  8 .. 31  |  24   | red   endpoints R0..R3 (4 x 6 bits)
+    // | 32 .. 55  |  24   | green endpoints G0..G3 (4 x 6 bits)
+    // | 56 .. 79  |  24   | blue  endpoints B0..B3 (4 x 6 bits)
+    // | 80 .. 81  |   2   | P-bits                 (2 x 1 bits, one per subset)
+    // | 82 .. 127 |  46   | colour indices         (16 texels, 2/3 bits each)
+    //
+    // Mode 1 decoding should work like this:
+    //   - The 6-bit partition index selects one of 64 fixed patterns (see the partition table)
+    //     that splits the 16 texels into 2 subsets, assigning each texel a subset 0/1.
+    //   - Each subset has two RGB endpoints; every endpoint is 6 bits per channel plus a single
+    //     p-bit shared by both of the subset's endpoints, forming a 7-bit value unquantized to
+    //     8 bits as (v << 1) | (v >> 6).
+    //   - Each texel carries a colour index selecting an interpolation weight from the 3-bit
+    //     weight table. Indices are 3 bits, except the anchor texel of each subset, which is
+    //     2 bits with an implied high bit of 0 (subset 0's anchor is texel 0; subset 1 uses the
+    //     fixed anchor table).
+    //   - Texel i's colour is, per channel, interpolate(e0, e1, w) = (e0*(64-w) + e1*w + 32) >> 6,
+    //     where e0/e1 are the two endpoints of that texel's subset and w is its weight.
+    //   - Alpha has no bits in this mode and is always opaque (255).
+    static unsafe void Mode1Avx(ulong lo, ulong hi, byte* rgba)
+    {
+        static ulong Unquantize(ulong v) => (v << 1) | ((v >> 6) & 0x01010101);
+
+        if (IsAvx2Supported)
+        {
+            const ulong DepMask = 0x3F3F3F3Ful << 1; // 6-bit endpoint at bits 1..6, bit 0 free
+
+            // Extract partition and endpoints. R and G lie wholly in lo; B straddles the
+            // lo/hi boundary at bit 64.
+            int partition = (int)((lo >> 2) & 0x3F);
+            ulong rB = pdep_u64(lo >> 8, DepMask);
+            ulong gB = pdep_u64(lo >> 32, DepMask);
+            ulong bB = pdep_u64((lo >> 56) | (hi << 8), DepMask);
+
+            // Two p-bits, each shared by both endpoints of its subset: P0 (bit 80) -> bytes
+            // 0,1; P1 (bit 81) -> bytes 2,3. Deposit one per subset then duplicate into the
+            // subset's second endpoint.
+            ulong pB = pdep_u64(hi >> 16, 0x0000000000010001ul);
+            pB |= pB << 8;
+
+            // Unquantize: replicate the top bit to the bottom, shift by 7
+            rB = Unquantize(rB | pB);
+            gB = Unquantize(gB | pB);
+            bB = Unquantize(bB | pB);
+
+            ulong idata = hi >> (82 - 64);
+            ulong ilo = pdep_u64(idata, Mode1IndexMaskLo[partition]);
+            ulong ihi = pdep_u64(idata >> Mode1IndexLoBits[partition], Mode1IndexMaskHi[partition]);
+
+            v128 w = shuffle_epi8(Weights3Vec, new(ilo, ihi));
+            v128 invw = sub_epi8(new((byte)64), w); // 64 - w
+
+            // Interleave (64-w, w) so we can use a pmaddubs to compute e0*(64-w) + e1*w
+            v256 pairs = new(unpacklo_epi8(invw, w), unpackhi_epi8(invw, w));
+
+            // Endpoint gather control for this partition
+            v256 gather = new(
+                Mode1Gather[partition * 4 + 0],
+                Mode1Gather[partition * 4 + 1],
+                Mode1Gather[partition * 4 + 2],
+                Mode1Gather[partition * 4 + 3]
+            );
+
+            // e0*(64-w) + e1*w
+            v256 resR = mm256_maddubs_epi16(mm256_shuffle_epi8(new(rB), gather), pairs);
+            v256 resG = mm256_maddubs_epi16(mm256_shuffle_epi8(new(gB), gather), pairs);
+            v256 resB = mm256_maddubs_epi16(mm256_shuffle_epi8(new(bB), gather), pairs);
+
+            // (res + 32) >> 6
+            resR = mm256_srli_epi16(mm256_add_epi16(resR, new((ushort)32)), 6);
+            resG = mm256_srli_epi16(mm256_add_epi16(resG, new((ushort)32)), 6);
+            resB = mm256_srli_epi16(mm256_add_epi16(resB, new((ushort)32)), 6);
+
+            // Transpose the three planar channels (+ constant opaque alpha) to interleaved
+            // RGBA, exactly as in Mode 0.
             var rg = mm256_or_si256(resR, mm256_slli_epi16(resG, 8));
             var ba = mm256_or_si256(resB, new((ushort)0xFF00));
             var rgbaLo = mm256_unpacklo_epi16(rg, ba); // RGBA, pixels {0..3, 8..11}
