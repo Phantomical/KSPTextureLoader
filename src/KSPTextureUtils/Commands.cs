@@ -468,6 +468,209 @@ internal static class Commands
         return name.Length == 0 ? "texture" : name;
     }
 
+    // -------------------------------------------------------------------------
+    // palette
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Convert a PNG or DDS texture to a Kopernicus palette DDS. Each distinct colour
+    /// becomes one palette entry, and the smallest palette that holds them all is
+    /// chosen — 16 entries (4bpp) for 16 or fewer colours, otherwise 256 (8bpp). An
+    /// image with more than 256 distinct colours is an error. When it is safe — every
+    /// colour opaque and no two collapsing onto the same value — the palette is snapped
+    /// to RGB565 so <c>build</c> can store the map compactly; otherwise the colours are
+    /// kept exactly as-is (alpha and all) and a warning is emitted. Colours are printed
+    /// as hex codes.
+    /// </summary>
+    public static int Palette(string input, string output)
+    {
+        if (!File.Exists(input))
+        {
+            Console.Error.WriteLine($"error: input not found: {input}");
+            return 1;
+        }
+
+        if (
+            string.Equals(
+                Path.GetFullPath(output),
+                Path.GetFullPath(input),
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
+        {
+            Console.Error.WriteLine("error: --output is the same path as the input");
+            return 1;
+        }
+
+        // Load the source to a flat RGBA32 image. PNGs are read directly (no mip
+        // chain); DDS files go through the reader and have their top mip expanded.
+        byte[] rgba;
+        int width,
+            height;
+        string ext = Path.GetExtension(input).ToLowerInvariant();
+        if (ext == ".png")
+        {
+            var (px, w, h, err) = PngReader.ReadRgba32(input);
+            if (px is null)
+            {
+                Console.Error.WriteLine($"error: {err}");
+                return 1;
+            }
+            (rgba, width, height) = (px, w, h);
+        }
+        else if (ext == ".dds")
+        {
+            var (tex, skip) = DdsReader.Read(input);
+            if (tex is null)
+            {
+                Console.Error.WriteLine($"error: {skip!.Detail}");
+                return 1;
+            }
+            var (px, err) = PaletteBuilder.DecodeTopMipToRgba32(tex);
+            if (px is null)
+            {
+                Console.Error.WriteLine($"error: {err}");
+                return 1;
+            }
+            (rgba, width, height) = (px, tex.Width, tex.Height);
+        }
+        else
+        {
+            Console.Error.WriteLine(
+                $"error: unsupported extension '{ext}' (expected .png or .dds)"
+            );
+            return 1;
+        }
+
+        int pixelCount = width * height;
+        if (pixelCount <= 0)
+        {
+            Console.Error.WriteLine($"error: image has no pixels ({width}x{height})");
+            return 1;
+        }
+
+        var quant = PaletteBuilder.Quantize(rgba, pixelCount);
+        if (quant is null)
+        {
+            Console.Error.WriteLine(
+                $"error: {Rel(input)} has more than {PaletteBuilder.MaxColors} distinct "
+                    + "colours; it cannot be represented as a palette texture"
+            );
+            return 1;
+        }
+
+        var (colors, indices) = quant.Value;
+        bool fourBit = colors.Length <= 16;
+        int entries = fourBit ? 16 : 256;
+
+        // Snap the palette to RGB565 when it's safe to: every colour opaque (RGB565 has
+        // no alpha to preserve) and no two distinct colours collapsing onto the same
+        // value. Then build stores the map compactly as RGB565, matching the runtime
+        // VRAM optimisation. Otherwise keep the palette exactly as-is — snapping would
+        // discard alpha or merge distinct regions — and warn below.
+        bool allOpaque = colors.All(c => (c >> 24) == 0xFF);
+        var collisions = new List<(uint snapped, List<uint> sources)>();
+        uint[] palette = colors;
+        if (allOpaque)
+        {
+            var snapped = new uint[colors.Length];
+            for (int i = 0; i < colors.Length; i++)
+                snapped[i] = PaletteBuilder.SnapToRgb565(colors[i]);
+            collisions = CollisionGroups(colors, snapped);
+            if (collisions.Count == 0)
+                palette = snapped;
+        }
+
+        byte[] dds = PaletteBuilder.WriteDds(width, height, fourBit, palette, indices);
+        File.WriteAllBytes(output, dds);
+
+        Console.WriteLine(
+            $"wrote {output}: {width}x{height}, {colors.Length} colour(s), "
+                + $"{entries}-entry {(fourBit ? "4bpp" : "8bpp")} palette"
+        );
+
+        // KSP ignores alpha in biome maps, so a non-opaque source is almost always a
+        // mistake worth surfacing; the alpha is still kept verbatim in the palette.
+        if (!allOpaque)
+            Console.WriteLine(
+                "warning: palette biome map is not fully opaque. The alpha channel is "
+                    + "ignored in KSP biome maps."
+            );
+
+        // Opaque colours that would collapse together can't be snapped to RGB565 without
+        // merging distinct regions (collisions is only populated when opaque), so the map
+        // stays full RGBA. Name each colliding group and the value it would collapse to.
+        if (collisions.Count > 0)
+        {
+            Console.WriteLine(
+                "warning: palette colours cannot be compressed to RGB565. This will cause "
+                    + "extra VRAM usage with Parallax. Colliding colours:"
+            );
+            const int maxGroups = 16;
+            foreach (var g in collisions.Take(maxGroups))
+                Console.WriteLine(
+                    $"  {string.Join(", ", g.sources.Select(Hex))} -> {Hex(g.snapped)}"
+                );
+            if (collisions.Count > maxGroups)
+                Console.WriteLine($"  ... and {collisions.Count - maxGroups} more group(s)");
+        }
+
+        PrintPalette(palette);
+        return 0;
+    }
+
+    /// <summary>
+    /// Print the palette colours as hex codes, in index order, eight per line.
+    /// </summary>
+    static void PrintPalette(uint[] colors)
+    {
+        const int perLine = 8;
+        for (int i = 0; i < colors.Length; i++)
+        {
+            string hex = Hex(colors[i]);
+            Console.Write(i % perLine == 0 ? "  " + hex : " " + hex);
+            if ((i + 1) % perLine == 0 || i == colors.Length - 1)
+                Console.WriteLine();
+        }
+    }
+
+    /// <summary>
+    /// Group the source colours by the RGB565 value they snap to, keeping only the
+    /// groups holding more than one distinct source colour (a lossy collision), in
+    /// first-seen order. Each group pairs the shared snapped value with its sources.
+    /// </summary>
+    static List<(uint snapped, List<uint> sources)> CollisionGroups(uint[] colors, uint[] palette)
+    {
+        var bySnap = new Dictionary<uint, List<uint>>();
+        var order = new List<uint>();
+        for (int i = 0; i < colors.Length; i++)
+        {
+            if (!bySnap.TryGetValue(palette[i], out var list))
+            {
+                bySnap[palette[i]] = list = [];
+                order.Add(palette[i]);
+            }
+            list.Add(colors[i]);
+        }
+        return order
+            .Where(s => bySnap[s].Count > 1)
+            .Select(s => (snapped: s, sources: bySnap[s]))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Format a colour (packed <c>0xAABBGGRR</c>) as <c>#RRGGBB</c>, or as
+    /// <c>#RRGGBBAA</c> when it carries a non-opaque alpha so transparency is not hidden.
+    /// </summary>
+    static string Hex(uint c)
+    {
+        byte r = (byte)(c & 0xFF),
+            g = (byte)((c >> 8) & 0xFF),
+            b = (byte)((c >> 16) & 0xFF),
+            a = (byte)((c >> 24) & 0xFF);
+        return a == 0xFF ? $"#{r:X2}{g:X2}{b:X2}" : $"#{r:X2}{g:X2}{b:X2}{a:X2}";
+    }
+
     static string MakeUnique(string path, HashSet<string> used)
     {
         string dir = Path.GetDirectoryName(path)!;
@@ -830,39 +1033,7 @@ internal static class Commands
         bool fourBit,
         byte[] palette,
         byte[] indices
-    )
-    {
-        using var ms = new MemoryStream();
-        var w = new BinaryWriter(ms);
-        w.Write(0x20534444u); // "DDS "
-        w.Write(124); // dwSize
-        w.Write(0x1007); // CAPS | HEIGHT | WIDTH | PIXELFORMAT
-        w.Write(height);
-        w.Write(width);
-        w.Write(0); // pitch
-        w.Write(0); // depth
-        w.Write(0); // mipCount
-        for (int i = 0; i < 11; i++)
-            w.Write(0); // reserved1
-        // DDS_PIXELFORMAT
-        w.Write(32); // dwSize
-        w.Write(0); // dwFlags (none -> palette)
-        w.Write(0); // fourCC
-        w.Write(fourBit ? 4 : 8); // rgbBitCount
-        w.Write(0);
-        w.Write(0);
-        w.Write(0);
-        w.Write(0); // masks
-        // caps
-        w.Write(0x1000); // TEXTURE
-        w.Write(0);
-        w.Write(0);
-        w.Write(0);
-        w.Write(0);
-        w.Write(palette);
-        w.Write(indices);
-        return ms.ToArray();
-    }
+    ) => PaletteBuilder.BuildDds(width, height, fourBit, palette, indices);
 
     static string ProbeSettings(AssetTypeValueField b)
     {

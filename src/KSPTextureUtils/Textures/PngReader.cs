@@ -22,6 +22,26 @@ namespace KSPTextureUtils.Textures;
 /// </summary>
 internal static class PngReader
 {
+    /// <summary>
+    /// Load a PNG's base image as tightly-packed RGBA32, with no mip chain — for
+    /// callers (e.g. the palette converter) that only need the source pixels.
+    /// Returns a null pixel array and a message when the file can't be decoded.
+    /// </summary>
+    public static (byte[]? pixels, int width, int height, string? error) ReadRgba32(string path)
+    {
+        try
+        {
+            using var image = Image.Load<Rgba32>(path);
+            var pixels = new byte[image.Width * image.Height * 4];
+            image.CopyPixelDataTo(pixels);
+            return (pixels, image.Width, image.Height, null);
+        }
+        catch (Exception ex)
+        {
+            return (null, 0, 0, $"PNG decode failed: {ex.Message}");
+        }
+    }
+
     public static (SourceTexture? texture, SkippedTexture? skip) Read(string path)
     {
         string name = Path.GetFileNameWithoutExtension(path);

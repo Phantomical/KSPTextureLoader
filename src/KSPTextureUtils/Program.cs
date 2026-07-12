@@ -11,6 +11,7 @@ internal static class Program
         );
         root.Subcommands.Add(BuildCommand());
         root.Subcommands.Add(ExtractCommand());
+        root.Subcommands.Add(PaletteCommand());
         root.Subcommands.Add(MakeSeedCommand());
         root.Subcommands.Add(DevCommand());
 
@@ -94,6 +95,28 @@ internal static class Program
         cmd.SetAction(pr =>
             Commands.Extract(pr.GetValue(bundle)!, pr.GetValue(output)!, pr.GetValue(flat))
         );
+        return cmd;
+    }
+
+    static Command PaletteCommand()
+    {
+        var input = new Argument<string>("input")
+        {
+            Description = "The PNG or DDS texture to palettise.",
+        };
+        var output = new Option<string>("--output", "-o")
+        {
+            Description = "Path that the output palette DDS will be written to.",
+            Required = true,
+        };
+
+        var cmd = new Command(
+            "palette",
+            "Convert a PNG/DDS texture to a 16- or 256-colour Kopernicus palette DDS."
+        );
+        cmd.Arguments.Add(input);
+        cmd.Options.Add(output);
+        cmd.SetAction(pr => Commands.Palette(pr.GetValue(input)!, pr.GetValue(output)!));
         return cmd;
     }
 
