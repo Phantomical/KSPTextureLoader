@@ -43,6 +43,16 @@ partial class CPUTexture2D
 
         public Color GetPixel(int x, int y, int mipLevel = 0)
         {
+            if (CPU.BurstForward.ShouldForward)
+            {
+                CPU.BurstForward.Bc5GetPixel(in this, x, y, mipLevel, out Color result);
+                return result;
+            }
+            return GetPixelCore(x, y, mipLevel);
+        }
+
+        internal Color GetPixelCore(int x, int y, int mipLevel)
+        {
             GetBlockIndex(Width, Height, x, y, mipLevel, out int blockIndex, out int pixelIndex);
             Block block = data[blockIndex];
             float red = CPU.Block.BC4.DecodePixel(block.red, pixelIndex);

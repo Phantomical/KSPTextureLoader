@@ -110,8 +110,8 @@ public class BC4BlockTests : KSPTextureLoaderTestBase
                 float expected = truth.GetPixel(x, y).r;
 
                 // (a) per-pixel helper channel decode
-                float channel = KSPTextureLoader.CPU.Block.BC4.DecodeChannel(bits, i);
-                assertFloatEquals($"{label}.DecodeChannel[{i}]", channel, expected, BC4Tol);
+                float channel = KSPTextureLoader.CPU.Block.BC4.DecodePixel(bits, i);
+                assertFloatEquals($"{label}.DecodePixel[{i}]", channel, expected, BC4Tol);
 
                 // (b) whole-block helper decode
                 assertFloatEquals($"{label}.DecodeBlock[{i}]", decoded[i], expected, BC4Tol);
