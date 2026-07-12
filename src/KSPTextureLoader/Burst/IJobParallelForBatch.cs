@@ -1,10 +1,12 @@
 using System;
+using System.Runtime.InteropServices;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
 
 namespace KSPTextureLoader.Burst;
 
+[JobProducerType(typeof(IJobParallelForBatchExtensions.JobStruct<>))]
 internal interface IJobParallelForBatch
 {
     void Execute(int start, int count);
@@ -12,6 +14,7 @@ internal interface IJobParallelForBatch
 
 internal static class IJobParallelForBatchExtensions
 {
+    [StructLayout(LayoutKind.Sequential, Size = 1)]
     internal struct JobStruct<T>
         where T : struct, IJobParallelForBatch
     {
@@ -37,13 +40,11 @@ internal static class IJobParallelForBatchExtensions
             int jobIndex
         )
         {
-            int beginIndex;
-            int endIndex;
             while (
-                JobsUtility.GetWorkStealingRange(ref ranges, jobIndex, out beginIndex, out endIndex)
+                JobsUtility.GetWorkStealingRange(ref ranges, jobIndex, out int begin, out int end)
             )
             {
-                jobData.Execute(beginIndex, endIndex - beginIndex);
+                jobData.Execute(begin, end - begin);
             }
         }
     }
