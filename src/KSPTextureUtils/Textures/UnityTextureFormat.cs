@@ -1,4 +1,4 @@
-namespace KSPTextureBundler.Textures;
+namespace KSPTextureUtils.Textures;
 
 /// <summary>
 /// The subset of <c>UnityEngine.TextureFormat</c> (classic enum) that the bundler

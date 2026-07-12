@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace KSPTextureBundler.Bundle;
+namespace KSPTextureUtils.Bundle;
 
 internal static class CabName
 {

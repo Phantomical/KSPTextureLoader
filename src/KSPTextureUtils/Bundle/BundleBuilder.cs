@@ -1,9 +1,9 @@
 using System.Reflection;
 using AssetsTools.NET;
 using AssetsTools.NET.Extra;
-using KSPTextureBundler.Textures;
+using KSPTextureUtils.Textures;
 
-namespace KSPTextureBundler.Bundle;
+namespace KSPTextureUtils.Bundle;
 
 /// <summary>
 /// Builds a KSPTextureLoader-compatible Unity asset bundle by cloning a seed

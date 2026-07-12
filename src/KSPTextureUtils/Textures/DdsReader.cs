@@ -1,6 +1,6 @@
 using System.Buffers.Binary;
 
-namespace KSPTextureBundler.Textures;
+namespace KSPTextureUtils.Textures;
 
 /// <summary>
 /// A minimal, self-contained DDS reader that maps a DDS file to the classic Unity

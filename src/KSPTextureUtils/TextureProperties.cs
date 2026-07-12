@@ -1,10 +1,10 @@
-using KSPTextureBundler.Textures;
+using KSPTextureUtils.Textures;
 using Microsoft.Extensions.FileSystemGlobbing;
 using YamlDotNet.Core;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
-namespace KSPTextureBundler;
+namespace KSPTextureUtils;
 
 /// <summary>
 /// The per-texture properties a <c>--properties</c> file resolves to for one

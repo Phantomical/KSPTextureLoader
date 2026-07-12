@@ -1,4 +1,4 @@
-namespace KSPTextureBundler.Textures;
+namespace KSPTextureUtils.Textures;
 
 /// <summary>
 /// Which Unity texture object a source maps to. Drives both the serialized class

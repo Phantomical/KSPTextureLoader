@@ -1,7 +1,7 @@
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
 
-namespace KSPTextureBundler.Textures;
+namespace KSPTextureUtils.Textures;
 
 /// <summary>
 /// A Kaiser-windowed sinc resampler.

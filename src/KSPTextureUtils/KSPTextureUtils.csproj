@@ -12,7 +12,7 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-        <RootNamespace>KSPTextureBundler</RootNamespace>
+        <RootNamespace>KSPTextureUtils</RootNamespace>
         <AssemblyName>ksp-texture-util</AssemblyName>
         <InvariantGlobalization>true</InvariantGlobalization>
 

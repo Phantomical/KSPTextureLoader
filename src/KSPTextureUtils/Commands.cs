@@ -1,11 +1,11 @@
 using System.Reflection;
 using AssetsTools.NET;
 using AssetsTools.NET.Extra;
-using KSPTextureBundler.Bundle;
-using KSPTextureBundler.Textures;
+using KSPTextureUtils.Bundle;
+using KSPTextureUtils.Textures;
 using ShellProgressBar;
 
-namespace KSPTextureBundler;
+namespace KSPTextureUtils;
 
 /// <summary>
 /// Implementations behind the CLI verbs. Each method returns a process exit code

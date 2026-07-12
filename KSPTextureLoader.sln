@@ -13,7 +13,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KSPTextureLoader.Analyzers"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KSPTextureLoader.Analyzers.Tests", "src\KSPTextureLoader.Analyzers.Tests\KSPTextureLoader.Analyzers.Tests.csproj", "{48B81212-F605-49E9-8D2A-C34D6F2F31C4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KSPTextureBundler", "src\KSPTextureBundler\KSPTextureBundler.csproj", "{AB440249-5B0F-4DD2-BBB5-E09F46AD7692}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KSPTextureUtils", "src\KSPTextureUtils\KSPTextureUtils.csproj", "{AB440249-5B0F-4DD2-BBB5-E09F46AD7692}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KSPTextureLoader.Burst", "src\KSPTextureLoader.Burst\KSPTextureLoader.Burst.csproj", "{78CFD653-3AFF-4974-8202-2578CFDDD2E3}"
 EndProject

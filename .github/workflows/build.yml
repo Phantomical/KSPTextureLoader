@@ -40,7 +40,7 @@ jobs:
           path: GameData/KSPTextureLoader/KSPTextureLoader.version
           name: KSPTextureLoader.version
 
-  # Publish the standalone KSPTextureBundler tool as a single self-contained
+  # Publish the standalone KSPTextureUtils tool as a single self-contained
   # Native-AOT executable for each desktop OS. This project is independent of the
   # KSP net4.8 plugin, so it builds straight from its own csproj with the .NET 10
   # SDK (no ckan/KSP references needed).
@@ -74,7 +74,7 @@ jobs:
 
       - name: Publish native AOT bundler
         run: >
-          dotnet publish src/KSPTextureBundler/KSPTextureBundler.csproj
+          dotnet publish src/KSPTextureUtils/KSPTextureUtils.csproj
           -c Release -r ${{ matrix.rid }} -p:PublishAot=true
 
       # A native build that links can still fail at runtime (e.g. a dependency
@@ -84,7 +84,7 @@ jobs:
       - name: Smoke-test the native binary
         shell: bash
         run: |
-          BIN=src/KSPTextureBundler/bin/Release/net10.0/${{ matrix.rid }}/publish/ksp-texture-util
+          BIN=src/KSPTextureUtils/bin/Release/net10.0/${{ matrix.rid }}/publish/ksp-texture-util
           [ -f "$BIN.exe" ] && BIN="$BIN.exe"
           "$BIN" dev cubemap-test
           "$BIN" dev palette-test
@@ -95,6 +95,6 @@ jobs:
           # The executable is ksp-texture-util(.exe); the second path only exists
           # on Windows, so ignore the miss on the other platforms.
           path: |
-            src/KSPTextureBundler/bin/Release/net10.0/${{ matrix.rid }}/publish/ksp-texture-util
-            src/KSPTextureBundler/bin/Release/net10.0/${{ matrix.rid }}/publish/ksp-texture-util.exe
+            src/KSPTextureUtils/bin/Release/net10.0/${{ matrix.rid }}/publish/ksp-texture-util
+            src/KSPTextureUtils/bin/Release/net10.0/${{ matrix.rid }}/publish/ksp-texture-util.exe
           if-no-files-found: ignore

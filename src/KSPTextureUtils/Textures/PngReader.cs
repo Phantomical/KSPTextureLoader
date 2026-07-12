@@ -5,7 +5,7 @@ using SixLabors.ImageSharp.ColorSpaces.Companding;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
-namespace KSPTextureBundler.Textures;
+namespace KSPTextureUtils.Textures;
 
 /// <summary>
 /// Decodes a PNG to an <see cref="UnityTextureFormat.RGBA32"/> texture with a full

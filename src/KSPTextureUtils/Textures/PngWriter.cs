@@ -1,7 +1,7 @@
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
-namespace KSPTextureBundler.Textures;
+namespace KSPTextureUtils.Textures;
 
 /// <summary>
 /// Encodes a texture's top mip back to a PNG — the inverse of <see cref="PngReader"/>.

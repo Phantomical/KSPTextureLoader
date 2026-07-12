@@ -1,4 +1,4 @@
-namespace KSPTextureBundler.Textures;
+namespace KSPTextureUtils.Textures;
 
 /// <summary>
 /// Repacks a 2D "cross" texture into a <see cref="TextureKind.Cubemap"/> at build

@@ -1,6 +1,6 @@
 using System.CommandLine;
 
-namespace KSPTextureBundler;
+namespace KSPTextureUtils;
 
 internal static class Program
 {

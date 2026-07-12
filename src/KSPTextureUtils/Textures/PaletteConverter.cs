@@ -1,4 +1,4 @@
-namespace KSPTextureBundler.Textures;
+namespace KSPTextureUtils.Textures;
 
 /// <summary>
 /// Converts a Kopernicus palette image (a 16- or 256-entry RGBA32 palette plus

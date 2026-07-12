@@ -1,6 +1,6 @@
 using System.Buffers.Binary;
 
-namespace KSPTextureBundler.Textures;
+namespace KSPTextureUtils.Textures;
 
 /// <summary>
 /// Writes a <see cref="UnityTextureFormat"/> texture (raw mip-chain bytes) to a DDS

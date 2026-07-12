@@ -1,4 +1,4 @@
-# KSPTextureBundler
+# KSPTextureUtils
 
 A command line tool to pack dds and png textures into a unity asset bundle that
 can be loaded by KSPTextureLoader. This is meant to allow you to easily create
