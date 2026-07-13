@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace KSPTextureLoader.Format.Bundle;
 
@@ -19,11 +20,13 @@ namespace KSPTextureLoader.Format.Bundle;
 /// </remarks>
 internal sealed class BundleStream : Stream
 {
-    readonly byte[] prefix;
+    readonly Task<byte[]> prefixTask;
     readonly Stream payload;
     readonly long payloadOffset;
     readonly long payloadLength;
     long position;
+
+    byte[] prefix => prefixTask.Result;
 
     /// <param name="prefix">The bundle bytes before the resS payload.</param>
     /// <param name="payload">The stream holding the pixel bytes. Ownership
@@ -31,9 +34,9 @@ internal sealed class BundleStream : Stream
     /// <param name="payloadOffset">Where the pixel bytes start within
     /// <paramref name="payload"/> (e.g. the data offset within a DDS file).</param>
     /// <param name="payloadLength">How many pixel bytes to present.</param>
-    public BundleStream(byte[] prefix, Stream payload, long payloadOffset, long payloadLength)
+    public BundleStream(Task<byte[]> prefix, Stream payload, long payloadOffset, long payloadLength)
     {
-        this.prefix = prefix ?? throw new ArgumentNullException(nameof(prefix));
+        this.prefixTask = prefix ?? throw new ArgumentNullException(nameof(prefix));
         this.payload = payload ?? throw new ArgumentNullException(nameof(payload));
         this.payloadOffset = payloadOffset;
         this.payloadLength = payloadLength;
@@ -46,6 +49,9 @@ internal sealed class BundleStream : Stream
         if (payloadOffset < 0 || payloadLength < 0)
             throw new ArgumentOutOfRangeException(nameof(payloadLength));
     }
+
+    public BundleStream(byte[] prefix, Stream payload, long payloadOffset, long payloadLength)
+        : this(Task.FromResult(prefix), payload, payloadOffset, payloadLength) { }
 
     public override bool CanRead => true;
     public override bool CanSeek => true;
