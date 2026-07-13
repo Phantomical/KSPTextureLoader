@@ -985,7 +985,11 @@ internal static class DDSLoader
             long offset = 0;
             for (int element = 0; element < arraySize; ++element)
             {
+                // The source is laid out cube-major: each group of 6 slices is one
+                // cubemap's faces. SetPixelData's `element` is the array element
+                // (the cubemap index), not the flattened slice index.
                 int face = element % 6;
+                int arrayElement = element / 6;
                 for (int mip = 0; mip < mipCount; ++mip)
                 {
                     int mipSize = Get2DMipMapSize(width, height, mip, format);
@@ -996,7 +1000,7 @@ internal static class DDSLoader
                         );
 
                     var mipData = buffer.GetSubArray(offset, mipSize).AsNativeArray();
-                    cubeArray.SetPixelData(mipData, mip, (CubemapFace)face, element);
+                    cubeArray.SetPixelData(mipData, mip, (CubemapFace)face, arrayElement);
                     offset += mipSize;
                 }
             }
