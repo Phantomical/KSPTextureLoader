@@ -383,13 +383,12 @@ internal class TextureHandleImpl
             yield return KeyValuePair.Create(index, (TextureHandle<T>)handle);
     }
 
-    string ITextureDestination.Path => Path;
-
-    void ITextureDestination.SetTexture<T>(
+    internal void SetTexture<T>(
         Texture tex,
         TextureLoadOptions options,
         TextureConvertOptions setOptions
     )
+        where T : Texture
     {
         tex.name = Path;
         var original = tex;
@@ -413,6 +412,14 @@ internal class TextureHandleImpl
             Debug.LogException(ex);
         }
     }
+
+    string ITextureDestination.Path => Path;
+
+    void ITextureDestination.SetTexture<T>(
+        Texture tex,
+        TextureLoadOptions options,
+        TextureConvertOptions setOptions
+    ) => SetTexture<T>(tex, options, setOptions);
 
     void ISetException.SetException(ExceptionDispatchInfo ex)
     {

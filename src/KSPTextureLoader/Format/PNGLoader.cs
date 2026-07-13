@@ -19,7 +19,7 @@ internal static class PNGLoader
     static readonly ProfilerMarker LoadImageMarker = new("LoadImage");
 
     public static IEnumerable<object> LoadPNGOrJPEG<T>(
-        TextureHandleImpl handle,
+        ITextureDestination handle,
         TextureLoadOptions options
     )
         where T : Texture
@@ -83,7 +83,7 @@ internal static class PNGLoader
             }
         });
 
-        using (handle.WithCompleteHandler(new TaskCompleteHandler(task)))
+        using (CompletionContext.BlockedOn(new TaskCompleteHandler(task)))
             yield return new WaitUntilTask(task);
 
         var array = task.GetResultUnwrapped();
