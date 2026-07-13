@@ -1042,7 +1042,7 @@ internal static class DDSLoader
                     MipCount = mipCount,
                     Format = (int)format,
                     ColorSpace = GraphicsFormatUtility.IsSRGBFormat(format) ? 1 : 0,
-                    Readable = false,
+                    Readable = !options.Unreadable,
                 },
                 source,
                 pixelDataSize
@@ -1090,7 +1090,7 @@ internal static class DDSLoader
             }
 
             using (TextureApplyMarker.Auto())
-                tex3d.Apply(false, makeNoLongerReadable: true);
+                tex3d.Apply(false, makeNoLongerReadable: options.Unreadable);
             handle.SetTexture<T>(tex3d, options);
             texGuard.Clear();
         });
