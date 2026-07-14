@@ -9,7 +9,12 @@ using UnityEngine;
 
 namespace KSPTextureLoader;
 
-internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler, ICompletionContext
+internal class TextureHandleImpl
+    : IDisposable,
+        ITextureDestination,
+        ISetException,
+        ICompleteHandler,
+        ICompletionContext
 {
     internal struct ExternalMarker;
 
@@ -381,7 +386,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler,
     internal void SetTexture<T>(
         Texture tex,
         TextureLoadOptions options,
-        TextureConvertOptions setOptions = default
+        TextureConvertOptions setOptions
     )
         where T : Texture
     {
@@ -407,6 +412,14 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler,
             Debug.LogException(ex);
         }
     }
+
+    string ITextureDestination.Path => Path;
+
+    void ITextureDestination.SetTexture<T>(
+        Texture tex,
+        TextureLoadOptions options,
+        TextureConvertOptions setOptions
+    ) => SetTexture<T>(tex, options, setOptions);
 
     void ISetException.SetException(ExceptionDispatchInfo ex)
     {

@@ -94,7 +94,7 @@ internal static class DX11
     }
 
     internal static async Task UploadTexture2DAsync<T>(
-        TextureHandleImpl handle,
+        ITextureDestination handle,
         TextureLoadOptions options,
         TextureMetadata metadata,
         Task<LargeNativeArray<byte>> dataTask
@@ -222,7 +222,7 @@ internal static class DX11
     }
 
     internal static async Task UploadTextureCubemapAsync<T>(
-        TextureHandleImpl handle,
+        ITextureDestination handle,
         TextureLoadOptions options,
         TextureMetadata metadata,
         Task<LargeNativeArray<byte>> dataTask

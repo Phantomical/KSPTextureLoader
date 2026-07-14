@@ -337,7 +337,7 @@ internal static class DDSLoader
     }
 
     static async Task LoadTextureBackground<T>(
-        TextureHandleImpl handle,
+        ITextureDestination handle,
         TextureLoadOptions options,
         string diskPath,
         Task<FileInfo> infoTask,
@@ -353,6 +353,17 @@ internal static class DDSLoader
         // demand through the source.
         var source = new PixelDataSource(diskPath, info.dataOffset, info.fileLength);
 
+        await LoadTextureFromSource<T>(handle, metadata, options, source);
+    }
+
+    internal static async Task LoadTextureFromSource<T>(
+        ITextureDestination handle,
+        TextureMetadata metadata,
+        TextureLoadOptions options,
+        PixelDataSource source
+    )
+        where T : Texture
+    {
         try
         {
             if (metadata.paletteType != KopernicusPaletteType.None)
@@ -524,7 +535,7 @@ internal static class DDSLoader
     // Runs on a background thread; only the bundle mount and SetTexture touch
     // the main thread.
     static async Task LoadTextureViaBundle<T>(
-        TextureHandleImpl handle,
+        ITextureDestination handle,
         TextureLoadOptions options,
         TextureBundleBuilder.TextureRequest request,
         PixelDataSource source,
@@ -585,7 +596,7 @@ internal static class DDSLoader
     }
 
     static async Task LoadTexture2D<T>(
-        TextureHandleImpl handle,
+        ITextureDestination handle,
         TextureLoadOptions options,
         TextureMetadata metadata,
         PixelDataSource source
@@ -686,7 +697,7 @@ internal static class DDSLoader
     }
 
     static async Task LoadTexture2DArray<T>(
-        TextureHandleImpl handle,
+        ITextureDestination handle,
         TextureLoadOptions options,
         TextureMetadata metadata,
         PixelDataSource source
@@ -772,7 +783,7 @@ internal static class DDSLoader
     }
 
     static async Task LoadTextureCubemap<T>(
-        TextureHandleImpl handle,
+        ITextureDestination handle,
         TextureLoadOptions options,
         TextureMetadata metadata,
         PixelDataSource source
@@ -910,7 +921,7 @@ internal static class DDSLoader
     }
 
     static async Task LoadTextureCubemapArray<T>(
-        TextureHandleImpl handle,
+        ITextureDestination handle,
         TextureLoadOptions options,
         TextureMetadata metadata,
         PixelDataSource source
@@ -974,7 +985,11 @@ internal static class DDSLoader
             long offset = 0;
             for (int element = 0; element < arraySize; ++element)
             {
+                // The source is laid out cube-major: each group of 6 slices is one
+                // cubemap's faces. SetPixelData's `element` is the array element
+                // (the cubemap index), not the flattened slice index.
                 int face = element % 6;
+                int arrayElement = element / 6;
                 for (int mip = 0; mip < mipCount; ++mip)
                 {
                     int mipSize = Get2DMipMapSize(width, height, mip, format);
@@ -985,7 +1000,7 @@ internal static class DDSLoader
                         );
 
                     var mipData = buffer.GetSubArray(offset, mipSize).AsNativeArray();
-                    cubeArray.SetPixelData(mipData, mip, (CubemapFace)face, element);
+                    cubeArray.SetPixelData(mipData, mip, (CubemapFace)face, arrayElement);
                     offset += mipSize;
                 }
             }
@@ -998,7 +1013,7 @@ internal static class DDSLoader
     }
 
     static async Task LoadTexture3D<T>(
-        TextureHandleImpl handle,
+        ITextureDestination handle,
         TextureLoadOptions options,
         TextureMetadata metadata,
         PixelDataSource source
@@ -1031,7 +1046,7 @@ internal static class DDSLoader
                     MipCount = mipCount,
                     Format = (int)format,
                     ColorSpace = GraphicsFormatUtility.IsSRGBFormat(format) ? 1 : 0,
-                    Readable = false,
+                    Readable = !options.Unreadable,
                 },
                 source,
                 pixelDataSize
@@ -1079,7 +1094,7 @@ internal static class DDSLoader
             }
 
             using (TextureApplyMarker.Auto())
-                tex3d.Apply(false, makeNoLongerReadable: true);
+                tex3d.Apply(false, makeNoLongerReadable: options.Unreadable);
             handle.SetTexture<T>(tex3d, options);
             texGuard.Clear();
         });
