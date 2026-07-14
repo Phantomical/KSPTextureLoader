@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.0.36
+### Added
+* KSPTextureLoader can now load CPU textures directly from asset bundles, even
+  if those textures are not readable within the asset bundle.
+* KSPTextureLoader now uses in-memory asset bundles to load loose dds textures
+  on disk if native texture loading is disabled.
+
+### Changed
+* CPUTexture samplers for BC7/BC4/DXT1/DXT5 now take advantage of AVX2 intrinsics
+  for better performance if KSPBurst is installed.
+* Debug/Release builds of unity are now detected more reliably.
+
+### Fixed
+* Fixed a deadlock when synchronously loading a PNG texture.
+* TextureLoader no longer emits a confusing error message when destroyed during
+  regular shutdown.
+
+As an extra, releases now have `ksp-texture-util` tool that allows you to:
+* build asset bundles
+* extract textures from existing asset bundles
+* build palette textures
+
 ## v1.0.35
 ### Changed
 * Textures loaded from asset bundles can now be unloaded while those asset
