@@ -24,27 +24,25 @@ internal static class Program
             Description = "Path that the output bundle will be written to.",
             Required = true,
         };
+        var prefix = new Option<string?>("--prefix")
+        {
+            Description = "The path prefix prepended to every texture path.",
+        };
+        var properties = new Option<string?>("--properties")
+        {
+            Description = "A YAML file with per-texture properties.",
+        };
         var name = new Option<string?>("--name", "-n")
         {
             Description = "Override the internal name of the asset bundle",
         };
         var seed = new Option<string?>("--seed")
         {
-            Description = "Override the embedded type-tree seed bundle.",
-        };
-        var prefix = new Option<string?>("--prefix")
-        {
-            Description = "A path prefix prepended to every texture path.",
+            Description = "Use a custom seed bundle to for the embedded type trees.",
         };
         var mipmapStreaming = new Option<bool>("--mipmap-streaming")
         {
-            Description = "Enabled mipmap streaming on bundled textures.",
-        };
-        var properties = new Option<string?>("--properties")
-        {
-            Description =
-                "A YAML file assigning per-texture properties (readable, mipmapStreaming) "
-                + "to input files matched by glob.",
+            Description = "Enable mipmap streaming on bundled textures.",
         };
         var inputs = new Argument<string[]>("inputs")
         {
