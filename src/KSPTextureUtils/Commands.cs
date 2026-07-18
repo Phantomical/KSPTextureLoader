@@ -23,7 +23,6 @@ internal static class Commands
         string? name,
         string? seedPath,
         string? prefix,
-        bool mipmapStreaming,
         string? propertiesPath
     )
     {
@@ -75,9 +74,7 @@ internal static class Commands
         var jobInputs = keyed
             .Select(x =>
             {
-                var resolved =
-                    properties?.Resolve(x.rel, mipmapStreaming)
-                    ?? new TextureProperties { MipmapStreaming = mipmapStreaming };
+                var resolved = properties?.Resolve(x.rel) ?? new TextureProperties();
                 return new BundleBuilder.TextureInput
                 {
                     AddressableName = x.key,

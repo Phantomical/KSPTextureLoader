@@ -8,9 +8,8 @@ namespace KSPTextureUtils;
 
 /// <summary>
 /// The per-texture properties a <c>--properties</c> file resolves to for one
-/// input file. Everything keeps Unity's defaults (flags false — or the global
-/// <c>--mipmap-streaming</c> flag —, bilinear filtering, repeat wrapping)
-/// unless an entry overrides it.
+/// input file. Everything keeps Unity's defaults (flags false, bilinear
+/// filtering, repeat wrapping) unless an entry overrides it.
 /// </summary>
 internal sealed class TextureProperties
 {
@@ -194,10 +193,10 @@ internal sealed class TexturePropertiesFile
     /// Resolve the flags for one input file given its input-relative,
     /// forward-slash path. Later matching entries win per flag.
     /// </summary>
-    public TextureProperties Resolve(string relativePath, bool defaultMipmapStreaming)
+    public TextureProperties Resolve(string relativePath)
     {
         bool readable = false;
-        bool mipmapStreaming = defaultMipmapStreaming;
+        bool mipmapStreaming = false;
         var filter = TextureFilterMode.Bilinear;
         var wrapU = TextureWrapMode.Repeat;
         var wrapV = TextureWrapMode.Repeat;

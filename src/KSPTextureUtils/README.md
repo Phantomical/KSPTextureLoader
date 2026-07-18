@@ -24,7 +24,6 @@ Available options are:
 -n, --name         Override the internal name of the asset bundle (used verbatim).
 --prefix <prefix>  A path prefix to prepend to every bundle texture path.
 --seed             Override the seed bundle used for type trees.
---mipmap-streaming Enable mipmap streaming on all textures in the bundle.
 --properties       A YAML file assigning per-texture properties by glob.
 ```
 
@@ -51,9 +50,9 @@ properties:
 Each entry needs a `files` glob plus any of the properties:
 
 * `readable` - keep a CPU-side copy of the pixels (`m_IsReadable`). Default false.
-* `mipmapStreaming` - enable mipmap streaming. Defaults to false, or true if
-  `--mipmap-streaming` was passed. Only applies to 2D textures and cubemaps;
-  array and 3D textures cannot be streamed by unity and ignore the setting.
+* `mipmapStreaming` - enable mipmap streaming. Default false. Only applies to
+  2D textures and cubemaps; array and 3D textures cannot be streamed by unity
+  and ignore the setting.
 * `streamingMipmapsPriority` - mip streaming priority (-128 to 127, default
   0): higher-priority textures keep their mips resident longer under memory
   pressure. Only meaningful when `mipmapStreaming` is enabled.

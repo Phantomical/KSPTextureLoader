@@ -40,10 +40,6 @@ internal static class Program
         {
             Description = "Use a custom seed bundle to for the embedded type trees.",
         };
-        var mipmapStreaming = new Option<bool>("--mipmap-streaming")
-        {
-            Description = "Enable mipmap streaming on bundled textures.",
-        };
         var inputs = new Argument<string[]>("inputs")
         {
             Description = "A directory containing the texture files",
@@ -55,7 +51,6 @@ internal static class Program
         cmd.Options.Add(name);
         cmd.Options.Add(seed);
         cmd.Options.Add(prefix);
-        cmd.Options.Add(mipmapStreaming);
         cmd.Options.Add(properties);
         cmd.Arguments.Add(inputs);
         cmd.SetAction(pr =>
@@ -65,7 +60,6 @@ internal static class Program
                 pr.GetValue(name),
                 pr.GetValue(seed),
                 pr.GetValue(prefix),
-                pr.GetValue(mipmapStreaming),
                 pr.GetValue(properties)
             )
         );

@@ -90,8 +90,7 @@ internal sealed class SourceTexture
 
     /// <summary>Serialized into <c>m_StreamingMipmaps</c>. Only the classic
     /// Texture2D/Cubemap layout carries the field; ignored for the modern
-    /// array/3D types. Set from <c>--mipmap-streaming</c> or the
-    /// <c>--properties</c> file.</summary>
+    /// array/3D types. Set from the <c>--properties</c> file.</summary>
     public bool StreamingMipmaps { get; set; }
 
     /// <summary>Serialized into <c>m_StreamingMipmapsPriority</c> (-128..127):
