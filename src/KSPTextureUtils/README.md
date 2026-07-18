@@ -8,7 +8,7 @@ asset bundles without having to import stuff into the unity editor.
 ### Building an asset bundle
 
 ```sh
-ksp-texture-util build <input-dir> -o output-bundle.unity3d
+ksp-texture-util bundle <input-dir> -o output-bundle.unity3d
 ```
 
 This command takes a directory a builds an asset bundle with the textures within.

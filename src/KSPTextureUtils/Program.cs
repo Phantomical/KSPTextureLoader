@@ -9,7 +9,7 @@ internal static class Program
         var root = new RootCommand(
             "Build KSPTextureLoader-compatible Unity asset bundles from DDS/PNG textures."
         );
-        root.Subcommands.Add(BuildCommand());
+        root.Subcommands.Add(BundleCommand());
         root.Subcommands.Add(ExtractCommand());
         root.Subcommands.Add(PaletteCommand());
         root.Subcommands.Add(MakeSeedCommand());
@@ -18,7 +18,7 @@ internal static class Program
         return root.Parse(args).Invoke();
     }
 
-    static Command BuildCommand()
+    static Command BundleCommand()
     {
         var output = new Option<string>("--output", "-o")
         {
@@ -53,7 +53,7 @@ internal static class Program
             Arity = ArgumentArity.OneOrMore,
         };
 
-        var cmd = new Command("build", "Build an asset bundle from texture files.");
+        var cmd = new Command("bundle", "Build an asset bundle from texture files.");
         cmd.Options.Add(output);
         cmd.Options.Add(name);
         cmd.Options.Add(seed);
