@@ -18,13 +18,18 @@ were relative to `GameData`. If your local file structure doesn't exactly match
 how they would be in `GameData` then you can use `--prefix` to prepend a prefix
 path to them.
 
+You can pass more than one input, and each one may be either a directory
+(searched recursively for `.dds` and `.png` files) or an individual texture
+file. Paths are made relative to the directory that was passed in, or to the
+containing directory for a file argument.
+
 Available options are:
 ```
--o, --output       Path the output bundle will be written to.
--n, --name         Override the internal name of the asset bundle (used verbatim).
---prefix <prefix>  A path prefix to prepend to every bundle texture path.
---seed             Override the seed bundle used for type trees.
---properties       A YAML file assigning per-texture properties by glob.
+-o, --output <output>      (required) Path that the output bundle will be written to.
+-n, --name <name>          Override the internal name of the asset bundle.
+--seed <seed>              Override the embedded seed bundle used for type trees.
+--prefix <prefix>          A path prefix to prepend to every bundle texture path.
+--properties <properties>  A YAML file assigning per-texture properties by glob.
 ```
 
 ### Per-texture properties
@@ -70,14 +75,19 @@ Each entry needs a `files` glob plus any of the properties:
   source file. Useful for data textures like normal maps stored as PNG, which
   would otherwise be tagged sRGB and be incorrectly gamma-converted when
   sampled.
-* `cubemap` - `true` repacks a 2D input into a native cubemap at build time, so
-  KSPTextureLoader loads a cubemap directly instead of converting it in-game.
-  The input must be a 4x3 horizontal cross (width = 4 faces, height = 3 faces)
-  laid out like `TextureUtils.ConvertTexture2dToCubemap` expects. The faces keep
-  the source format (a compressed cross stays compressed), which requires the
-  face size to be a multiple of the format's block size (4 for BC/DXT); inputs
-  that aren't a valid cross or aren't block-aligned are skipped with a message.
-  Only the base mip is used, producing a single-mip cubemap.
+* `cubemap` - `true` packs the input into a real cubemap, so KSP loads it as
+  one directly instead of converting it at load time. The image must be a
+  horizontal cross: four faces wide and three faces tall, with the faces laid
+  out like this:
+
+  ```
+   .    .   +Y    .
+  -Z   -X   +Z   +X
+   .    .   -Y    .
+  ```
+
+  The blank cells are ignored, so you can put whatever you like there. Faces
+  keep the format of the source image.
 
 Globs are matched case-insensitively against the same input-relative path that
 becomes the texture's bundle path, before `--prefix` is applied: `*` matches
@@ -95,10 +105,31 @@ This extracts all the textures contained within the asset bundle. Textures that
 were originally png will be extracted as png, everything else will be extracted
 as dds textures.
 
+Cubemaps, texture arrays, 3d textures, and cubemap arrays all come back as dds
+files of the same shape, with their mipmaps intact, so they can be fed straight
+back into `bundle`.
+
 Available options are:
 ```
--o, --output  Output directory to write files to.
---flat        Put all texture files directly in the output directory.
+-o, --output <output>  (required) Output directory to write files to.
+--flat                 Put all texture files directly in the output directory,
+                       instead of recreating the bundle's path structure.
+```
+
+### Converting a texture to a Kopernicus palette
+
+```sh
+ksp-texture-util palette <input.png> -o output.dds
+```
+
+This converts a PNG or DDS texture to a 16- or 256-colour Kopernicus palette
+DDS, picking whichever palette size the source's colour count allows. It fails
+if the input has more than 256 distinct colours.
+
+Available options are:
+```
+-o, --output <output>  (required) Path that the output palette DDS will be
+                       written to.
 ```
 
 ## Supported texture formats

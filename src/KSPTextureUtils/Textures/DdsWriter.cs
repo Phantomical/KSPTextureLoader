@@ -25,24 +25,65 @@ internal static class DdsWriter
     const uint DDSCAPS_TEXTURE = 0x1000;
     const uint DDSCAPS_MIPMAP = 0x400000;
 
+    const uint DDSD_DEPTH = 0x800000;
+
+    // DDS_HEADER.dwCaps2 flags: the "is a cubemap" bit plus the six per-face bits,
+    // which every face must set for a complete cube, and the volume bit for 3D.
+    const uint DDSCAPS2_CUBEMAP = 0x200;
+    const uint DDSCAPS2_CUBEMAP_ALLFACES = 0xFC00;
+    const uint DDSCAPS2_VOLUME = 0x200000;
+
+    // DDS_HEADER_DXT10 fields
+    const uint DDS_DIMENSION_TEXTURE2D = 3;
+    const uint DDS_DIMENSION_TEXTURE3D = 4;
+    const uint DDS_RESOURCE_MISC_TEXTURECUBE = 0x4;
+
     const uint Dx10 = 0x30315844; // "DX10"
 
+    /// <summary>
+    /// Write a texture's raw pixel bytes as a DDS of the given shape — the inverse of
+    /// <see cref="DdsReader"/>. <paramref name="layers"/> carries the same per-kind
+    /// count as <see cref="SourceTexture.Layers"/>: depth slices for a 3D texture,
+    /// array length for a 2D array, and cube count for a cubemap array.
+    ///
+    /// <para>DDS and Unity agree on the payload layout for every shape — a cubemap is
+    /// six complete mip chains (+X,-X,+Y,-Y,+Z,-Z), an array is one chain per slice,
+    /// and a volume interleaves its slice stack per mip — so the bytes are always
+    /// copied verbatim and only the header differs.</para>
+    /// </summary>
     public static byte[] Write(
         UnityTextureFormat format,
         int width,
         int height,
         int mipCount,
-        ReadOnlySpan<byte> data
+        ReadOnlySpan<byte> data,
+        TextureKind kind = TextureKind.Texture2D,
+        int layers = 1
     )
     {
         // The packed palette formats have no clean DDS equivalent; expand to RGBA32.
         if (format is UnityTextureFormat.RGB565 or UnityTextureFormat.RGBA4444)
         {
             byte[] rgba = Expand16ToRgba32(format, data);
-            return Write(UnityTextureFormat.RGBA32, width, height, mipCount, rgba);
+            return Write(UnityTextureFormat.RGBA32, width, height, mipCount, rgba, kind, layers);
         }
 
+        bool cubemap = kind is TextureKind.Cubemap or TextureKind.CubemapArray;
+        bool volume = kind == TextureKind.Texture3D;
+        // A DX10 arraySize counts whole cubes for a cubemap array, not faces.
+        uint arraySize = kind switch
+        {
+            TextureKind.Texture2DArray or TextureKind.CubemapArray => (uint)Math.Max(1, layers),
+            _ => 1u,
+        };
+        int depth = volume ? Math.Max(1, layers) : 0;
+
         var (legacyFourCC, dxgi) = MapFormat(format);
+        // A legacy header has nowhere to put an array size, so anything with more
+        // than one slice has to go out with a DX10 header even when its format has
+        // a perfectly good FourCC (DXT1/DXT5).
+        if (arraySize > 1)
+            legacyFourCC = null;
         bool compressed = TextureFormatInfo.IsBlockCompressed(format);
         long topMip = TextureFormatInfo.MipSize(format, width, height);
 
@@ -55,13 +96,15 @@ internal static class DdsWriter
         flags |= compressed ? DDSD_LINEARSIZE : DDSD_PITCH;
         if (mipCount > 1)
             flags |= DDSD_MIPMAPCOUNT;
+        if (volume)
+            flags |= DDSD_DEPTH;
         w.Write(flags);
         w.Write(height);
         w.Write(width);
         w.Write(
             (int)(compressed ? topMip : (long)width * TextureFormatInfo.BlockOrPixelSize(format))
         ); // pitch or linear size
-        w.Write(0); // depth
+        w.Write(depth);
         w.Write(mipCount);
         for (int i = 0; i < 11; i++)
             w.Write(0); // reserved1
@@ -79,8 +122,15 @@ internal static class DdsWriter
         uint caps = DDSCAPS_TEXTURE;
         if (mipCount > 1)
             caps |= DDSCAPS_MIPMAP | DDSCAPS_COMPLEX;
+        if (cubemap || volume || arraySize > 1)
+            caps |= DDSCAPS_COMPLEX;
         w.Write(caps);
-        w.Write(0); // caps2
+        uint caps2 = 0;
+        if (cubemap)
+            caps2 = DDSCAPS2_CUBEMAP | DDSCAPS2_CUBEMAP_ALLFACES;
+        else if (volume)
+            caps2 = DDSCAPS2_VOLUME;
+        w.Write(caps2);
         w.Write(0); // caps3
         w.Write(0); // caps4
         w.Write(0); // reserved2
@@ -89,9 +139,10 @@ internal static class DdsWriter
         {
             // DDS_HEADER_DXT10
             w.Write(dxgi);
-            w.Write(3); // resourceDimension = TEXTURE2D
-            w.Write(0); // miscFlag
-            w.Write(1); // arraySize
+            // A cube is six 2D surfaces, so only a true volume is TEXTURE3D.
+            w.Write(volume ? DDS_DIMENSION_TEXTURE3D : DDS_DIMENSION_TEXTURE2D);
+            w.Write(cubemap ? DDS_RESOURCE_MISC_TEXTURECUBE : 0u); // miscFlag
+            w.Write(arraySize);
             w.Write(0); // miscFlags2
         }
 
@@ -103,8 +154,10 @@ internal static class DdsWriter
     static (uint? legacyFourCC, uint dxgi) MapFormat(UnityTextureFormat format) =>
         format switch
         {
-            UnityTextureFormat.DXT1 => (FourCC('D', 'X', 'T', '1'), 0u),
-            UnityTextureFormat.DXT5 => (FourCC('D', 'X', 'T', '5'), 0u),
+            // These two prefer the legacy FourCC, but still carry a DXGI value for
+            // when an array forces the DX10 header (see the arraySize check above).
+            UnityTextureFormat.DXT1 => (FourCC('D', 'X', 'T', '1'), 71u), // BC1_UNORM
+            UnityTextureFormat.DXT5 => (FourCC('D', 'X', 'T', '5'), 77u), // BC3_UNORM
             UnityTextureFormat.BC4 => (null, 80u), // BC4_UNORM
             UnityTextureFormat.BC5 => (null, 83u), // BC5_UNORM
             UnityTextureFormat.BC6H => (null, 95u), // BC6H_UF16

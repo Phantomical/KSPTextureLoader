@@ -376,31 +376,54 @@ internal static class Commands
             skipped = 0;
         var usedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var info in afile.GetAssetsOfType(AssetClassID.Texture2D))
+        // Every texture object the builder can emit, paired with the shape it holds.
+        // Texture2D and Cubemap share the classic field layout; Texture3D,
+        // Texture2DArray and CubemapArray use the modern one (see ReadShape).
+        var textureAssets = Shape(AssetClassID.Texture2D, TextureKind.Texture2D)
+            .Concat(Shape(AssetClassID.Cubemap, TextureKind.Cubemap))
+            .Concat(Shape(AssetClassID.Texture3D, TextureKind.Texture3D))
+            .Concat(Shape(AssetClassID.Texture2DArray, TextureKind.Texture2DArray))
+            .Concat(Shape(AssetClassID.CubemapArray, TextureKind.CubemapArray));
+
+        IEnumerable<(AssetFileInfo, TextureKind)> Shape(AssetClassID id, TextureKind kind) =>
+            afile.GetAssetsOfType(id).Select(i => (i, kind));
+
+        foreach (var (info, kind) in textureAssets)
         {
             var b = am.GetBaseField(afileInst, info);
             string name = b["m_Name"].AsString;
-            int w = b["m_Width"].AsInt;
-            int h = b["m_Height"].AsInt;
             int mips = Math.Max(1, b["m_MipCount"].AsInt);
-            int fmt = b["m_TextureFormat"].AsInt;
             long size = b["m_StreamData"]["size"].AsUInt;
             long off = b["m_StreamData"]["offset"].AsUInt;
 
-            var format = (UnityTextureFormat)fmt;
+            var shape = ReadShape(b, kind);
+            if (shape is null)
+            {
+                Console.WriteLine(
+                    $"skip  {name}: {kind} uses graphics format {b["m_Format"].AsInt}, "
+                        + "which has no DDS equivalent"
+                );
+                skipped++;
+                continue;
+            }
+            var (format, colorSpace, w, h, layers) = shape.Value;
 
             // The container key keeps the source file's extension, so a bundle built
             // from a PNG round-trips back to a PNG. Anything else is written as DDS,
-            // its extension swapped to .dds.
+            // its extension swapped to .dds. Only a plain 2D texture can be a PNG —
+            // no other shape fits in one.
             pathIdToKey.TryGetValue(info.PathId, out var key);
             bool wantPng =
-                key is not null
+                kind == TextureKind.Texture2D
+                && key is not null
                 && key.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
                 && PngWriter.CanWrite(format);
 
             if (!wantPng && !DdsWriter.CanWrite(format))
             {
-                Console.WriteLine($"skip  {name}: texture format {fmt} cannot be written as DDS");
+                Console.WriteLine(
+                    $"skip  {name}: texture format {(int)format} cannot be written as DDS"
+                );
                 skipped++;
                 continue;
             }
@@ -429,6 +452,20 @@ internal static class Commands
                 continue;
             }
 
+            // Every shape but a plain 2D texture stores several surfaces back to back.
+            // Writing a short payload would produce a DDS whose later faces or slices
+            // read past the end of the data.
+            long need = TextureFormatInfo.ShapeSize(format, kind, w, h, layers, mips);
+            if (pixels.Length < need)
+            {
+                Console.WriteLine(
+                    $"skip  {name}: {kind} {w}x{h} needs {need} bytes for {layers} layer(s) "
+                        + $"x {mips} mip(s), but only {pixels.Length} are present"
+                );
+                skipped++;
+                continue;
+            }
+
             string ext = wantPng ? ".png" : ".dds";
 
             string rel;
@@ -449,13 +486,51 @@ internal static class Commands
             Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
             byte[] outBytes = wantPng
                 ? PngWriter.Write(format, w, h, pixels)
-                : DdsWriter.Write(format, w, h, mips, pixels);
+                : DdsWriter.Write(format, w, h, mips, pixels, kind, layers);
             File.WriteAllBytes(outPath, outBytes);
             written++;
         }
 
         Console.WriteLine($"extracted {written} texture(s) to {outDir}, {skipped} skipped");
         return written > 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Read the format and dimensions of a texture object, bridging the two
+    /// serialization layouts: Texture2D/Cubemap keep the classic
+    /// <c>m_TextureFormat</c>, while Texture3D/Texture2DArray/CubemapArray store a
+    /// <c>GraphicsFormat</c> in <c>m_Format</c> and count slices in <c>m_Depth</c>
+    /// (or <c>m_CubemapCount</c>). Null means the format has no classic equivalent.
+    /// </summary>
+    static (
+        UnityTextureFormat Format,
+        int ColorSpace,
+        int Width,
+        int Height,
+        int Layers
+    )? ReadShape(AssetTypeValueField b, TextureKind kind)
+    {
+        int width = b["m_Width"].AsInt;
+
+        if (kind is TextureKind.Texture2D or TextureKind.Cubemap)
+            return (
+                (UnityTextureFormat)b["m_TextureFormat"].AsInt,
+                b["m_ColorSpace"].AsInt,
+                width,
+                b["m_Height"].AsInt,
+                1
+            );
+
+        var mapped = TextureFormatInfo.FromGraphicsFormat(b["m_Format"].AsInt);
+        if (mapped is null)
+            return null;
+        var (format, space) = mapped.Value;
+
+        // A CubemapArray's faces are square, so it serializes no m_Height and counts
+        // cubes rather than slices.
+        return kind == TextureKind.CubemapArray
+            ? (format, space, width, width, Math.Max(1, b["m_CubemapCount"].AsInt))
+            : (format, space, width, b["m_Height"].AsInt, Math.Max(1, b["m_Depth"].AsInt));
     }
 
     static string Sanitize(string name)

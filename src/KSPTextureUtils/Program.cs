@@ -38,7 +38,7 @@ internal static class Program
         };
         var seed = new Option<string?>("--seed")
         {
-            Description = "Use a custom seed bundle to for the embedded type trees.",
+            Description = "Use a custom seed bundle for the embedded type trees.",
         };
         var inputs = new Argument<string[]>("inputs")
         {

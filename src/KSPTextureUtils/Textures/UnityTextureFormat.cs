@@ -6,7 +6,7 @@ namespace KSPTextureUtils.Textures;
 /// and are what <c>KSPTextureLoader</c> casts back to <c>TextureFormat</c> when it
 /// builds the CPU texture from streamed bytes.
 /// </summary>
-internal enum UnityTextureFormat
+public enum UnityTextureFormat
 {
     Alpha8 = 1,
     RGB24 = 3,
@@ -170,4 +170,67 @@ internal static class TextureFormatInfo
             _ => 0, // None
         };
     }
+
+    /// <summary>
+    /// The inverse of <see cref="ToGraphicsFormat"/>: turn a serialized
+    /// <c>GraphicsFormat</c> value back into a classic format plus its colour space
+    /// (1 = sRGB, 0 = linear), or null if it maps to nothing we handle. Two mappings
+    /// are one-way and resolve to the more common format: Alpha8 shares R8_UNorm, and
+    /// ARGB32 shares RGBA32's pair, so both come back as R8/RGBA32.
+    /// </summary>
+    public static (UnityTextureFormat Format, int ColorSpace)? FromGraphicsFormat(int graphics) =>
+        graphics switch
+        {
+            1 => (UnityTextureFormat.R8, 1),
+            5 => (UnityTextureFormat.R8, 0),
+            3 => (UnityTextureFormat.RGB24, 1),
+            7 => (UnityTextureFormat.RGB24, 0),
+            4 => (UnityTextureFormat.RGBA32, 1),
+            8 => (UnityTextureFormat.RGBA32, 0),
+            57 => (UnityTextureFormat.BGRA32, 1),
+            59 => (UnityTextureFormat.BGRA32, 0),
+            6 => (UnityTextureFormat.RG16, 0),
+            21 => (UnityTextureFormat.R16, 0),
+            68 => (UnityTextureFormat.RGB565, 0),
+            66 => (UnityTextureFormat.RGBA4444, 0),
+            45 => (UnityTextureFormat.RHalf, 0),
+            46 => (UnityTextureFormat.RGHalf, 0),
+            48 => (UnityTextureFormat.RGBAHalf, 0),
+            49 => (UnityTextureFormat.RFloat, 0),
+            50 => (UnityTextureFormat.RGFloat, 0),
+            52 => (UnityTextureFormat.RGBAFloat, 0),
+            73 => (UnityTextureFormat.RGB9e5Float, 0),
+            96 => (UnityTextureFormat.DXT1, 1),
+            97 => (UnityTextureFormat.DXT1, 0),
+            100 => (UnityTextureFormat.DXT5, 1),
+            101 => (UnityTextureFormat.DXT5, 0),
+            102 => (UnityTextureFormat.BC4, 0),
+            104 => (UnityTextureFormat.BC5, 0),
+            106 => (UnityTextureFormat.BC6H, 0),
+            108 => (UnityTextureFormat.BC7, 1),
+            109 => (UnityTextureFormat.BC7, 0),
+            _ => null,
+        };
+
+    /// <summary>
+    /// Total payload size for a texture of the given shape: the number of complete
+    /// mip chains a kind stores back to back (6 per cubemap, one per array slice),
+    /// or the interleaved slice stack of a volume.
+    /// </summary>
+    public static long ShapeSize(
+        UnityTextureFormat f,
+        TextureKind kind,
+        int width,
+        int height,
+        int layers,
+        int mipCount
+    ) =>
+        kind switch
+        {
+            TextureKind.Texture3D => VolumeMipChainSize(f, width, height, layers, mipCount),
+            TextureKind.Cubemap => 6 * MipChainSize(f, width, height, mipCount),
+            TextureKind.CubemapArray => 6L * layers * MipChainSize(f, width, height, mipCount),
+            TextureKind.Texture2DArray => layers * MipChainSize(f, width, height, mipCount),
+            _ => MipChainSize(f, width, height, mipCount),
+        };
 }

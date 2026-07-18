@@ -5,7 +5,7 @@ namespace KSPTextureUtils.Textures;
 /// (Texture2D 28, Cubemap 89, Texture3D 117, Texture2DArray 187, CubemapArray 188)
 /// and the field layout written into the bundle.
 /// </summary>
-internal enum TextureKind
+public enum TextureKind
 {
     Texture2D,
     Cubemap,
