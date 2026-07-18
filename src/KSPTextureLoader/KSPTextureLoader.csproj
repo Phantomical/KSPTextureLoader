@@ -110,6 +110,59 @@
     </ItemGroup>
 
     <!--
+        Never ship KSP's own assemblies back to KSP.
+
+        KSPBuildTools resolves the framework/Unity/game references out of KSP's
+        Managed folder and marks each one Private=false, so those don't get copied.
+        But that only covers the references it declares directly: RAR then walks
+        their dependency closure and turns up private Mono BCL implementation
+        assemblies nobody asked for — Mono.Posix and Mono.Security (via System.dll /
+        System.Core.dll), System.Configuration (via System.dll), and System.Security
+        (via System.Configuration). Those are undeclared transitive references, so
+        they default to CopyLocal=true.
+
+        They aren't caught by RAR's "don't copy framework files" rule either: that
+        compares against _TargetFrameworkDirectories, which KSPBuildTools sets to a
+        forward-slashed KSPBT_ManagedPath, while RAR resolved these via the
+        referencing assembly's own (backslashed) directory — so the paths don't
+        match as strings and the files stay copy-local.
+
+        The result was byte-identical copies of KSP's Mono BCL landing in
+        Plugins/, where AssemblyLoader would load them as if they were mod
+        assemblies, duplicating what the runtime has already loaded.
+
+        Rather than blacklisting those four by name, drop anything that resolved out
+        of the Managed folder: if it came from KSP, KSP already has it. Paths are
+        normalized through GetFullPath so the slash mismatch above can't defeat the
+        comparison (MSBuild's string == is case-insensitive, which covers Windows).
+    -->
+    <Target Name="DoNotShipKSPManagedAssemblies" AfterTargets="ResolveAssemblyReferences">
+        <PropertyGroup>
+            <_KSPManagedFullPath>$([MSBuild]::EnsureTrailingSlash($([System.IO.Path]::GetFullPath('$(KSPBT_ManagedPath)'))))</_KSPManagedFullPath>
+        </PropertyGroup>
+
+        <ItemGroup>
+            <!--
+                A condition can't call a property function on %(metadata), so stamp the
+                normalized directory onto each item first, then collect the matches and
+                remove them by identity.
+            -->
+            <ReferenceCopyLocalPaths>
+                <_NormalizedDir>$([MSBuild]::EnsureTrailingSlash($([System.IO.Path]::GetFullPath('%(RootDir)%(Directory)'))))</_NormalizedDir>
+            </ReferenceCopyLocalPaths>
+
+            <_KSPManagedCopyLocal
+                Include="@(ReferenceCopyLocalPaths)"
+                Condition=" '%(ReferenceCopyLocalPaths._NormalizedDir)' == '$(_KSPManagedFullPath)' " />
+
+            <ReferenceCopyLocalPaths Remove="@(_KSPManagedCopyLocal)" />
+        </ItemGroup>
+
+        <Message Importance="normal"
+                 Text="Not shipping KSP-provided assembly: %(_KSPManagedCopyLocal.Filename)%(_KSPManagedCopyLocal.Extension)" />
+    </Target>
+
+    <!--
         It's really easy for old binaries to stick around in GameData and bin
         directories. This step makes sure that doesn't happen.
     -->
