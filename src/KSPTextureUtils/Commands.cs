@@ -691,7 +691,7 @@ internal static class Commands
             .FirstOrDefault(n => n.EndsWith("seed.bundle", StringComparison.OrdinalIgnoreCase));
         if (resource is null)
             throw new InvalidOperationException(
-                "no embedded seed bundle; pass --seed <seed.bundle> or run 'make-seed' first"
+                "no embedded seed bundle; pass --seed <seed.bundle> or run 'dev make-seed' first"
             );
         using var stream = asm.GetManifestResourceStream(resource)!;
         using var ms = new MemoryStream();

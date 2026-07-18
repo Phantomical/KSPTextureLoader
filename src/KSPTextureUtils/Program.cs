@@ -12,7 +12,6 @@ internal static class Program
         root.Subcommands.Add(BundleCommand());
         root.Subcommands.Add(ExtractCommand());
         root.Subcommands.Add(PaletteCommand());
-        root.Subcommands.Add(MakeSeedCommand());
         root.Subcommands.Add(DevCommand());
 
         return root.Parse(args).Invoke();
@@ -169,9 +168,9 @@ internal static class Program
     }
 
     // Developer-only inspection and self-check verbs, grouped under a single hidden
-    // `dev` parent command (e.g. `dev probe`, `dev validate`, `dev palette-test`,
-    // `dev cubemap-test`) so they stay out of the way of the normal build/extract
-    // workflow.
+    // `dev` parent command (e.g. `dev probe`, `dev validate`, `dev make-seed`,
+    // `dev palette-test`, `dev cubemap-test`) so they stay out of the way of the
+    // normal bundle/extract workflow.
     static Command DevCommand()
     {
         var dev = new Command("dev", "Developer-only inspection and self-check commands.")
@@ -180,6 +179,7 @@ internal static class Program
         };
         dev.Subcommands.Add(ProbeCommand());
         dev.Subcommands.Add(ValidateCommand());
+        dev.Subcommands.Add(MakeSeedCommand());
         dev.Subcommands.Add(MakeTypeTreeCommand());
         dev.Subcommands.Add(PaletteTestCommand());
         dev.Subcommands.Add(CubemapTestCommand());
