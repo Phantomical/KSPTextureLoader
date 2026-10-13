@@ -18,6 +18,12 @@
         -->
         <DefineConstants>$(DefineConstants);ENABLE_PROFILER</DefineConstants>
 
+        <!--
+            Build with -p:Unity67=true (or set it in KSPTextureLoader.props.user)
+            to target a Unity 6.7 build of KSP.
+        -->
+        <DefineConstants Condition=" '$(Unity67)' == 'true' ">$(DefineConstants);UNITY_6_7</DefineConstants>
+
         <RepoRootPath>$(MSBuildThisFileDirectory)\..\..</RepoRootPath>
 
         <KSPBT_ModRoot>$(RepoRootPath)\GameData\$(MSBuildProjectName)</KSPBT_ModRoot>
@@ -79,9 +85,27 @@
             Unity.Burst/Unity.Mathematics, so it never clashes with a KSPBurst-provided
             copy at runtime.
         -->
-        <Reference Include="KSPTextureLoader.Burst">
+        <Reference Include="KSPTextureLoader.Burst" Condition=" '$(Unity67)' != 'true' ">
             <HintPath>$(RepoRootPath)\deps\KSPTextureLoader.Burst.dll</HintPath>
             <Private>true</Private>
+        </Reference>
+
+        <!--
+            Unity 6.7 ships Unity.Burst and Unity.Mathematics with the game (and
+            the intrinsics in UnityEngine.BurstModule), so use those instead of our
+            bundled copy, which would otherwise clash with them.
+        -->
+        <Reference Include="Unity.Burst" Condition=" '$(Unity67)' == 'true' ">
+            <HintPath>$(KSPBT_GameRoot)\KSP_x64_Data\Managed\Unity.Burst.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="Unity.Mathematics" Condition=" '$(Unity67)' == 'true' ">
+            <HintPath>$(KSPBT_GameRoot)\KSP_x64_Data\Managed\Unity.Mathematics.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="netstandard" Condition=" '$(Unity67)' == 'true' ">
+            <HintPath>$(KSPBT_GameRoot)\KSP_x64_Data\Managed\netstandard.dll</HintPath>
+            <Private>false</Private>
         </Reference>
 
         <ProjectReference Include="../KSPTextureLoader.Analyzers/KSPTextureLoader.Analyzers.csproj"
@@ -107,6 +131,12 @@
         <Publicize Include="UnityEngine.CoreModule:Unity.Profiling.ProfilerMarker+AutoScope.m_Ptr" />
         <Publicize Include="UnityEngine.CoreModule:Unity.Profiling.ProfilerMarker.Internal_Begin" />
         <Publicize Include="UnityEngine.CoreModule:Unity.Profiling.ProfilerMarker.Internal_End" />
+    </ItemGroup>
+
+    <ItemGroup Condition=" '$(Unity67)' == 'true' ">
+        <Publicize Include="UnityEngine.ManagedKernelModule:Unity.Collections.NativeArray`1.m_AllocatorLabel" />
+        <Publicize Include="UnityEngine.CoreModule:UnityEngine.Texture.GetTextureColorSpace" />
+        <Publicize Include="UnityEngine.CoreModule:UnityEngine.TextureColorSpace" />
     </ItemGroup>
 
     <!--

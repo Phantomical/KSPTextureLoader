@@ -102,6 +102,18 @@ internal static class TextureUtils
         DontCreateSharedTextureData = 1 << 4,
         APIShareable = 1 << 5,
         Crunch = 1 << 6,
+
+        /// <summary>
+        /// Not a unity flag. On Unity 6.7 textures are created with
+        /// <c>DontUploadUponCreate</c> unless this is set. Set it if the
+        /// texture is going to be written to by <see cref="Graphics.CopyTexture"/>
+        /// before it is applied, since that needs the GPU texture to exist.
+        /// </summary>
+#if UNITY_6_7
+        UploadUponCreate = 1 << 30,
+#else
+        UploadUponCreate = 0,
+#endif
     }
 
     /// <summary>
@@ -141,6 +153,16 @@ internal static class TextureUtils
         );
     }
 
+#if UNITY_6_7
+    static TextureCreationFlags GetUnityCreationFlags(InternalTextureCreationFlags flags)
+    {
+        var unity = (TextureCreationFlags)(flags & ~InternalTextureCreationFlags.UploadUponCreate);
+        if ((flags & InternalTextureCreationFlags.UploadUponCreate) == 0)
+            unity |= TextureCreationFlags.DontUploadUponCreate;
+        return unity;
+    }
+#endif
+
     static readonly ProfilerMarker CreateTexture2DMarker = new("CreateUninitializedTexture2D");
 
     internal static Texture2D CreateUninitializedTexture2D(
@@ -153,13 +175,16 @@ internal static class TextureUtils
     {
         using var scope = CreateTexture2DMarker.Auto();
 
-        var tex = (Texture2D)FormatterServices.GetUninitializedObject(typeof(Texture2D));
-        if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
-            return tex;
-
         flags |= InternalTextureCreationFlags.DontInitializePixels;
         if (mipCount != 1)
             flags |= InternalTextureCreationFlags.MipChain;
+
+#if UNITY_6_7
+        return new Texture2D(width, height, format, mipCount, GetUnityCreationFlags(flags));
+#else
+        var tex = (Texture2D)FormatterServices.GetUninitializedObject(typeof(Texture2D));
+        if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
+            return tex;
 
         Texture2D.Internal_Create(
             tex,
@@ -172,6 +197,7 @@ internal static class TextureUtils
         );
 
         return tex;
+#endif
     }
 
     static readonly ProfilerMarker CreateTexture2DArrayMarker = new(
@@ -189,13 +215,23 @@ internal static class TextureUtils
     {
         using var scope = CreateTexture2DArrayMarker.Auto();
 
-        var tex = (Texture2DArray)FormatterServices.GetUninitializedObject(typeof(Texture2DArray));
-        if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
-            return tex;
-
         flags |= InternalTextureCreationFlags.DontInitializePixels;
         if (mipCount != 1)
             flags |= InternalTextureCreationFlags.MipChain;
+
+#if UNITY_6_7
+        return new Texture2DArray(
+            width,
+            height,
+            depth,
+            format,
+            GetUnityCreationFlags(flags),
+            mipCount
+        );
+#else
+        var tex = (Texture2DArray)FormatterServices.GetUninitializedObject(typeof(Texture2DArray));
+        if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
+            return tex;
 
         Texture2DArray.Internal_Create(
             tex,
@@ -208,6 +244,7 @@ internal static class TextureUtils
         );
 
         return tex;
+#endif
     }
 
     static readonly ProfilerMarker CreateTexture3DMarker = new("CreateUninitializedTexture3D");
@@ -223,13 +260,16 @@ internal static class TextureUtils
     {
         using var scope = CreateTexture3DMarker.Auto();
 
-        var tex = (Texture3D)FormatterServices.GetUninitializedObject(typeof(Texture3D));
-        if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
-            return tex;
-
         flags |= InternalTextureCreationFlags.DontInitializePixels;
         if (mipCount != 1)
             flags |= InternalTextureCreationFlags.MipChain;
+
+#if UNITY_6_7
+        return new Texture3D(width, height, depth, format, GetUnityCreationFlags(flags), mipCount);
+#else
+        var tex = (Texture3D)FormatterServices.GetUninitializedObject(typeof(Texture3D));
+        if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
+            return tex;
 
         Texture3D.Internal_Create(
             tex,
@@ -242,6 +282,7 @@ internal static class TextureUtils
         );
 
         return tex;
+#endif
     }
 
     static readonly ProfilerMarker CreateCubemapMarker = new("CreateUninitializedCubemap");
@@ -255,14 +296,17 @@ internal static class TextureUtils
     {
         using var scope = CreateCubemapMarker.Auto();
 
+        flags |= InternalTextureCreationFlags.DontInitializePixels;
+        if (mipCount != 1)
+            flags |= InternalTextureCreationFlags.MipChain;
+
+#if UNITY_6_7
+        return new Cubemap(extent, format, GetUnityCreationFlags(flags), mipCount);
+#else
         var tex = (Cubemap)FormatterServices.GetUninitializedObject(typeof(Cubemap));
 
         if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
             return tex;
-
-        flags |= InternalTextureCreationFlags.DontInitializePixels;
-        if (mipCount != 1)
-            flags |= InternalTextureCreationFlags.MipChain;
 
         Cubemap.Internal_Create(
             tex,
@@ -274,6 +318,7 @@ internal static class TextureUtils
         );
 
         return tex;
+#endif
     }
 
     static readonly ProfilerMarker CreateCubemapArrayMarker = new(
@@ -290,14 +335,17 @@ internal static class TextureUtils
     {
         using var scope = CreateCubemapArrayMarker.Auto();
 
+        flags |= InternalTextureCreationFlags.DontInitializePixels;
+        if (mipCount != 1)
+            flags |= InternalTextureCreationFlags.MipChain;
+
+#if UNITY_6_7
+        return new CubemapArray(extent, count, format, GetUnityCreationFlags(flags), mipCount);
+#else
         var tex = (CubemapArray)FormatterServices.GetUninitializedObject(typeof(CubemapArray));
 
         if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
             return tex;
-
-        flags |= InternalTextureCreationFlags.DontInitializePixels;
-        if (mipCount != 1)
-            flags |= InternalTextureCreationFlags.MipChain;
 
         CubemapArray.Internal_Create(
             tex,
@@ -309,6 +357,7 @@ internal static class TextureUtils
         );
 
         return tex;
+#endif
     }
     #endregion
 
@@ -335,8 +384,17 @@ internal static class TextureUtils
             height,
             mipCount,
             format,
+#if UNITY_6_7
+            tex.GetTextureColorSpace(format),
+#endif
             (TextureCreationFlags)flags,
+#if UNITY_6_7
+            nativePtr,
+            true,
+            null
+#else
             nativePtr
+#endif
         );
 
         return tex;
@@ -362,6 +420,9 @@ internal static class TextureUtils
             extent,
             mipCount,
             format,
+#if UNITY_6_7
+            tex.GetTextureColorSpace(format),
+#endif
             (TextureCreationFlags)flags,
             nativePtr
         );
@@ -392,7 +453,8 @@ internal static class TextureUtils
             src.width,
             src.height,
             src.mipmapCount,
-            src.graphicsFormat
+            src.graphicsFormat,
+            InternalTextureCreationFlags.UploadUponCreate
         );
         if (!src.isReadable)
             dst.Apply(false, true);
@@ -408,7 +470,8 @@ internal static class TextureUtils
             src.height,
             src.depth,
             src.mipmapCount,
-            src.graphicsFormat
+            src.graphicsFormat,
+            InternalTextureCreationFlags.UploadUponCreate
         );
         if (!src.isReadable)
             dst.Apply(false, true);
@@ -424,7 +487,8 @@ internal static class TextureUtils
             src.height,
             src.depth,
             src.mipmapCount,
-            src.graphicsFormat
+            src.graphicsFormat,
+            InternalTextureCreationFlags.UploadUponCreate
         );
         if (!src.isReadable)
             dst.Apply(false, true);
@@ -435,7 +499,12 @@ internal static class TextureUtils
 
     internal static Cubemap CloneTexture(Cubemap src)
     {
-        var dst = CreateUninitializedCubemap(src.width, src.mipmapCount, src.graphicsFormat);
+        var dst = CreateUninitializedCubemap(
+            src.width,
+            src.mipmapCount,
+            src.graphicsFormat,
+            InternalTextureCreationFlags.UploadUponCreate
+        );
         if (!src.isReadable)
             dst.Apply(false, true);
 
@@ -449,7 +518,8 @@ internal static class TextureUtils
             src.width,
             src.cubemapCount,
             src.mipmapCount,
-            src.graphicsFormat
+            src.graphicsFormat,
+            InternalTextureCreationFlags.UploadUponCreate
         );
         if (!src.isReadable)
             dst.Apply(false, true);
@@ -568,7 +638,12 @@ internal static class TextureUtils
         // garbage.
         if (CanGpuCopyTexture2dToCubemap && (!readable || src.isReadable))
         {
-            cube = CreateUninitializedCubemap(cubedim, mips, src.graphicsFormat);
+            cube = CreateUninitializedCubemap(
+                cubedim,
+                mips,
+                src.graphicsFormat,
+                InternalTextureCreationFlags.UploadUponCreate
+            );
 
             // Make sure the GPU texture exists and drop the CPU copy so that
             // nothing uploads the uninitialized CPU data over what we copy.
@@ -627,13 +702,23 @@ internal static class TextureUtils
 
     internal static Texture2DArray ConvertTexture2DToArray(Texture2D src)
     {
-        var dst = (Texture2DArray)FormatterServices.GetUninitializedObject(typeof(Texture2DArray));
-
         var flags = InternalTextureCreationFlags.DontInitializePixels;
         if (src.mipmapCount != 1)
             flags |= InternalTextureCreationFlags.MipChain;
         if (!src.isReadable)
             flags |= InternalTextureCreationFlags.DontCreateSharedTextureData;
+
+#if UNITY_6_7
+        var dst = new Texture2DArray(
+            src.width,
+            src.height,
+            1,
+            src.graphicsFormat,
+            (TextureCreationFlags)flags,
+            src.mipmapCount
+        );
+#else
+        var dst = (Texture2DArray)FormatterServices.GetUninitializedObject(typeof(Texture2DArray));
 
         Texture2DArray.Internal_Create(
             dst,
@@ -644,6 +729,7 @@ internal static class TextureUtils
             src.graphicsFormat,
             (TextureCreationFlags)flags
         );
+#endif
 
         for (int i = 0; i < src.mipmapCount; ++i)
             Graphics.CopyTexture(src, 0, i, dst, 0, i);
@@ -653,7 +739,7 @@ internal static class TextureUtils
 
     internal static CubemapArray ConvertCubemapToArray(Cubemap src)
     {
-        var flags = InternalTextureCreationFlags.None;
+        var flags = InternalTextureCreationFlags.UploadUponCreate;
         if (!src.isReadable)
             flags |= InternalTextureCreationFlags.DontCreateSharedTextureData;
         var dst = CreateUninitializedCubemapArray(

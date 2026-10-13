@@ -613,7 +613,8 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
                 src.width,
                 src.height,
                 src.mipmapCount,
-                src.graphicsFormat
+                src.graphicsFormat,
+                TextureUtils.InternalTextureCreationFlags.UploadUponCreate
             );
             copy.name = src.name;
             copy.anisoLevel = src.anisoLevel;

@@ -412,7 +412,12 @@ internal static class DebugUIManager
 
         // Lock game input while the mouse is over the window
         var inputLock = go.AddComponent<DialogMouseEnterControlLock>();
-        inputLock.Setup(ControlTypes.ALLBUTCAMERAS, $"KSPTextureLoader_{go.GetInstanceID()}");
+#if UNITY_6_7
+        var id = go.GetEntityId();
+#else
+        var id = go.GetInstanceID();
+#endif
+        inputLock.Setup(ControlTypes.ALLBUTCAMERAS, $"KSPTextureLoader_{id}");
 
         var contentArea = go.transform.Find("VerticalLayout/Content");
 
