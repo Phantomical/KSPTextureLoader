@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.0.39
+### Added
+* Added compatibility with Unity 6.7
+
 ## v1.0.38
 ### Fixed
 * Fixed an issue where some cubemap mipmaps were not being initialized.
