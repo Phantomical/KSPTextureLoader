@@ -79,6 +79,16 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
     protected const float Float2Byte = 255f;
     protected const float Float2Ushort = 65535f;
 
+    /// <summary>
+    /// The alpha value <see cref="Texture2D.GetPixel(int, int)"/> returns for BC4 and BC5
+    /// textures, which don't store an alpha channel.
+    /// </summary>
+#if UNITY_6_7
+    internal const float BCMissingAlpha = 1f;
+#else
+    internal const float BCMissingAlpha = 0f;
+#endif
+
     public abstract int Width { get; }
     public abstract int Height { get; }
     public abstract int MipCount { get; }

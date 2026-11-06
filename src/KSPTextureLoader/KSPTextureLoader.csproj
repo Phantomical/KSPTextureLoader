@@ -32,6 +32,10 @@
             <Destination>$(RepoRootPath)\GameData\KSPTextureLoader\KSPTextureLoader.version</Destination>
             <URL>https://github.com/Phantomical/KSPTextureLoader/releases/latest/download/KSPTextureLoader.version</URL>
             <Download>https://github.com/Phantomical/KSPTextureLoader/releases</Download>
+            <!-- Set here so that every build writes the same range, whichever games it targets -->
+            <KSP_Version>1.13</KSP_Version>
+            <KSP_Version_Min>1.8</KSP_Version_Min>
+            <KSP_Version_Max>1.13</KSP_Version_Max>
         </KSPVersionFile>
     </ItemGroup>
 
