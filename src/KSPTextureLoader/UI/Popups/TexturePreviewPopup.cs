@@ -29,6 +29,10 @@ internal class AspectPreferredHeight : UIBehaviour, ILayoutElement
     public float minHeight => -1f;
     public float preferredHeight => ((RectTransform)transform).rect.width / aspectRatio;
     public float flexibleHeight => -1f;
+#if UNITY_6_7
+    public float maxWidth => -1f;
+    public float maxHeight => -1f;
+#endif
     public int layoutPriority => 1;
 
     protected override void OnRectTransformDimensionsChange()

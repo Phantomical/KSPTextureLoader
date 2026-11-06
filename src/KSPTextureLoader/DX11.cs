@@ -53,6 +53,12 @@ internal static class DX11
     static bool IsDirect3D11;
     static bool AllowThreadedTextureCreation;
 
+    #if !UNITY_6_7
+    static bool IsUnity2019_4 => true;
+    #else
+    static bool IsUnity2019_4 => false;
+    #endif
+
     /// <summary>
     /// Snapshot the Unity capability statics used by
     /// <see cref="SupportsAsyncUpload"/>, which can only be read on the main
@@ -69,6 +75,9 @@ internal static class DX11
     internal static bool SupportsAsyncUpload(int width, int height, GraphicsFormat format)
     {
         if (!Config.Instance.AllowNativeUploads)
+            return false;
+
+        if (!IsUnity2019_4)
             return false;
 
         if (!IsDirect3D11)
@@ -162,8 +171,10 @@ internal static class DX11
             );
             using var uguard = new TextureDisposeGuard(texture);
 
+#if !UNITY_6_7
             if (options.Hint != TextureLoadHint.Synchronous)
                 await AsyncUtil.RunOnGraphicsThread(static () => { });
+#endif
 
             var rawdata = texture.GetRawTextureData<byte>();
             var copy = Task.Run(async () =>

@@ -173,7 +173,7 @@ public class BC5Tests : CPUTexture2DTests
         var (bc5, data) = BC5_Make(block);
         try
         {
-            var expected = new Color(red / 255f, green / 255f, 0f, 0f);
+            var expected = new Color(red / 255f, green / 255f, 0f, CPUTexture2D.BCMissingAlpha);
 
             for (int y = 0; y < 4; y++)
             for (int x = 0; x < 4; x++)
@@ -416,13 +416,13 @@ public class BC5Tests : CPUTexture2DTests
     }
 
     // ================================================================
-    // 8. Blue and alpha channels are always 0.0
+    // 8. Blue is always 0.0 and alpha is always BCMissingAlpha
     // ================================================================
 
     [TestInfo("CPUTexture2D_BC5_BlueAlpha")]
     public void TestBC5_BlueAndAlphaAreZero()
     {
-        // Use varied indices to make sure blue/alpha are always 0.0 regardless of R/G
+        // Use varied indices to make sure blue/alpha don't change with R/G
         var redIdx = new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 3, 2, 1, 0 };
         var greenIdx = new byte[] { 7, 6, 5, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 6, 7 };
         var block = BC5_BuildBlock(200, 50, redIdx, 180, 30, greenIdx);
@@ -435,7 +435,7 @@ public class BC5Tests : CPUTexture2DTests
             {
                 Color pixel = bc5.GetPixel(x, y);
                 assertFloatEquals($"Blue({x},{y})", pixel.b, 0f, BC5Tol);
-                assertFloatEquals($"Alpha({x},{y})", pixel.a, 0f, BC5Tol);
+                assertFloatEquals($"Alpha({x},{y})", pixel.a, CPUTexture2D.BCMissingAlpha, BC5Tol);
             }
 
             BC5_CompareWithUnity("BlueAlpha", block);
@@ -593,7 +593,7 @@ public class BC5Tests : CPUTexture2DTests
             assertColorEquals(
                 "Block00",
                 bc5.GetPixel(1, 1),
-                new Color(255f / 255f, 0f / 255f, 0f, 0f),
+                new Color(255f / 255f, 0f / 255f, 0f, CPUTexture2D.BCMissingAlpha),
                 BC5Tol
             );
 
@@ -601,7 +601,7 @@ public class BC5Tests : CPUTexture2DTests
             assertColorEquals(
                 "Block10",
                 bc5.GetPixel(5, 1),
-                new Color(0f / 255f, 255f / 255f, 0f, 0f),
+                new Color(0f / 255f, 255f / 255f, 0f, CPUTexture2D.BCMissingAlpha),
                 BC5Tol
             );
 
@@ -609,7 +609,7 @@ public class BC5Tests : CPUTexture2DTests
             assertColorEquals(
                 "Block01",
                 bc5.GetPixel(1, 5),
-                new Color(128f / 255f, 64f / 255f, 0f, 0f),
+                new Color(128f / 255f, 64f / 255f, 0f, CPUTexture2D.BCMissingAlpha),
                 BC5Tol
             );
 
@@ -617,7 +617,7 @@ public class BC5Tests : CPUTexture2DTests
             assertColorEquals(
                 "Block11",
                 bc5.GetPixel(5, 5),
-                new Color(64f / 255f, 128f / 255f, 0f, 0f),
+                new Color(64f / 255f, 128f / 255f, 0f, CPUTexture2D.BCMissingAlpha),
                 BC5Tol
             );
 
@@ -665,7 +665,7 @@ public class BC5Tests : CPUTexture2DTests
                 assertColorEquals(
                     $"NPOT_block({bx},{by})",
                     bc5.GetPixel(px, py),
-                    new Color(red / 255f, green / 255f, 0f, 0f),
+                    new Color(red / 255f, green / 255f, 0f, CPUTexture2D.BCMissingAlpha),
                     BC5Tol
                 );
             }
@@ -698,8 +698,8 @@ public class BC5Tests : CPUTexture2DTests
         var (bc5, data) = BC5_Make(bytes, 8, 8, 2);
         try
         {
-            var mip0Expected = new Color(200f / 255f, 100f / 255f, 0f, 0f);
-            var mip1Expected = new Color(50f / 255f, 220f / 255f, 0f, 0f);
+            var mip0Expected = new Color(200f / 255f, 100f / 255f, 0f, CPUTexture2D.BCMissingAlpha);
+            var mip1Expected = new Color(50f / 255f, 220f / 255f, 0f, CPUTexture2D.BCMissingAlpha);
 
             // Mip 0: all corners
             assertColorEquals("Mip0(0,0)", bc5.GetPixel(0, 0, 0), mip0Expected, BC5Tol);
@@ -921,7 +921,7 @@ public class BC5Tests : CPUTexture2DTests
         var (bc5, data) = BC5_Make(block, 1, 1);
         try
         {
-            var expected = new Color(red / 255f, green / 255f, 0f, 0f);
+            var expected = new Color(red / 255f, green / 255f, 0f, CPUTexture2D.BCMissingAlpha);
             assertColorEquals("1x1(0,0)", bc5.GetPixel(0, 0), expected, BC5Tol);
             // Clamped out-of-bounds still returns (0,0)
             assertColorEquals("1x1_clamped", bc5.GetPixel(3, 3), expected, BC5Tol);
@@ -936,6 +936,8 @@ public class BC5Tests : CPUTexture2DTests
     // 21. Non-multiple-of-4 dimensions (5x3 = 2x1 blocks)
     // ================================================================
 
+#if !UNITY_6_7
+    // Unity 6.7 refuses to create compressed textures whose size is not a multiple of 4.
     [TestInfo("CPUTexture2D_BC5_NonMul4")]
     public void TestBC5_NonMultipleOf4()
     {
@@ -958,13 +960,13 @@ public class BC5Tests : CPUTexture2DTests
             assertColorEquals(
                 "NonMul4(0,0)",
                 bc5.GetPixel(0, 0),
-                new Color(100f / 255f, 200f / 255f, 0f, 0f),
+                new Color(100f / 255f, 200f / 255f, 0f, CPUTexture2D.BCMissingAlpha),
                 BC5Tol
             );
             assertColorEquals(
                 "NonMul4(3,2)",
                 bc5.GetPixel(3, 2),
-                new Color(100f / 255f, 200f / 255f, 0f, 0f),
+                new Color(100f / 255f, 200f / 255f, 0f, CPUTexture2D.BCMissingAlpha),
                 BC5Tol
             );
 
@@ -972,7 +974,7 @@ public class BC5Tests : CPUTexture2DTests
             assertColorEquals(
                 "NonMul4(4,0)",
                 bc5.GetPixel(4, 0),
-                new Color(200f / 255f, 100f / 255f, 0f, 0f),
+                new Color(200f / 255f, 100f / 255f, 0f, CPUTexture2D.BCMissingAlpha),
                 BC5Tol
             );
 
@@ -987,6 +989,7 @@ public class BC5Tests : CPUTexture2DTests
             data.Dispose();
         }
     }
+#endif
 
     // ================================================================
     // 22. GetPixels matches GetPixel for multi-block texture

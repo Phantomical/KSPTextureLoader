@@ -42,7 +42,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <!--
         Import ReferencePath (the KSP install root) from the repo-root props.user, the
-        same value KSPBuildTools uses. We resolve props.user by a path relative to this
+        same value KSP1Retooled.BuildTools uses. We resolve props.user by a path relative to this
         file rather than via $(SolutionDir) so it also works when the project is built
         on its own (outside the solution). MUST come before the PropertyGroup below,
         which derives the KSPBurst/Managed paths from it.
@@ -80,7 +80,7 @@
 
         <!--
             Locate the KSP install we read the merge inputs from. Local dev sets
-            ReferencePath (via props.user) to the KSP root; KSPBuildTools' CI compile
+            ReferencePath (via props.user) to the KSP root; KSP1Retooled.BuildTools' CI compile
             action instead passes KSPBT_ManagedPath (=<ksproot>/KSP_x64_Data/Managed),
             so derive the root from that when ReferencePath is absent.
         -->
@@ -107,7 +107,7 @@
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
         <!--
-            This project does not use KSPBuildTools, so it does not inherit the trick
+            This project does not use KSP1Retooled.BuildTools, so it does not inherit the trick
             of resolving net48 references from KSP's Managed folder. Pull in the .NET
             Framework reference assemblies so restore/build works on any platform
             (notably Linux CI, where there is no targeting pack). This also gives

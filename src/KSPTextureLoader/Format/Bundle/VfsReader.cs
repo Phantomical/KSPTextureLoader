@@ -74,16 +74,21 @@ internal static class VfsReader
         {
             using var scope = ReadMarker.Auto();
 
+            // it has to stay allocated until the read completes.
+            var command = AllocatorUtil.CreateNativeArrayHGlobal<ReadCommand>(1);
+            using var guard = new NativeArrayAsyncGuard<ReadCommand>(command);
+
             ReadHandle handle;
             unsafe
             {
-                var command = new ReadCommand
+                var cmd = (ReadCommand*)NativeArrayUnsafeUtility.GetUnsafePtr(command);
+                *cmd = new ReadCommand
                 {
                     Buffer = data.GetUnsafePtr(),
                     Offset = offset,
                     Size = size,
                 };
-                handle = AsyncReadManager.Read(path, &command, 1);
+                handle = AsyncReadManager.Read(path, cmd, 1);
             }
 
             using var hguard = handle;
@@ -146,38 +151,34 @@ internal static class VfsReader
         {
             using var scope = ReadRangesMarker.Auto();
 
-            ReadHandle handle;
-
             // The command array can be large (one entry per object), so keep it
-            // off the stack. AsyncReadManager copies the commands internally at
-            // dispatch, so it is safe to free this right after the Read call.
-            var commands = new NativeArray<ReadCommand>(
-                n,
-                Allocator.Persistent,
-                NativeArrayOptions.UninitializedMemory
+            // off the stack. Unity 6 reads the commands from a job after Read
+            // returns (2019.4 copied them during the call), so the array has to
+            // stay allocated until the read completes.
+            using var commands = new NativeArrayGuard<ReadCommand>(
+                new NativeArray<ReadCommand>(
+                    n,
+                    Allocator.Persistent,
+                    NativeArrayOptions.UninitializedMemory
+                )
             );
-            try
-            {
-                unsafe
-                {
-                    byte* basePtr = data.GetUnsafePtr();
-                    var cmds = (ReadCommand*)NativeArrayUnsafeUtility.GetUnsafePtr(commands);
-                    for (int i = 0; i < n; ++i)
-                    {
-                        cmds[i] = new ReadCommand
-                        {
-                            Buffer = basePtr + offsets[i],
-                            Offset = ranges[i].Offset,
-                            Size = sizes[i],
-                        };
-                    }
 
-                    handle = AsyncReadManager.Read(path, cmds, (uint)n);
-                }
-            }
-            finally
+            ReadHandle handle;
+            unsafe
             {
-                commands.Dispose();
+                byte* basePtr = data.GetUnsafePtr();
+                var cmds = (ReadCommand*)NativeArrayUnsafeUtility.GetUnsafePtr(commands.array);
+                for (int i = 0; i < n; ++i)
+                {
+                    cmds[i] = new ReadCommand
+                    {
+                        Buffer = basePtr + offsets[i],
+                        Offset = ranges[i].Offset,
+                        Size = sizes[i],
+                    };
+                }
+
+                handle = AsyncReadManager.Read(path, cmds, (uint)n);
             }
 
             using var hguard = handle;

@@ -5,6 +5,9 @@ using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using UnityEngine;
+#if UNITY_6_7
+using IJobParallelForBatch = KSPTextureLoader.Burst.IJobParallelForBatch;
+#endif
 
 namespace KSPTextureLoader;
 

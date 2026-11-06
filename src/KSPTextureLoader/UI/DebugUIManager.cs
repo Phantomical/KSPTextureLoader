@@ -23,6 +23,7 @@ internal static class DebugUIManager
     static GameObject _windowPrefab;
 
     static bool _initialized;
+    static int _nextWindowId;
 
     /// <summary>
     /// Must be called after DebugScreenSpawner has been set up (e.g. from MainMenu).
@@ -412,7 +413,7 @@ internal static class DebugUIManager
 
         // Lock game input while the mouse is over the window
         var inputLock = go.AddComponent<DialogMouseEnterControlLock>();
-        inputLock.Setup(ControlTypes.ALLBUTCAMERAS, $"KSPTextureLoader_{go.GetInstanceID()}");
+        inputLock.Setup(ControlTypes.ALLBUTCAMERAS, $"KSPTextureLoader_{_nextWindowId++}");
 
         var contentArea = go.transform.Find("VerticalLayout/Content");
 

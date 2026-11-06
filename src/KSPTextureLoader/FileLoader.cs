@@ -130,16 +130,21 @@ internal static class FileLoader
 
         try
         {
+            var command = AllocatorUtil.CreateNativeArrayHGlobal<ReadCommand>(1);
+            using var guard = new NativeArrayAsyncGuard<ReadCommand>(command);
+
             ReadHandle handle;
             unsafe
             {
-                var command = new ReadCommand
+                var cmd = (ReadCommand*)NativeArrayUnsafeUtility.GetUnsafePtr(command);
+                *cmd = new ReadCommand
                 {
                     Buffer = data.GetUnsafePtr(),
                     Offset = info.offset,
                     Size = data.Length,
                 };
-                handle = AsyncReadManager.Read(info.path, &command, 1);
+                handle = AsyncReadManager.Read(info.path, cmd, 1);
+                command.DisposeExt(handle.JobHandle);
             }
 
             using var hguard = handle;

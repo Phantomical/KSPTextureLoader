@@ -17,7 +17,8 @@ namespace KSPTextureLoaderTests;
 ///   If r0 &lt;= r1: 6-value palette + literal 0.0 and 1.0.
 ///
 /// BC4 stores a single channel (red). Unlike uncompressed single-channel formats,
-/// Unity returns G=0, B=0, A=0 for BC4's missing channels.
+/// Unity returns G=0, B=0 for BC4's missing channels. Alpha depends on the Unity version,
+/// see <see cref="CPUTexture2D.BCMissingAlpha"/>.
 /// </summary>
 public class BC4Tests : CPUTexture2DTests
 {
@@ -120,7 +121,7 @@ public class BC4Tests : CPUTexture2DTests
         try
         {
             float r = value / 255f;
-            var expected = new Color(r, 0f, 0f, 0f);
+            var expected = new Color(r, 0f, 0f, CPUTexture2D.BCMissingAlpha);
 
             for (int y = 0; y < 4; y++)
             for (int x = 0; x < 4; x++)
@@ -408,13 +409,13 @@ public class BC4Tests : CPUTexture2DTests
     }
 
     // ================================================================
-    // 9. Missing channels: G=0, B=0, A=0
+    // 9. Missing channels: G=0, B=0, A=BCMissingAlpha
     // ================================================================
 
     [TestInfo("CPUTexture2D_BC4_MissingChannels")]
     public void TestBC4_MissingChannels()
     {
-        // BC4 missing channels are 0, unlike uncompressed single-channel formats.
+        // BC4 missing color channels are 0, unlike uncompressed single-channel formats.
         var block = BC4_BuildBlock(
             100,
             200,
@@ -430,7 +431,7 @@ public class BC4Tests : CPUTexture2DTests
                 Color c = bc4.GetPixel(x, y);
                 assertFloatEquals($"MissG({x},{y})", c.g, 0f, BC4Tol);
                 assertFloatEquals($"MissB({x},{y})", c.b, 0f, BC4Tol);
-                assertFloatEquals($"MissA({x},{y})", c.a, 0f, BC4Tol);
+                assertFloatEquals($"MissA({x},{y})", c.a, CPUTexture2D.BCMissingAlpha, BC4Tol);
             }
 
             BC4_CompareWithUnity("MissingChannels", block);

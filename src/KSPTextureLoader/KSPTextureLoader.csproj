@@ -32,6 +32,10 @@
             <Destination>$(RepoRootPath)\GameData\KSPTextureLoader\KSPTextureLoader.version</Destination>
             <URL>https://github.com/Phantomical/KSPTextureLoader/releases/latest/download/KSPTextureLoader.version</URL>
             <Download>https://github.com/Phantomical/KSPTextureLoader/releases</Download>
+            <!-- Set here so that every build writes the same range, whichever games it targets -->
+            <KSP_Version>1.13</KSP_Version>
+            <KSP_Version_Min>1.8</KSP_Version_Min>
+            <KSP_Version_Max>1.13</KSP_Version_Max>
         </KSPVersionFile>
     </ItemGroup>
 
@@ -46,7 +50,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="KSPBuildTools" Version="1.1.1" />
+        <PackageReference Include="KSP1Retooled.BuildTools" Version="2.0.0" />
 
         <PackageReference Include="Krafs.Publicizer" Version="2.3.0">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -78,11 +82,18 @@
             Its assembly identity is KSPTextureLoader.Burst, distinct from
             Unity.Burst/Unity.Mathematics, so it never clashes with a KSPBurst-provided
             copy at runtime.
+
+            Retooled ships Unity.Burst and Unity.Mathematics with the game (and the
+            intrinsics in UnityEngine.BurstModule), and KSP1Retooled.BuildTools
+            references those, so the bundled copy would clash there. KSPBT_TargetGame
+            isn't set yet when the properties in this file are evaluated, but items are
+            evaluated after every property, so it can be used in this condition.
         -->
-        <Reference Include="KSPTextureLoader.Burst">
+        <Reference Include="KSPTextureLoader.Burst" Condition=" '$(KSPBT_TargetGame)' != 'Retooled' ">
             <HintPath>$(RepoRootPath)\deps\KSPTextureLoader.Burst.dll</HintPath>
             <Private>true</Private>
         </Reference>
+
 
         <ProjectReference Include="../KSPTextureLoader.Analyzers/KSPTextureLoader.Analyzers.csproj"
                           OutputItemType="Analyzer"
@@ -109,10 +120,16 @@
         <Publicize Include="UnityEngine.CoreModule:Unity.Profiling.ProfilerMarker.Internal_End" />
     </ItemGroup>
 
+    <ItemGroup Condition=" '$(KSPBT_TargetGame)' == 'Retooled' ">
+        <Publicize Include="UnityEngine.ManagedKernelModule:Unity.Collections.NativeArray`1.m_AllocatorLabel" />
+        <Publicize Include="UnityEngine.CoreModule:UnityEngine.Texture.GetTextureColorSpace" />
+        <Publicize Include="UnityEngine.CoreModule:UnityEngine.TextureColorSpace" />
+    </ItemGroup>
+
     <!--
         Never ship KSP's own assemblies back to KSP.
 
-        KSPBuildTools resolves the framework/Unity/game references out of KSP's
+        KSP1Retooled.BuildTools resolves the framework/Unity/game references out of KSP's
         Managed folder and marks each one Private=false, so those don't get copied.
         But that only covers the references it declares directly: RAR then walks
         their dependency closure and turns up private Mono BCL implementation
@@ -122,7 +139,7 @@
         they default to CopyLocal=true.
 
         They aren't caught by RAR's "don't copy framework files" rule either: that
-        compares against _TargetFrameworkDirectories, which KSPBuildTools sets to a
+        compares against _TargetFrameworkDirectories, which KSP1Retooled.BuildTools sets to a
         forward-slashed KSPBT_ManagedPath, while RAR resolved these via the
         referencing assembly's own (backslashed) directory — so the paths don't
         match as strings and the files stay copy-local.
