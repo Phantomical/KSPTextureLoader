@@ -144,7 +144,6 @@ internal static class FileLoader
                     Size = data.Length,
                 };
                 handle = AsyncReadManager.Read(info.path, cmd, 1);
-                command.DisposeExt(handle.JobHandle);
             }
 
             using var hguard = handle;

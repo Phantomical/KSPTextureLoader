@@ -10,9 +10,9 @@
       },
       "KSP1Retooled.BuildTools": {
         "type": "Direct",
-        "requested": "[2.0.0, )",
-        "resolved": "2.0.0",
-        "contentHash": "CYLiUMgzdFzOp4nhG6MMgEGjTCYpmvq8sngMZZuKpNF/ZNwXKQIbxiXEnA5PMLNFv5rp3lBZlaNfUwHKX4W+8g==",
+        "requested": "[2.0.1, )",
+        "resolved": "2.0.1",
+        "contentHash": "9G3q4AyET4ys5NFYLUJlMJ0YzXGKgyhpgJMkb7iN270j731t+qWfYyMgYJaJ4KAy0DGDdnXUsJkT+B87XWgebw==",
         "dependencies": {
           "JsonPoke": "1.2.0"
         }

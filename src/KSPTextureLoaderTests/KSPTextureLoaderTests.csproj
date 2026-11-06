@@ -24,7 +24,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="KSP1Retooled.BuildTools" Version="2.0.0" />
+        <PackageReference Include="KSP1Retooled.BuildTools" Version="2.0.1" />
 
         <PackageReference Include="Krafs.Publicizer" Version="2.3.0">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
