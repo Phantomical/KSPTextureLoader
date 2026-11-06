@@ -24,7 +24,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="KSPBuildTools" Version="1.1.1" />
+        <PackageReference Include="KSP1Retooled.BuildTools" Version="2.0.0" />
 
         <PackageReference Include="Krafs.Publicizer" Version="2.3.0">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -34,7 +34,9 @@
         <ProjectReference Include="../KSPTextureLoader/KSPTextureLoader.csproj">
             <Private>false</Private>
         </ProjectReference>
-        <ProjectReference Include="../KSPTextureLoader.Analyzers/KSPTextureLoader.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="../KSPTextureLoader.Analyzers/KSPTextureLoader.Analyzers.csproj"
+                          OutputItemType="Analyzer"
+                          ReferenceOutputAssembly="false" />
     </ItemGroup>
 
     <PropertyGroup>
@@ -50,10 +52,6 @@
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Texture2DArray.Internal_Create" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Texture3D.Internal_Create" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Texture.ValidateFormat" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <Reference Include="netstandard" />
     </ItemGroup>
 
     <!--

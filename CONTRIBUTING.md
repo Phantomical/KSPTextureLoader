@@ -26,6 +26,16 @@ in the repository root, like this one:
 Make sure to replace `$KSP_ROOT_PATH` with the path to your KSP installation.
 If you have an install made via steam then you might be able to skip this step.
 
+To build for both stock KSP and KSP Retooled, set both of these in the same
+`PropertyGroup` instead:
+```xml
+<KSPBT_StockGameRoot>$KSP_ROOT_PATH</KSPBT_StockGameRoot>
+<KSPBT_RetooledGameRoot>$RETOOLED_ROOT_PATH</KSPBT_RetooledGameRoot>
+```
+
+This adds a `KSPTextureLoader.1.13.dll` next to `KSPTextureLoader.dll`. Each game
+loads the one built for it. Code specific to Retooled goes behind `#if UNITY_6_7`.
+
 Finally, you can build by running either:
 - `dotnet build` (for a debug build), or,
 - `dotnet build -c Release` (for a release build)

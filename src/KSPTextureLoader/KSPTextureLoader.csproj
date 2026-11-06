@@ -18,12 +18,6 @@
         -->
         <DefineConstants>$(DefineConstants);ENABLE_PROFILER</DefineConstants>
 
-        <!--
-            Build with -p:Unity67=true (or set it in KSPTextureLoader.props.user)
-            to target a Unity 6.7 build of KSP.
-        -->
-        <DefineConstants Condition=" '$(Unity67)' == 'true' ">$(DefineConstants);UNITY_6_7</DefineConstants>
-
         <RepoRootPath>$(MSBuildThisFileDirectory)\..\..</RepoRootPath>
 
         <KSPBT_ModRoot>$(RepoRootPath)\GameData\$(MSBuildProjectName)</KSPBT_ModRoot>
@@ -52,7 +46,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="KSPBuildTools" Version="1.1.1" />
+        <PackageReference Include="KSP1Retooled.BuildTools" Version="2.0.0" />
 
         <PackageReference Include="Krafs.Publicizer" Version="2.3.0">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -84,29 +78,18 @@
             Its assembly identity is KSPTextureLoader.Burst, distinct from
             Unity.Burst/Unity.Mathematics, so it never clashes with a KSPBurst-provided
             copy at runtime.
+
+            Retooled ships Unity.Burst and Unity.Mathematics with the game (and the
+            intrinsics in UnityEngine.BurstModule), and KSP1Retooled.BuildTools
+            references those, so the bundled copy would clash there. KSPBT_TargetGame
+            isn't set yet when the properties in this file are evaluated, but items are
+            evaluated after every property, so it can be used in this condition.
         -->
-        <Reference Include="KSPTextureLoader.Burst" Condition=" '$(Unity67)' != 'true' ">
+        <Reference Include="KSPTextureLoader.Burst" Condition=" '$(KSPBT_TargetGame)' != 'Retooled' ">
             <HintPath>$(RepoRootPath)\deps\KSPTextureLoader.Burst.dll</HintPath>
             <Private>true</Private>
         </Reference>
 
-        <!--
-            Unity 6.7 ships Unity.Burst and Unity.Mathematics with the game (and
-            the intrinsics in UnityEngine.BurstModule), so use those instead of our
-            bundled copy, which would otherwise clash with them.
-        -->
-        <Reference Include="Unity.Burst" Condition=" '$(Unity67)' == 'true' ">
-            <HintPath>$(KSPBT_GameRoot)\KSP_x64_Data\Managed\Unity.Burst.dll</HintPath>
-            <Private>false</Private>
-        </Reference>
-        <Reference Include="Unity.Mathematics" Condition=" '$(Unity67)' == 'true' ">
-            <HintPath>$(KSPBT_GameRoot)\KSP_x64_Data\Managed\Unity.Mathematics.dll</HintPath>
-            <Private>false</Private>
-        </Reference>
-        <Reference Include="netstandard" Condition=" '$(Unity67)' == 'true' ">
-            <HintPath>$(KSPBT_GameRoot)\KSP_x64_Data\Managed\netstandard.dll</HintPath>
-            <Private>false</Private>
-        </Reference>
 
         <ProjectReference Include="../KSPTextureLoader.Analyzers/KSPTextureLoader.Analyzers.csproj"
                           OutputItemType="Analyzer"
@@ -133,7 +116,7 @@
         <Publicize Include="UnityEngine.CoreModule:Unity.Profiling.ProfilerMarker.Internal_End" />
     </ItemGroup>
 
-    <ItemGroup Condition=" '$(Unity67)' == 'true' ">
+    <ItemGroup Condition=" '$(KSPBT_TargetGame)' == 'Retooled' ">
         <Publicize Include="UnityEngine.ManagedKernelModule:Unity.Collections.NativeArray`1.m_AllocatorLabel" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.Texture.GetTextureColorSpace" />
         <Publicize Include="UnityEngine.CoreModule:UnityEngine.TextureColorSpace" />
@@ -142,7 +125,7 @@
     <!--
         Never ship KSP's own assemblies back to KSP.
 
-        KSPBuildTools resolves the framework/Unity/game references out of KSP's
+        KSP1Retooled.BuildTools resolves the framework/Unity/game references out of KSP's
         Managed folder and marks each one Private=false, so those don't get copied.
         But that only covers the references it declares directly: RAR then walks
         their dependency closure and turns up private Mono BCL implementation
@@ -152,7 +135,7 @@
         they default to CopyLocal=true.
 
         They aren't caught by RAR's "don't copy framework files" rule either: that
-        compares against _TargetFrameworkDirectories, which KSPBuildTools sets to a
+        compares against _TargetFrameworkDirectories, which KSP1Retooled.BuildTools sets to a
         forward-slashed KSPBT_ManagedPath, while RAR resolved these via the
         referencing assembly's own (backslashed) directory — so the paths don't
         match as strings and the files stay copy-local.
