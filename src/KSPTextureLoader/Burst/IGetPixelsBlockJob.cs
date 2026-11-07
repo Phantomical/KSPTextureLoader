@@ -26,6 +26,7 @@ internal static class IGetPixelsBlockJobExtensions
 
         [WriteOnly]
         [NativeDisableParallelForRestriction]
+        [NativeDisableContainerSafetyRestriction]
         public NativeArray<Color> pixels;
 
         public int blocksPerRow;
@@ -100,6 +101,7 @@ internal static class IGetPixelsBlockJobExtensions
 
         [WriteOnly]
         [NativeDisableParallelForRestriction]
+        [NativeDisableContainerSafetyRestriction]
         public NativeArray<Color32> pixels;
 
         public int blocksPerRow;
@@ -191,7 +193,8 @@ internal static class IGetPixelsBlockJobExtensions
             ScheduleMode.Batched
         );
 
-        return JobsUtility.ScheduleParallelFor(ref parameters, pixels.Length, 256);
+        int blockCount = blocksPerRow * ((height + 3) / 4);
+        return JobsUtility.ScheduleParallelFor(ref parameters, blockCount, 256);
     }
 
     public static unsafe JobHandle Schedule<T>(
@@ -218,6 +221,7 @@ internal static class IGetPixelsBlockJobExtensions
             ScheduleMode.Batched
         );
 
-        return JobsUtility.ScheduleParallelFor(ref parameters, pixels.Length, 256);
+        int blockCount = blocksPerRow * ((height + 3) / 4);
+        return JobsUtility.ScheduleParallelFor(ref parameters, blockCount, 256);
     }
 }

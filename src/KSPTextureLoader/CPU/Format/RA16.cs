@@ -3,6 +3,7 @@ using KSPTextureLoader.Burst;
 using KSPTextureLoader.Utils;
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using UnityEngine;
 #if UNITY_6_7
@@ -118,7 +119,9 @@ partial class CPUTexture2D
         [BurstCompile(FloatMode = FloatMode.Fast)]
         struct GetPixelsJob : IJobParallelForBatch
         {
+            [NativeDisableContainerSafetyRestriction]
             public NativeArray<ushort> data;
+            [NativeDisableContainerSafetyRestriction]
             public NativeArray<Color> pixels;
 
             public void Execute(int start, int count)
@@ -135,7 +138,9 @@ partial class CPUTexture2D
         [BurstCompile(FloatMode = FloatMode.Fast)]
         struct GetPixels32Job : IJobParallelForBatch
         {
+            [NativeDisableContainerSafetyRestriction]
             public NativeArray<ushort> data;
+            [NativeDisableContainerSafetyRestriction]
             public NativeArray<Color32> pixels;
 
             public void Execute(int start, int count)

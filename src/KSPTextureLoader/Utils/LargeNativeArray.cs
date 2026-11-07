@@ -7,6 +7,7 @@ namespace KSPTextureLoader.Utils;
 public unsafe struct LargeNativeArray<T> : IDisposable
     where T : unmanaged
 {
+    [NativeDisableUnsafePtrRestriction]
     T* data;
     long length;
     Allocator allocator;
@@ -61,7 +62,15 @@ public unsafe struct LargeNativeArray<T> : IDisposable
 
     public void Dispose()
     {
-        UnsafeUtility.Free(data, allocator);
+        if (allocator == AllocatorUtil.HGlobal)
+        {
+            this.DisposeExt();
+            return;
+        }
+
+        // Invalid marks a view of memory this array doesn't own, such as a mapped file.
+        if (allocator != Allocator.Invalid)
+            UnsafeUtility.Free(data, allocator);
         this = default;
     }
 
@@ -96,7 +105,7 @@ public unsafe struct LargeNativeArray<T> : IDisposable
                 $"LargeNativeArray is too large to convert to NativeArray (length {length})"
             );
 
-        return NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<T>(
+        return NativeArraySafety.Wrap<T>(
             data,
             (int)length,
             Allocator.Invalid

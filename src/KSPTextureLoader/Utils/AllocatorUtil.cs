@@ -79,7 +79,7 @@ internal static class AllocatorUtil
             throw new OutOfMemoryException("failed to allocate an array using AllocHGlobal");
         Interlocked.Add(ref allocMem, length);
 
-        var array = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<T>(
+        var array = NativeArraySafety.Wrap<T>(
             ptr,
             length,
             HGlobal
@@ -150,6 +150,7 @@ internal static class AllocatorUtil
     struct DisposeJob<T>(NativeArray<T> array) : IJob
         where T : unmanaged
     {
+        [NativeDisableContainerSafetyRestriction]
         public NativeArray<T> array = array;
 
         public void Execute()

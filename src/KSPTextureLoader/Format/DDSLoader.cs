@@ -1221,7 +1221,7 @@ internal static class DDSLoader
             new(new UnmanagedMemoryStream(pointer, fileLength, fileLength, FileAccess.Read));
 
         public readonly NativeArray<byte> GetNativeArray(long offset, int length) =>
-            NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<byte>(
+            NativeArraySafety.Wrap<byte>(
                 pointer + offset,
                 length,
                 Allocator.Invalid

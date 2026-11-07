@@ -3,6 +3,7 @@ using KSPTextureLoader.Burst;
 using KSPTextureLoader.Utils;
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 
 namespace KSPTextureLoader;
@@ -112,6 +113,7 @@ partial class CPUTexture2D
         struct GetPixelsJob : IGetPixelsBlockJob
         {
             [ReadOnly]
+            [NativeDisableContainerSafetyRestriction]
             public NativeArray<Block> blocks;
 
             public bool signed;

@@ -37,7 +37,7 @@ partial class CPUTexture2D
                     );
 
                 var palette = (Color32*)data.GetUnsafePtr();
-                return NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<Color32>(
+                return NativeArraySafety.Wrap<Color32>(
                     palette,
                     PaletteEntries,
                     Allocator.Invalid

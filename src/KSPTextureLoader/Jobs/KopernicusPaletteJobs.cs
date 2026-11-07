@@ -18,6 +18,7 @@ struct DecodeKopernicusPalette4bitJob : IJobParallelForBatch
 
     [WriteOnly]
     [NativeDisableParallelForRestriction]
+    [NativeDisableContainerSafetyRestriction]
     public NativeSlice<Color32> colors;
 
     public readonly unsafe void Execute(int start, int count)
@@ -45,6 +46,7 @@ struct DecodeKopernicusPalette8bitJob : IJobParallelForBatch
     public LargeNativeArray<byte> data;
 
     [WriteOnly]
+    [NativeDisableContainerSafetyRestriction]
     public NativeSlice<Color32> colors;
 
     public readonly unsafe void Execute(int start, int count)

@@ -535,7 +535,7 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
     static unsafe NativeArray<T> GetNonOwningNativeArray<T>(NativeArray<T> array)
         where T : unmanaged
     {
-        return NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<T>(
+        return NativeArraySafety.Wrap<T>(
             NativeArrayUnsafeUtility.GetUnsafeBufferPointerWithoutChecks(array),
             array.Length,
             Allocator.Invalid
