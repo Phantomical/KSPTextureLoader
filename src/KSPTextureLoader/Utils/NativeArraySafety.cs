@@ -41,8 +41,6 @@ internal static unsafe class NativeArraySafety
     // These live in nested classes so that the static initializers stay out of reach of Burst.
     static class Reflected
     {
-        // Null in a player. The shared handle is the one Unity gives to memory it doesn't own, and
-        // it is never invalidated, so it doesn't need to be released.
         public static readonly object SharedHandle;
         public static readonly MethodInfo SetHandle;
 
@@ -62,6 +60,8 @@ internal static unsafe class NativeArraySafety
 
     static class Setter<T>
     {
-        public static readonly MethodInfo Method = Reflected.SetHandle.MakeGenericMethod(typeof(T));
+        public static readonly MethodInfo Method = Reflected.SetHandle?.MakeGenericMethod(
+            typeof(T)
+        );
     }
 }
