@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.0.40
+### Fixed
+* Fixed a bug where KSPTL would fail to load on MacOS.
+
 ## v1.0.39
 ### Added
 * Added compatibility with Unity 6.7
