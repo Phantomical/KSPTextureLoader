@@ -41,7 +41,14 @@ internal static class PNGLoader
             // back to a synchronous read off disk.
             if (request.isDone)
             {
+#if UNITY_6_7
+                if (
+                    request.result == UnityWebRequest.Result.ConnectionError
+                    || request.result == UnityWebRequest.Result.ProtocolError
+                )
+#else
                 if (request.isNetworkError || request.isHttpError)
+#endif
                     throw new Exception($"Failed to load image: {request.error}");
 
                 texture = DownloadHandlerTexture.GetContent(request);

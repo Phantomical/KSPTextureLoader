@@ -28,7 +28,9 @@ internal static class IJobParallelForBatchExtensions
 
         internal static readonly IntPtr jobReflectionData = JobsUtility.CreateJobReflectionData(
             typeof(T),
+#if !UNITY_6_7
             JobType.ParallelFor,
+#endif
             new ExecuteJobFunction(Execute)
         );
 
@@ -61,7 +63,11 @@ internal static class IJobParallelForBatchExtensions
             UnsafeUtility.AddressOf(ref job),
             JobStruct<T>.jobReflectionData,
             dependsOn,
+#if UNITY_6_7
+            ScheduleMode.Parallel
+#else
             ScheduleMode.Batched
+#endif
         );
 
         return JobsUtility.ScheduleParallelFor(ref parameters, arrayLength, minIndicesPerJob);

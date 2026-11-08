@@ -89,7 +89,9 @@ internal static class IGetPixelsBlockJobExtensions
         internal static readonly IntPtr JobReflectionData = JobsUtility.CreateJobReflectionData(
             typeof(JobStruct<T>),
             typeof(T),
+#if !UNITY_6_7
             JobType.ParallelFor,
+#endif
             new ExecuteJobFunction(Execute)
         );
     }
@@ -164,7 +166,9 @@ internal static class IGetPixelsBlockJobExtensions
         internal static readonly IntPtr JobReflectionData = JobsUtility.CreateJobReflectionData(
             typeof(JobStruct32<T>),
             typeof(T),
+#if !UNITY_6_7
             JobType.ParallelFor,
+#endif
             new ExecuteJobFunction(Execute)
         );
     }
@@ -190,7 +194,11 @@ internal static class IGetPixelsBlockJobExtensions
             UnsafeUtility.AddressOf(ref wrap),
             JobStruct<T>.JobReflectionData,
             default,
+#if UNITY_6_7
+            ScheduleMode.Parallel
+#else
             ScheduleMode.Batched
+#endif
         );
 
         int blockCount = blocksPerRow * ((height + 3) / 4);
@@ -218,7 +226,11 @@ internal static class IGetPixelsBlockJobExtensions
             UnsafeUtility.AddressOf(ref wrap),
             JobStruct32<T>.JobReflectionData,
             default,
+#if UNITY_6_7
+            ScheduleMode.Parallel
+#else
             ScheduleMode.Batched
+#endif
         );
 
         int blockCount = blocksPerRow * ((height + 3) / 4);

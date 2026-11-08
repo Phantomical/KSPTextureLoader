@@ -144,7 +144,11 @@ public class TestRunnerUI : MonoBehaviour
         GUI.skin = HighLogic.Skin;
         Styles.Init();
         windowRect = GUILayout.Window(
+#if UNITY_6_7
+            GetEntityId().GetHashCode(),
+#else
             GetInstanceID(),
+#endif
             windowRect,
             DrawWindow,
             "KSPTextureLoader Test Results"
