@@ -34,6 +34,8 @@
         <EmbeddedResource Include="classdata/classdata.tpk" />
     </ItemGroup>
 
+    <Import Project="ImageSharpAudit.props" />
+
     <ItemGroup>
         <PackageReference Include="AssetsTools.NET" Version="3.0.4" />
         <!-- Live progress bar for `build`, shown only on an interactive terminal. -->

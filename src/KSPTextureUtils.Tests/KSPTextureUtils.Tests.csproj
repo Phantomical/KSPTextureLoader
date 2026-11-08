@@ -14,4 +14,5 @@
   <ItemGroup>
     <ProjectReference Include="../KSPTextureUtils/KSPTextureUtils.csproj" />
   </ItemGroup>
+  <Import Project="../KSPTextureUtils/ImageSharpAudit.props" />
 </Project>
