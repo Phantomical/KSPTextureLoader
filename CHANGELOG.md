@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.0.42
+### Fixed
+* KSPTL will now automatically decompress compressed dds textures whose
+  dimensions are not a multiple of 4x4 on platforms where unity does not
+  support such textures.
+
 ## v1.0.41
 ### Fixed
 * Fixed a bug where KSPTL would cause dds biome maps in kopernicus to fail to
