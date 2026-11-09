@@ -87,6 +87,23 @@ internal static class TextureUtils
         return size;
     }
 
+    /// <summary>
+    /// Check that <paramref name="format"/> is supported, the same way the
+    /// texture constructors do.
+    /// </summary>
+    static bool ValidateFormat(Texture tex, GraphicsFormat format)
+    {
+        var textureFormat = GraphicsFormatUtility.GetTextureFormat(format);
+#if UNITY_6_7
+        // Some graphics formats (e.g. DXT3 and signed BC4/BC5) have no
+        // TextureFormat equivalent, and on Unity 6.7 SupportsTextureFormat
+        // throws if you pass it an invalid TextureFormat.
+        if (!Enum.IsDefined(typeof(TextureFormat), textureFormat))
+            return tex.ValidateFormat(format, GraphicsFormatUsage.Sample);
+#endif
+        return tex.ValidateFormat(textureFormat);
+    }
+
     #region CreateUninitializedTexture
     // This reflects the actual creation flags in
     // https://github.com/Unity-Technologies/UnityCsReference/blob/59b03b8a0f179c0b7e038178c90b6c80b340aa9f/Runtime/Export/Graphics/GraphicsEnums.cs#L626
@@ -169,7 +186,7 @@ internal static class TextureUtils
         using var scope = CreateTexture2DMarker.Auto();
 
         var tex = (Texture2D)FormatterServices.GetUninitializedObject(typeof(Texture2D));
-        if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
+        if (!ValidateFormat(tex, format))
             return tex;
 
         if (mipCount != 1)
@@ -196,7 +213,7 @@ internal static class TextureUtils
         using var scope = CreateTexture2DArrayMarker.Auto();
 
         var tex = (Texture2DArray)FormatterServices.GetUninitializedObject(typeof(Texture2DArray));
-        if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
+        if (!ValidateFormat(tex, format))
             return tex;
 
         if (mipCount != 1)
@@ -221,7 +238,7 @@ internal static class TextureUtils
         using var scope = CreateTexture3DMarker.Auto();
 
         var tex = (Texture3D)FormatterServices.GetUninitializedObject(typeof(Texture3D));
-        if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
+        if (!ValidateFormat(tex, format))
             return tex;
 
         if (mipCount != 1)
@@ -245,7 +262,7 @@ internal static class TextureUtils
 
         var tex = (Cubemap)FormatterServices.GetUninitializedObject(typeof(Cubemap));
 
-        if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
+        if (!ValidateFormat(tex, format))
             return tex;
 
         if (mipCount != 1)
@@ -272,7 +289,7 @@ internal static class TextureUtils
 
         var tex = (CubemapArray)FormatterServices.GetUninitializedObject(typeof(CubemapArray));
 
-        if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
+        if (!ValidateFormat(tex, format))
             return tex;
 
         if (mipCount != 1)
@@ -451,7 +468,7 @@ internal static class TextureUtils
     )
     {
         var tex = (Texture2D)FormatterServices.GetUninitializedObject(typeof(Texture2D));
-        if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
+        if (!ValidateFormat(tex, format))
             return tex;
 
         if (mipCount != 1)
@@ -479,7 +496,7 @@ internal static class TextureUtils
     )
     {
         var tex = (Cubemap)FormatterServices.GetUninitializedObject(typeof(Cubemap));
-        if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
+        if (!ValidateFormat(tex, format))
             return tex;
 
         if (mipCount != 1)

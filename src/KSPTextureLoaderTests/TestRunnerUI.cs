@@ -32,6 +32,34 @@ public class TestRunnerUI : MonoBehaviour
         GameEvents.onGUIApplicationLauncherReady.Add(OnAppLauncherReady);
         if (ApplicationLauncher.Ready)
             OnAppLauncherReady();
+
+        // Pass -ksptl-run-tests on the command line to run the tests as soon as
+        // the main menu loads and then quit, for running the tests unattended.
+        if (System.Array.IndexOf(System.Environment.GetCommandLineArgs(), AutoRunArg) >= 0)
+            StartCoroutine(AutoRun());
+    }
+
+    const string AutoRunArg = "-ksptl-run-tests";
+    static bool autoRunDone;
+
+    System.Collections.IEnumerator AutoRun()
+    {
+        if (autoRunDone)
+            yield break;
+        autoRunDone = true;
+
+        // Let the main menu finish loading first.
+        yield return null;
+        yield return null;
+
+        try
+        {
+            RunTests();
+        }
+        finally
+        {
+            Application.Quit();
+        }
     }
 
     void OnDestroy()

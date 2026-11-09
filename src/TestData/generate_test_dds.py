@@ -50,6 +50,7 @@ def fourcc(s):
     return struct.unpack('<I', s.encode('ascii'))[0]
 
 FOURCC_DXT1 = fourcc('DXT1')
+FOURCC_DXT3 = fourcc('DXT3')
 FOURCC_DXT5 = fourcc('DXT5')
 FOURCC_ATI1 = fourcc('ATI1')
 FOURCC_ATI2 = fourcc('ATI2')
@@ -57,6 +58,8 @@ FOURCC_DX10 = fourcc('DX10')
 
 # DXGI format values
 DXGI_FORMAT_R8G8B8A8_UNORM      = 28
+DXGI_FORMAT_BC4_SNORM           = 81
+DXGI_FORMAT_BC5_SNORM           = 84
 DXGI_FORMAT_BC6H_UF16           = 95
 DXGI_FORMAT_BC6H_SF16           = 96
 DXGI_FORMAT_BC7_UNORM           = 98
@@ -724,6 +727,116 @@ def make_kopernicus_palette8():
     print(f"  Created {path}")
 
 
+# ---- Odd sized block compressed textures ----
+#
+# Unity 6.7 can't create block compressed textures whose dimensions are not a
+# multiple of 4, so KSPTextureLoader decompresses them instead. These files are
+# 6x7 with a full mip chain (6x7, 3x3, 1x1) where every block is a copy of the
+# single block in the matching 4x4 file. The tests compare the two textures, so
+# the 4x4 file acts as the reference decode.
+
+ODD_WIDTH = 6
+ODD_HEIGHT = 7
+ODD_MIPS = 3
+
+
+def odd_block_count():
+    total = 0
+    w, h = ODD_WIDTH, ODD_HEIGHT
+    for _ in range(ODD_MIPS):
+        total += ((w + 3) // 4) * ((h + 3) // 4)
+        w, h = max(1, w // 2), max(1, h // 2)
+    return total
+
+
+def make_odd_size(src_name, dst_name):
+    """Build a 6x7 mipmapped copy of a single-block 4x4 DDS file."""
+    with open(os.path.join(OUTPUT_DIR, src_name), 'rb') as f:
+        data = bytearray(f.read())
+
+    header_len = 128
+    if struct.unpack_from('<I', data, 84)[0] == FOURCC_DX10:
+        header_len += 20
+
+    header = data[:header_len]
+    block = bytes(data[header_len:])
+    assert len(block) in (8, 16), f"{src_name} is not a single block"
+
+    flags = struct.unpack_from('<I', header, 8)[0]
+    struct.pack_into('<I', header, 8, flags | DDSD_MIPMAPCOUNT | DDSD_LINEARSIZE)
+    struct.pack_into('<I', header, 12, ODD_HEIGHT)
+    struct.pack_into('<I', header, 16, ODD_WIDTH)
+    struct.pack_into('<I', header, 20, 4 * len(block))  # top mip is 2x2 blocks
+    struct.pack_into('<I', header, 28, ODD_MIPS)
+
+    path = os.path.join(OUTPUT_DIR, dst_name)
+    with open(path, 'wb') as f:
+        f.write(header)
+        f.write(block * odd_block_count())
+    print(f"  Created {path}")
+
+
+def make_dxt3():
+    """DXT3 (BC2) - explicit 4-bit alpha followed by a BC1 color block."""
+    path = os.path.join(OUTPUT_DIR, "dxt3.dds")
+    with open(path, 'wb') as f:
+        linear_size = max(1, WIDTH // 4) * max(1, HEIGHT // 4) * 16
+        write_dds_header(f, WIDTH, HEIGHT,
+                         DDSD_LINEARSIZE, linear_size,
+                         DDPF_FOURCC, FOURCC_DXT3, 0, 0, 0, 0, 0)
+        # A distinct alpha value for each pixel: pixel i gets alpha i.
+        alpha = 0
+        for i in range(16):
+            alpha |= i << (i * 4)
+        f.write(struct.pack('<Q', alpha))
+        f.write(encode_bc1_block(PIXELS))
+    print(f"  Created {path}")
+
+
+def make_bc4_snorm():
+    """Signed BC4 (DX10 header). Endpoints straddle zero to exercise signs."""
+    path = os.path.join(OUTPUT_DIR, "bc4_snorm.dds")
+    with open(path, 'wb') as f:
+        write_dx10_header(f, WIDTH, HEIGHT, DXGI_FORMAT_BC4_SNORM, 8)
+        f.write(bc4_snorm_block(100, -90))
+    print(f"  Created {path}")
+
+
+def make_bc5_snorm():
+    """Signed BC5 (DX10 header)."""
+    path = os.path.join(OUTPUT_DIR, "bc5_snorm.dds")
+    with open(path, 'wb') as f:
+        write_dx10_header(f, WIDTH, HEIGHT, DXGI_FORMAT_BC5_SNORM, 16)
+        f.write(bc4_snorm_block(100, -90))  # 8 value mode
+        f.write(bc4_snorm_block(-128, 60))  # 6 value mode, -128 clamps to -127
+    print(f"  Created {path}")
+
+
+def bc4_snorm_block(e0, e1):
+    # Cycle through all 8 palette indices.
+    indices = 0
+    for i in range(16):
+        indices |= (i % 8) << (i * 3)
+    return struct.pack('<bb', e0, e1) + indices.to_bytes(6, 'little')
+
+
+def make_bc6h_mode11():
+    """BC6H with a non-trivial block (unlike bc6h.dds, which is all zeros).
+
+    Mode 11 (low 5 bits 00011) is the single subset mode with raw 10-bit
+    endpoints, so every bit pattern after the mode bits is a valid block.
+    """
+    path = os.path.join(OUTPUT_DIR, "bc6h_mode11.dds")
+    import random
+    rng = random.Random(1234)
+    block = bytearray(rng.getrandbits(8) for _ in range(16))
+    block[0] = (block[0] & ~0x1F) | 0x03
+    with open(path, 'wb') as f:
+        write_dx10_header(f, WIDTH, HEIGHT, DXGI_FORMAT_BC6H_UF16, 16)
+        f.write(bytes(block))
+    print(f"  Created {path}")
+
+
 if __name__ == '__main__':
     print("Generating test DDS files...")
     print()
@@ -766,3 +879,13 @@ if __name__ == '__main__':
 
     print()
     print("Done! Generated test DDS files in", OUTPUT_DIR)
+
+    print()
+    print("Odd sized block compressed formats:")
+    make_dxt3()
+    make_bc4_snorm()
+    make_bc5_snorm()
+    make_bc6h_mode11()
+    for name in ["dxt1", "dxt3", "dxt5", "bc4", "bc4_snorm", "bc5", "bc5_snorm",
+                 "bc6h_mode11", "bc7"]:
+        make_odd_size(f"{name}.dds", f"{name}_6x7.dds")

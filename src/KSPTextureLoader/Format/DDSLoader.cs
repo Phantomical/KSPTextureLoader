@@ -382,6 +382,21 @@ internal static class DDSLoader
                 metadata.format = format;
             }
 
+#if UNITY_6_7
+            // Unity 6.7 cannot create block-compressed textures whose size is
+            // not a multiple of the block size, so decompress those instead.
+            if (
+                BlockDecompression.NeedsDecompression(
+                    metadata.format,
+                    metadata.width,
+                    metadata.height
+                )
+            )
+            {
+                source = BlockDecompression.Decompress(handle.Path, ref metadata, source);
+            }
+#endif
+
             switch (metadata.type)
             {
                 case DDSTextureType.Texture2D:
@@ -1221,11 +1236,7 @@ internal static class DDSLoader
             new(new UnmanagedMemoryStream(pointer, fileLength, fileLength, FileAccess.Read));
 
         public readonly NativeArray<byte> GetNativeArray(long offset, int length) =>
-            NativeArraySafety.Wrap<byte>(
-                pointer + offset,
-                length,
-                Allocator.Invalid
-            );
+            NativeArraySafety.Wrap<byte>(pointer + offset, length, Allocator.Invalid);
 
         public readonly LargeNativeArray<byte> GetLargeNativeArray(long offset, long length) =>
             new(pointer + offset, length, Allocator.Invalid);
