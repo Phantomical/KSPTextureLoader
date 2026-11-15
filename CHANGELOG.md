@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.0.43
+### Fixed
+* Fixed a bug where the wrong asset bundles would occasionally be released
+  after calling `ImmediatelyUnloadUnusedTextures`.
+
 ## v1.0.42
 ### Fixed
 * KSPTL will now automatically decompress compressed dds textures whose
