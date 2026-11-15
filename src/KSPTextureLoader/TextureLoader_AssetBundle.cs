@@ -107,6 +107,10 @@ public partial class TextureLoader
         int delayCount = 0;
         while (true)
         {
+            // UnloadAllAssetBundles can unload the handle while this waits.
+            if (handle.IsDestroyed)
+                yield break;
+
             if (handle.RefCount > 0)
             {
                 delayCount = 0;

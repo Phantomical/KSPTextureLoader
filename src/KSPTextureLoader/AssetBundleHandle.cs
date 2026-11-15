@@ -103,14 +103,31 @@ public class AssetBundleHandle
         }
     }
 
+    /// <summary>
+    /// Set once the bundle has been unloaded. A destroyed handle is no longer
+    /// in <see cref="TextureLoader.assetBundles"/>, and a later load of the same
+    /// path gets a new handle.
+    /// </summary>
+    internal bool IsDestroyed { get; private set; }
+
     internal void Destroy()
     {
-        TextureLoader.assetBundles.Remove(Path);
+        // The entry for this path may already belong to a newer handle, if this
+        // one was unloaded early and the bundle loaded again since.
+        var key = TextureLoader.CanonicalizeResourcePath(Path);
+        if (
+            TextureLoader.assetBundles.TryGetValue(key, out var current)
+            && ReferenceEquals(current, this)
+        )
+            TextureLoader.assetBundles.Remove(key);
+
         DestroyNoRemove();
     }
 
     internal void DestroyNoRemove()
     {
+        IsDestroyed = true;
+
         if (bundle is null)
             return;
 
