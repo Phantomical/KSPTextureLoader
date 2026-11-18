@@ -169,11 +169,9 @@ partial class TextureLoader
             Allocator.None
         );
 
-        var task = Task.Run(() =>
+        return new(() =>
             LoadOwnedTexture2D(config, new PixelDataSource(Task.FromResult(bytes), bytes.Length))
         );
-
-        return new(task);
     }
 
     /// <summary>
@@ -187,11 +185,9 @@ partial class TextureLoader
         long length
     )
     {
-        var task = Task.Run(() =>
+        return new(() =>
             LoadOwnedTexture2D(config, new PixelDataSource(path, offset, length))
         );
-
-        return new(task);
     }
 
     static Task<Texture2D> LoadOwnedTexture2D(Texture2DConfig config, PixelDataSource source)
@@ -245,11 +241,9 @@ partial class TextureLoader
             Allocator.None
         );
 
-        var task = Task.Run(() =>
+        return new(() =>
             LoadOwnedTexture3D(config, new PixelDataSource(Task.FromResult(bytes), bytes.Length))
         );
-
-        return new(task);
     }
 
     /// <summary>
@@ -263,11 +257,9 @@ partial class TextureLoader
         long length
     )
     {
-        var task = Task.Run(() =>
+        return new(() =>
             LoadOwnedTexture3D(config, new PixelDataSource(path, offset, length))
         );
-
-        return new(task);
     }
 
     static Task<Texture3D> LoadOwnedTexture3D(Texture3DConfig config, PixelDataSource source)
@@ -321,14 +313,12 @@ partial class TextureLoader
             Allocator.None
         );
 
-        var task = Task.Run(() =>
+        return new(() =>
             LoadOwnedTexture2DArray(
                 config,
                 new PixelDataSource(Task.FromResult(bytes), bytes.Length)
             )
         );
-
-        return new(task);
     }
 
     /// <summary>
@@ -342,11 +332,9 @@ partial class TextureLoader
         long length
     )
     {
-        var task = Task.Run(() =>
+        return new(() =>
             LoadOwnedTexture2DArray(config, new PixelDataSource(path, offset, length))
         );
-
-        return new(task);
     }
 
     static Task<Texture2DArray> LoadOwnedTexture2DArray(
@@ -403,11 +391,9 @@ partial class TextureLoader
             Allocator.None
         );
 
-        var task = Task.Run(() =>
+        return new(() =>
             LoadOwnedCubemap(config, new PixelDataSource(Task.FromResult(bytes), bytes.Length))
         );
-
-        return new(task);
     }
 
     /// <summary>
@@ -421,11 +407,9 @@ partial class TextureLoader
         long length
     )
     {
-        var task = Task.Run(() =>
+        return new(() =>
             LoadOwnedCubemap(config, new PixelDataSource(path, offset, length))
         );
-
-        return new(task);
     }
 
     static Task<Cubemap> LoadOwnedCubemap(CubemapConfig config, PixelDataSource source)
@@ -479,11 +463,9 @@ partial class TextureLoader
             Allocator.None
         );
 
-        var task = Task.Run(() =>
+        return new(() =>
             LoadOwnedCubemapArray(config, new PixelDataSource(Task.FromResult(bytes), bytes.Length))
         );
-
-        return new(task);
     }
 
     /// <summary>
@@ -497,11 +479,9 @@ partial class TextureLoader
         long length
     )
     {
-        var task = Task.Run(() =>
+        return new(() =>
             LoadOwnedCubemapArray(config, new PixelDataSource(path, offset, length))
         );
-
-        return new(task);
     }
 
     static Task<CubemapArray> LoadOwnedCubemapArray(

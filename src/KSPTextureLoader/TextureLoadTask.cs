@@ -23,12 +23,15 @@ public sealed class TextureLoadTask<T>
 
     public bool IsComplete => task.IsCompleted;
 
-    internal TextureLoadTask(Task<T> task)
+    internal TextureLoadTask(Func<Task<T>> load)
     {
-        if (task is null)
-            throw new ArgumentNullException(nameof(task));
+        if (load is null)
+            throw new ArgumentNullException(nameof(load));
 
-        this.task = task;
+        // Bundle requests must register with this task so a blocking wait can
+        // finish them without waiting for the next player-loop update.
+        using var context = CompletionContext.Enter(this);
+        task = Task.Run(load);
     }
 
     public Awaiter GetAwaiter() => new(this);

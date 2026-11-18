@@ -522,7 +522,7 @@ internal static class DDSLoader
     static bool IsMultipleOfBlockSize(GraphicsFormat format, int width, int height)
     {
         if (!GraphicsFormatUtility.IsCompressedFormat(format))
-            return false;
+            return true;
 
         int blockWidth = (int)GraphicsFormatUtility.GetBlockWidth(format);
         int blockHeight = (int)GraphicsFormatUtility.GetBlockHeight(format);
@@ -543,11 +543,13 @@ internal static class DDSLoader
     /// </remarks>
     static bool SupportsMipmapLimit(GraphicsFormat format, int width, int height, int mipCount)
     {
-        int blockWidth = (int)GraphicsFormatUtility.GetBlockWidth(format);
-        int blockHeight = (int)GraphicsFormatUtility.GetBlockHeight(format);
+        // Keep the 4x4 safety requirement for uncompressed formats too: these
+        // can now reach the bundle path, including decoded palette textures.
+        int blockWidth = Math.Max(4, (int)GraphicsFormatUtility.GetBlockWidth(format));
+        int blockHeight = Math.Max(4, (int)GraphicsFormatUtility.GetBlockHeight(format));
         int lastMip = Math.Min(MaxMipmapLimit, mipCount - 1);
 
-        for (int mip = 1; mip <= lastMip; ++mip)
+        for (int mip = 0; mip <= lastMip; ++mip)
         {
             int mipWidth = Math.Max(width >> mip, 1);
             int mipHeight = Math.Max(height >> mip, 1);
