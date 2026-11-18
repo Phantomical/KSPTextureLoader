@@ -32,6 +32,8 @@ internal static class TextureBundleLoader
         if (request.Pixels is null)
             throw new ArgumentNullException(nameof(request.Pixels));
 
+        // In-memory payloads cannot support reloading individual mips.
+        request.IgnoreMipmapLimit = true;
         var built = TextureBundleBuilder.Build(request, request.Pixels.LongLength, platform);
         var stream = new BundleStream(
             built.Prefix,
