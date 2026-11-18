@@ -529,6 +529,35 @@ internal static class DDSLoader
         return width % blockWidth == 0 && height % blockHeight == 0;
     }
 
+    // KSP's lowest texture quality setting drops the top three mips.
+    const int MaxMipmapLimit = 3;
+
+    /// <summary>
+    /// Can the texture quality setting drop mips from a texture loaded from a bundle?
+    /// </summary>
+    ///
+    /// <remarks>
+    /// Unity creates the texture starting at the first mip it keeps. The graphics
+    /// API refuses a block compressed texture whose top mip is not a whole number
+    /// of blocks, and Unity then crashes on the render thread.
+    /// </remarks>
+    static bool SupportsMipmapLimit(GraphicsFormat format, int width, int height, int mipCount)
+    {
+        int blockWidth = (int)GraphicsFormatUtility.GetBlockWidth(format);
+        int blockHeight = (int)GraphicsFormatUtility.GetBlockHeight(format);
+        int lastMip = Math.Min(MaxMipmapLimit, mipCount - 1);
+
+        for (int mip = 1; mip <= lastMip; ++mip)
+        {
+            int mipWidth = Math.Max(width >> mip, 1);
+            int mipHeight = Math.Max(height >> mip, 1);
+            if (mipWidth % blockWidth != 0 || mipHeight % blockHeight != 0)
+                return false;
+        }
+
+        return true;
+    }
+
     /// <summary>
     /// The classic Texture2D/Cubemap objects serialize a legacy
     /// <see cref="TextureFormat"/> plus a color space; only graphics formats
@@ -575,6 +604,7 @@ internal static class DDSLoader
         }
         else
         {
+            request.IgnoreMipmapLimit = true;
             built = TextureBundleBuilder.Build(request, pixelDataSize);
 
             // For palette textures this waits on the decoded pixels, whose
@@ -653,6 +683,7 @@ internal static class DDSLoader
                     Format = textureFormat,
                     ColorSpace = colorSpace,
                     Readable = !unreadable,
+                    IgnoreMipmapLimit = !SupportsMipmapLimit(format, width, height, mipCount),
                 },
                 source,
                 pixelDataSize
@@ -839,6 +870,7 @@ internal static class DDSLoader
                     Format = textureFormat,
                     ColorSpace = colorSpace,
                     Readable = !options.Unreadable,
+                    IgnoreMipmapLimit = !SupportsMipmapLimit(format, width, height, mipCount),
                 },
                 source,
                 pixelDataSize

@@ -75,6 +75,10 @@ internal static class TextureBundleBuilder
         /// <summary>Whether Unity should keep a CPU-side copy of the pixels.</summary>
         public bool Readable;
 
+        /// <summary>Whether the texture quality setting must not drop mips from
+        /// this texture. Only the classic types (Texture2D / Cubemap) serialize it.</summary>
+        public bool IgnoreMipmapLimit;
+
         /// <summary>The full mip chain in resS byte order. Only used by
         /// <see cref="TextureBundleLoader.CreateAsync"/>; the streamed
         /// <see cref="Build(TextureRequest, long, int)"/> path never
@@ -229,7 +233,7 @@ internal static class TextureBundleBuilder
         w.WriteInt32(req.Format); // m_TextureFormat
         w.WriteInt32(req.MipCount); // m_MipCount
         w.WriteBool(req.Readable); // m_IsReadable
-        w.WriteBool(false); // m_IgnoreMasterTextureLimit
+        w.WriteBool(req.IgnoreMipmapLimit); // m_IgnoreMasterTextureLimit
         w.WriteBool(false); // m_IsPreProcessed
         w.WriteBool(false); // m_StreamingMipmaps
         w.Align(4);
