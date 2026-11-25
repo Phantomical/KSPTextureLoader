@@ -18,18 +18,20 @@ public class OddSizeBlockCompressedTests : KSPTextureLoaderTestBase
 {
     const string BasePath = "KSPTextureLoaderTests/PluginData/";
 
-    static readonly TextureLoadOptions Options = new()
-    {
-        Unreadable = false,
-        Hint = TextureLoadHint.Synchronous,
-    };
-
     static TextureHandle<Texture2D> Load(string name, TextureLoadOptions options)
     {
         var handle = TextureLoader.LoadTexture<Texture2D>(BasePath + name, options);
         handle.WaitUntilComplete();
         return handle;
     }
+
+#if UNITY_6_7
+    // These pixel comparisons exercise the Retooled CPU decompressor. Stock keeps the mips compressed.
+    static readonly TextureLoadOptions Options = new()
+    {
+        Unreadable = false,
+        Hint = TextureLoadHint.Synchronous,
+    };
 
     /// <summary>
     /// Compare the 6x7 file against Unity's decode of the matching 4x4 file.
@@ -78,12 +80,10 @@ public class OddSizeBlockCompressedTests : KSPTextureLoaderTestBase
         if (odd.mipmapCount != 3)
             throw new Exception($"{name}: expected 3 mips but got {odd.mipmapCount}");
 
-#if UNITY_6_7
         if (odd.graphicsFormat != expectedFormat)
             throw new Exception(
                 $"{name}: expected format {expectedFormat} but got {odd.graphicsFormat}"
             );
-#endif
 
         void Check(int x, int y, int mip, int rx, int ry)
         {
@@ -153,6 +153,7 @@ public class OddSizeBlockCompressedTests : KSPTextureLoaderTestBase
 
     [TestInfo("OddSize_BC7")]
     public void TestBC7() => AssertMatchesReference("bc7", GraphicsFormat.R8G8B8A8_UNorm);
+#endif
 
     /// <summary>
     /// The unreadable, asynchronous path goes through different texture
