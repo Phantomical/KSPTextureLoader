@@ -91,12 +91,14 @@ internal class TextureHandleImpl
     // If the texture gets leaked
     ~TextureHandleImpl()
     {
-        if (texture is null)
+        if (Path is null || TextureLoader.Context is null)
             return;
 
         _ = AsyncUtil.LaunchMainThreadTask(() =>
         {
-            if (TextureLoader.Instance is null)
+            // The short weak cache entry has expired and no caller owns this handle.
+            RefCount = 0;
+            if (isExternal || TextureLoader.Instance is null)
                 Destroy();
             else
                 TextureLoader.Instance.QueueForDestroy(this);
@@ -221,7 +223,7 @@ internal class TextureHandleImpl
 
         if (isExternal)
         {
-            texture = null;
+            Destroy();
             return;
         }
 
@@ -255,8 +257,12 @@ internal class TextureHandleImpl
             TextureLoader.textures.Remove(key);
         }
 
-        if (texture == null)
+        GC.SuppressFinalize(this);
+        if (isExternal || texture == null)
+        {
+            texture = null;
             return 0;
+        }
 
         if (Config.Instance.DebugMode >= DebugLevel.Debug)
             Debug.Log($"[KSPTextureLoader] Unloading texture {Path}");
@@ -283,7 +289,6 @@ internal class TextureHandleImpl
         }
 
         texture = null;
-        GC.SuppressFinalize(this);
         return size;
     }
 

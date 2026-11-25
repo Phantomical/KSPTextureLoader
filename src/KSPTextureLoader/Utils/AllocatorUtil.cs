@@ -73,22 +73,28 @@ internal static class AllocatorUtil
     )
         where T : unmanaged
     {
+        if (length < 0)
+            throw new ArgumentOutOfRangeException(nameof(length));
         using var scope = AllocMarker.Auto();
-        var ptr = (void*)Marshal.AllocHGlobal(sizeof(T) * length);
+        long bytes = checked((long)sizeof(T) * length);
+        var ptr = (void*)Marshal.AllocHGlobal((IntPtr)bytes);
         if (ptr is null)
             throw new OutOfMemoryException("failed to allocate an array using AllocHGlobal");
-        Interlocked.Add(ref allocMem, length);
 
-        var array = NativeArraySafety.Wrap<T>(
-            ptr,
-            length,
-            HGlobal
-        );
+        try
+        {
+            var array = NativeArraySafety.Wrap<T>(ptr, length, HGlobal);
+            if (options == NativeArrayOptions.ClearMemory)
+                UnsafeUtility.MemClear(ptr, bytes);
 
-        if (options == NativeArrayOptions.ClearMemory)
-            UnsafeUtility.MemClear(ptr, sizeof(T) * length);
-
-        return array;
+            Interlocked.Add(ref allocMem, bytes);
+            return array;
+        }
+        catch
+        {
+            Marshal.FreeHGlobal((IntPtr)ptr);
+            throw;
+        }
     }
 
     internal static unsafe LargeNativeArray<T> CreateNativeArrayHGlobal<T>(
@@ -97,16 +103,19 @@ internal static class AllocatorUtil
     )
         where T : unmanaged
     {
+        if (length < 0)
+            throw new ArgumentOutOfRangeException(nameof(length));
+        long bytes = checked(sizeof(T) * length);
         using var scope = AllocMarker.Auto();
-        var ptr = (void*)Marshal.AllocHGlobal((IntPtr)(sizeof(T) * length));
+        var ptr = (void*)Marshal.AllocHGlobal((IntPtr)bytes);
         if (ptr is null)
             throw new OutOfMemoryException("failed to allocate an array using AllocHGlobal");
-        Interlocked.Add(ref allocMem, length);
+        Interlocked.Add(ref allocMem, bytes);
 
         var array = new LargeNativeArray<T>((T*)ptr, length, HGlobal);
 
         if (options == NativeArrayOptions.ClearMemory)
-            UnsafeUtility.MemClear(ptr, sizeof(T) * length);
+            UnsafeUtility.MemClear(ptr, bytes);
 
         return array;
     }
@@ -125,7 +134,7 @@ internal static class AllocatorUtil
         if (array.m_AllocatorLabel != HGlobal)
             return;
 
-        Interlocked.Add(ref allocMem, -array.Length);
+        Interlocked.Add(ref allocMem, -(long)UnsafeUtility.SizeOf<T>() * array.Length);
         condvar.Notify();
     }
 
@@ -143,7 +152,7 @@ internal static class AllocatorUtil
         if (array.Allocator != HGlobal)
             return;
 
-        Interlocked.Add(ref allocMem, -array.Length);
+        Interlocked.Add(ref allocMem, -(long)UnsafeUtility.SizeOf<T>() * array.Length);
         condvar.Notify();
     }
 
@@ -168,7 +177,7 @@ internal static class AllocatorUtil
             {
                 using var scope = FreeMarker.Auto();
                 Marshal.FreeHGlobal((IntPtr)array.GetUnsafePtr());
-                Interlocked.Add(ref allocMem, -array.Length);
+                Interlocked.Add(ref allocMem, -(long)UnsafeUtility.SizeOf<T>() * array.Length);
             }
 
             condvar.Notify();
@@ -206,7 +215,7 @@ internal static class AllocatorUtil
             {
                 using var scope = FreeMarker.Auto();
                 Marshal.FreeHGlobal((IntPtr)array.GetUnsafePtr());
-                Interlocked.Add(ref allocMem, -array.Length);
+                Interlocked.Add(ref allocMem, -(long)UnsafeUtility.SizeOf<T>() * array.Length);
             }
 
             condvar.Notify();

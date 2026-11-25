@@ -276,12 +276,13 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
     /// <summary>
     /// Create a new CPUTexture2D from a native array containing texture data.
     /// </summary>
-    /// <param name="data">The data backing this texture.</param>
-    /// <param name="width">The width of the the texture.</param>
+    /// <param name="data">The backing array. Ownership of an allocated array transfers
+    /// to this method, including on failure. For a borrowed view, the caller must keep
+    /// the underlying storage alive until the texture is disposed.</param>
+    /// <param name="width">The width of the texture.</param>
     /// <param name="height">The height of the texture.</param>
     /// <param name="mipCount">The number of mipmaps for this texture.</param>
-    /// <param name="format">The <see cref="TextureFormat"/> of <paramref name="data"/>.</param>
-    /// <returns></returns>
+    /// <param name="format">The format of the pixels.</param>
     public static CPUTexture2D Create(
         NativeArray<byte> data,
         int width,
@@ -290,24 +291,22 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
         TextureFormat format
     )
     {
-        return Create(
-            LargeNativeArray<byte>.FromNativeArray(data),
-            width,
-            height,
-            mipCount,
-            format
-        );
+        var view = LargeNativeArray<byte>.FromNativeArray(data);
+        if (data.m_AllocatorLabel is Allocator.None or Allocator.Invalid)
+            return Create(view, width, height, mipCount, format);
+
+        try
+        {
+            var factory = new MemoryTexture2D.Factory<NativeArray<byte>>(data);
+            return Create(factory, view, width, height, mipCount, format);
+        }
+        catch
+        {
+            data.Dispose();
+            throw;
+        }
     }
 
-    /// <summary>
-    /// Create a new CPUTexture2D from a native array containing texture data.
-    /// </summary>
-    /// <param name="data">The data backing this texture.</param>
-    /// <param name="width">The width of the the texture.</param>
-    /// <param name="height">The height of the texture.</param>
-    /// <param name="mipCount">The number of mipmaps for this texture.</param>
-    /// <param name="format">The <see cref="TextureFormat"/> of <paramref name="data"/>.</param>
-    /// <returns></returns>
     internal static unsafe CPUTexture2D Create(
         LargeNativeArray<byte> data,
         int width,
@@ -316,8 +315,24 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
         TextureFormat format
     )
     {
-        var factory = new MemoryTexture2D.Factory(data.GetUnsafePtr(), data.Allocator);
-        return Create(factory, data, width, height, mipCount, format);
+        try
+        {
+            if (data.Allocator == AllocatorUtil.HGlobal)
+            {
+                var factory = new HGlobalMemoryTexture2D.Factory(data.GetUnsafePtr());
+                var texture = Create(factory, data, width, height, mipCount, format);
+                AllocatorUtil.Release(data);
+                return texture;
+            }
+
+            var memoryFactory = new MemoryTexture2D.Factory<LargeNativeArray<byte>>(data);
+            return Create(memoryFactory, data, width, height, mipCount, format);
+        }
+        catch
+        {
+            data.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -743,11 +758,19 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             NativeArrayOptions.UninitializedMemory
         );
 
-        var blocks = texture.GetRawTextureData<TBlock>().GetSubArray(blockOffset, blockCount);
-        var job = func(blocks);
+        try
+        {
+            var blocks = texture.GetRawTextureData<TBlock>().GetSubArray(blockOffset, blockCount);
+            var job = func(blocks);
 
-        job.Schedule(blocksPerRow, mipWidth, mipHeight, pixels).Complete();
-        return pixels;
+            job.Schedule(blocksPerRow, mipWidth, mipHeight, pixels).Complete();
+            return pixels;
+        }
+        catch
+        {
+            pixels.Dispose();
+            throw;
+        }
     }
 
     static NativeArray<Color32> GetBlockPixels32<TTex, TBlock, TJob>(
@@ -777,11 +800,19 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             NativeArrayOptions.UninitializedMemory
         );
 
-        var blocks = texture.GetRawTextureData<TBlock>().GetSubArray(blockOffset, blockCount);
-        var job = func(blocks);
+        try
+        {
+            var blocks = texture.GetRawTextureData<TBlock>().GetSubArray(blockOffset, blockCount);
+            var job = func(blocks);
 
-        job.Schedule(blocksPerRow, mipWidth, mipHeight, pixels).Complete();
-        return pixels;
+            job.Schedule(blocksPerRow, mipWidth, mipHeight, pixels).Complete();
+            return pixels;
+        }
+        catch
+        {
+            pixels.Dispose();
+            throw;
+        }
     }
     #endregion
 }

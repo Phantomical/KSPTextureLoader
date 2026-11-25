@@ -69,7 +69,7 @@ public unsafe struct LargeNativeArray<T> : IDisposable
         }
 
         // Invalid marks a view of memory this array doesn't own, such as a mapped file.
-        if (allocator != Allocator.Invalid)
+        if (allocator != Allocator.Invalid && allocator != Allocator.None)
             UnsafeUtility.Free(data, allocator);
         this = default;
     }

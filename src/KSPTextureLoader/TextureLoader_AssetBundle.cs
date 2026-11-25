@@ -31,18 +31,12 @@ public partial class TextureLoader
         return handle;
     }
 
-    readonly Dictionary<string, ProfilerMarker> LoadBundleMarkerCache = [];
+    static readonly ProfilerMarker LoadBundleMarker = new("LoadAssetBundle");
 
     IEnumerator DoLoadAssetBundle(AssetBundleHandle handle, bool sync)
     {
         // Ensure that the asset bundle handle stays alive while we are loading it.
         using var guard = handle.Acquire();
-
-        if (!LoadBundleMarkerCache.TryGetValue(handle.Path, out var marker))
-        {
-            marker = new ProfilerMarker($"LoadAssetBundle: {handle.Path}");
-            LoadBundleMarkerCache.Add(handle.Path, marker);
-        }
 
         IEnumerator<object> coroutine;
         using (CompletionContext.Enter(handle))
@@ -53,7 +47,7 @@ public partial class TextureLoader
 
         while (true)
         {
-            using (var scope = marker.Auto())
+            using (var scope = LoadBundleMarker.Auto())
             using (CompletionContext.Enter(handle))
             {
                 if (!coroutine.MoveNext())

@@ -197,15 +197,15 @@ internal class TexturesScreenContent : MonoBehaviour
 
 internal class TexturePreviewItem : MonoBehaviour
 {
-    TextureHandleImpl handle;
+    WeakReference<TextureHandleImpl> handle;
     public TexturePreviewButton button;
     public TextMeshProUGUI label;
 
-    internal string Path => handle?.Path;
+    internal string Path => button.path;
 
     internal void Initialize(TextureHandleImpl handle)
     {
-        this.handle = handle;
+        this.handle = new WeakReference<TextureHandleImpl>(handle, trackResurrection: true);
         label.text = handle.Path;
         button.path = handle.Path;
         TextureHandleImpl.HandleDestroyed.Add(OnHandleDestroyed);
@@ -213,7 +213,7 @@ internal class TexturePreviewItem : MonoBehaviour
 
     void OnHandleDestroyed(TextureHandleImpl destroyed)
     {
-        if (!ReferenceEquals(destroyed, handle))
+        if (handle.TryGetTarget(out var target) && !ReferenceEquals(destroyed, target))
             return;
 
         TextureHandleImpl.HandleDestroyed.Remove(OnHandleDestroyed);

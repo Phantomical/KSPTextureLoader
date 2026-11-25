@@ -18,7 +18,6 @@ internal static unsafe class HGlobalMemoryTexture2D
 
         public CPUTexture2D CreateFallback(TextureFormat format)
         {
-            Marshal.FreeHGlobal((IntPtr)data);
             throw new NotSupportedException(
                 $"Unsupported texture format for memory-mapped CPU texture: {format}"
             );

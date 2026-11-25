@@ -451,20 +451,22 @@ internal static class DDSLoader
         {
             using var rawGuard = new TaskArrayDisposeGuard(rawDataTask);
             var rawData = await rawDataTask;
-            var colors = AllocatorUtil.CreateNativeArrayHGlobal<Color32>(
-                width * height,
+            var output = AllocatorUtil.CreateNativeArrayHGlobal<Color32>(
+                checked((long)width * height),
                 NativeArrayOptions.UninitializedMemory
             );
-            using var colorsGuard = new NativeArrayGuard<Color32>(colors);
+            try
+            {
+                await Decode(output.AsNativeArray());
+                return output.Reinterpret<byte>();
+            }
+            catch
+            {
+                output.DisposeExt();
+                throw;
+            }
 
-            await Decode();
-
-            colorsGuard.array = default;
-            return LargeNativeArray<byte>.FromNativeArray(
-                colors.Reinterpret<byte>(UnsafeUtility.SizeOf<Color32>())
-            );
-
-            Task Decode() =>
+            Task Decode(NativeArray<Color32> colors) =>
                 paletteType switch
                 {
                     KopernicusPaletteType.Palette4 => AsyncUtil.ScheduleAndWait(

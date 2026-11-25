@@ -1,70 +1,35 @@
 using System;
-using System.Runtime.InteropServices;
-using System.Threading.Tasks;
-using KSPTextureLoader.Utils;
-using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
-using Unity.Profiling;
 using UnityEngine;
 
 namespace KSPTextureLoader.CPU;
 
-internal static unsafe class MemoryTexture2D
+internal static class MemoryTexture2D
 {
-    internal readonly struct Factory(void* data, Allocator allocator)
-        : CPUTexture2D.ICPUTexture2DFactory
+    internal readonly struct Factory<TStorage>(TStorage storage) : CPUTexture2D.ICPUTexture2DFactory
+        where TStorage : struct, IDisposable
     {
         public CPUTexture2D CreateTexture2D<T>(T texture)
-            where T : ICPUTexture2D
-        {
-            if (allocator == AllocatorUtil.HGlobal)
-                return new HGlobalMemoryTexture2D<T>(data, texture);
+            where T : ICPUTexture2D => new MemoryTexture2D<T, TStorage>(texture, storage);
 
-            return new MemoryTexture2D<T>(data, allocator, texture);
-        }
-
-        public CPUTexture2D CreateFallback(TextureFormat format)
-        {
-            if (allocator == AllocatorUtil.HGlobal)
-                Marshal.FreeHGlobal((IntPtr)data);
-            else
-                UnsafeUtility.Free(data, allocator);
-
-            throw new NotSupportedException(
-                $"Unsupported texture format for memory-mapped CPU texture: {format}"
-            );
-        }
+        public CPUTexture2D CreateFallback(TextureFormat format) =>
+            throw new NotSupportedException($"Unsupported format for memory-backed CPU texture: {format}");
     }
 }
 
-internal sealed unsafe class MemoryTexture2D<TTexture> : CPUTexture2D<TTexture>
+internal sealed class MemoryTexture2D<TTexture, TStorage>(TTexture texture, TStorage storage)
+    : CPUTexture2D<TTexture>(texture)
     where TTexture : ICPUTexture2D
+    where TStorage : struct, IDisposable
 {
-    void* data;
-    Allocator allocator;
+    TStorage? backing = storage;
 
-    internal MemoryTexture2D(void* data, Allocator allocator, TTexture texture)
-        : base(texture)
-    {
-        this.data = data;
-        this.allocator = allocator;
-    }
-
-    ~MemoryTexture2D()
-    {
-        if (data is null)
-            return;
-
-        UnsafeUtility.Free(data, allocator);
-    }
+    ~MemoryTexture2D() => backing?.Dispose();
 
     public override void Dispose()
     {
         base.Dispose();
+        backing?.Dispose();
+        backing = null;
         GC.SuppressFinalize(this);
-
-        UnsafeUtility.Free(data, allocator);
-        data = null;
-        allocator = Allocator.Invalid;
     }
 }

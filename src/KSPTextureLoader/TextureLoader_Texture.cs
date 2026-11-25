@@ -80,7 +80,7 @@ public partial class TextureLoader
         return new(handle);
     }
 
-    readonly Dictionary<string, ProfilerMarker> LoadTextureMarkerCache = [];
+    static readonly ProfilerMarker LoadTextureMarker = new("LoadTexture");
 
     private IEnumerator DoLoadTexture<T>(
         TextureHandleImpl handle,
@@ -91,12 +91,6 @@ public partial class TextureLoader
     {
         // Ensure that the texture handle doesn't get disposed of while we are still working on it.
         using var guard = handle.Acquire();
-
-        if (!LoadTextureMarkerCache.TryGetValue(handle.Path, out var marker))
-        {
-            marker = new ProfilerMarker($"LoadTexture: {handle.Path}");
-            LoadTextureMarkerCache.Add(handle.Path, marker);
-        }
 
         IEnumerator<object> coroutine;
         using (CompletionContext.Enter(handle))
@@ -109,7 +103,7 @@ public partial class TextureLoader
 
         while (true)
         {
-            using (var scope = marker.Auto())
+            using (var scope = LoadTextureMarker.Auto())
             using (CompletionContext.Enter(handle))
             {
                 if (!coroutine.MoveNext())
@@ -379,24 +373,25 @@ public partial class TextureLoader
                 GraphicsFormatUtility.IsSRGBFormat(tex2d.graphicsFormat)
             )
         );
+        using var readableGuard = new TextureDisposeGuard(readable);
         readable.name = tex2d.name;
 
-        var rt = new RenderTexture(
-            tex2d.width,
-            tex2d.height,
-            1,
-            RenderTextureFormat.ARGB32,
-            tex2d.mipmapCount
-        );
-        Graphics.Blit(tex2d, rt);
-
         var prev = RenderTexture.active;
-        RenderTexture.active = rt;
-        readable.ReadPixels(new Rect(0f, 0f, tex2d.width, tex2d.height), 0, 0);
-        RenderTexture.active = prev;
-        rt.Release();
+        var rt = RenderTexture.GetTemporary(tex2d.width, tex2d.height, 0, RenderTextureFormat.ARGB32);
+        try
+        {
+            Graphics.Blit(tex2d, rt);
+            RenderTexture.active = rt;
+            readable.ReadPixels(new Rect(0f, 0f, tex2d.width, tex2d.height), 0, 0);
+        }
+        finally
+        {
+            RenderTexture.active = prev;
+            RenderTexture.ReleaseTemporary(rt);
+        }
 
         options.UpdateMipmaps = true;
+        readableGuard.Clear();
         return readable;
     }
 

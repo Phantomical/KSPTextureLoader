@@ -40,7 +40,7 @@ public partial class TextureLoader
         return handle;
     }
 
-    readonly Dictionary<string, ProfilerMarker> LoadCPUTextureMarkerCache = [];
+    static readonly ProfilerMarker LoadCPUTextureMarker = new("LoadCPUTexture");
 
     private IEnumerator DoLoadCPUTexture(
         CPUTextureHandle handle,
@@ -49,12 +49,6 @@ public partial class TextureLoader
     )
     {
         using var guard = handle.Acquire();
-
-        if (!LoadCPUTextureMarkerCache.TryGetValue(handle.Path, out var marker))
-        {
-            marker = new ProfilerMarker($"LoadCPUTexture: {handle.Path}");
-            LoadCPUTextureMarkerCache.Add(handle.Path, marker);
-        }
 
         IEnumerator<object> coroutine;
         using (CompletionContext.Enter(handle))
@@ -67,7 +61,7 @@ public partial class TextureLoader
 
         while (true)
         {
-            using (var scope = marker.Auto())
+            using (var scope = LoadCPUTextureMarker.Auto())
             using (CompletionContext.Enter(handle))
             {
                 if (!coroutine.MoveNext())

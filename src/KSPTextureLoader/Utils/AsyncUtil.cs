@@ -200,14 +200,14 @@ internal static class AsyncUtil
         });
     }
 
-    struct NotifyJob(TaskCompletionSource<Empty> tcs) : IJob
+    struct NotifyJob : IJob
     {
-        ObjectHandle<TaskCompletionSource<Empty>> tcs = new(tcs);
+        public ObjectHandle<TaskCompletionSource<Empty>> completion;
 
         public void Execute()
         {
-            using var _guard = tcs;
-            tcs.Target.TrySetResult(default);
+            using var guard = completion;
+            completion.Target.TrySetResult(default);
         }
     }
 
@@ -246,8 +246,19 @@ internal static class AsyncUtil
             if (IsComplete)
                 return;
 
-            handle.Complete();
-            Finish();
+            try
+            {
+                handle.Complete();
+                TrySetResult(default);
+            }
+            catch (Exception ex)
+            {
+                TrySetException(ex);
+            }
+            finally
+            {
+                context?.MarkCompleted(this);
+            }
         }
 
         IEnumerator Poll()
@@ -255,54 +266,51 @@ internal static class AsyncUtil
             while (!IsComplete && !handle.IsCompleted)
                 yield return null;
 
-            handle.Complete();
-            Finish();
-        }
-
-        void Finish()
-        {
-            if (TrySetResult(default))
-                context?.MarkCompleted(this);
+            WaitUntilComplete();
         }
     }
 
-    public static Task WaitFor(JobHandle handle)
+    public static Task WaitFor(JobHandle handle) =>
+        LaunchMainThreadTask(() => WaitForJobOnMainThread(handle));
+
+    static async Task WaitForJobOnMainThread(JobHandle handle)
     {
-        if (!BurstUtil.JobsAllowed && !IsMainThread)
-            return LaunchMainThreadTask(() => WaitFor(handle));
-
-        TaskCompletionSource<Empty> tcs;
-        if (IsMainThread)
+        if (handle.IsCompleted)
         {
-            if (handle.IsCompleted)
-                return Task.CompletedTask;
+            handle.Complete();
+            return;
+        }
 
-            if (!BurstUtil.JobsAllowed)
-                return PolledJobCompletionSource.Start(handle);
+        if (!BurstUtil.JobsAllowed)
+        {
+            await PolledJobCompletionSource.Start(handle);
+            return;
+        }
 
-            tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            var job = new NotifyJob(tcs);
-            job.Schedule(handle);
+        var signal = new TaskCompletionSource<Empty>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var job = new NotifyJob { completion = new(signal) };
+        JobHandle notification;
+        try
+        {
+            notification = job.Schedule(handle);
+        }
+        catch
+        {
+            job.completion.Dispose();
+            handle.Complete();
+            throw;
+        }
+
+        try
+        {
             JobHandle.ScheduleBatchedJobs();
+            await signal.Task;
         }
-        else
+        finally
         {
-            tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            LaunchMainThreadTask(() =>
-            {
-                if (handle.IsCompleted)
-                {
-                    tcs.TrySetResult(default);
-                    return;
-                }
-
-                var job = new NotifyJob(tcs);
-                job.Schedule(handle);
-                JobHandle.ScheduleBatchedJobs();
-            });
+            // Complete the dependency chain before the caller can release its buffers.
+            notification.Complete();
         }
-
-        return tcs.Task;
     }
     #endregion
 

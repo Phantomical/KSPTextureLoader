@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Threading.Tasks;
 using KSPTextureLoader.Format.Bundle;
+using KSPTextureLoader.Utils;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
@@ -58,6 +59,8 @@ internal class BundleUploadTestButton : DebugScreenButton
 
             // CreateAsync must be called from a background thread.
             Texture texture = await Task.Run(() => TextureBundleLoader.CreateAsync(request));
+
+            using var textureGuard = new TextureDisposeGuard(texture);
 
             sw.Stop();
             log.AppendLine($"  loaded in {sw.ElapsedMilliseconds} ms (wall clock)");
