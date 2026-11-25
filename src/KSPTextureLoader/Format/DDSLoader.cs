@@ -456,31 +456,39 @@ internal static class DDSLoader
                 NativeArrayOptions.UninitializedMemory
             );
             using var colorsGuard = new NativeArrayGuard<Color32>(colors);
-            await await AsyncUtil.LaunchMainThreadTask(async () =>
-            {
-                JobHandle jobHandle = paletteType switch
-                {
-                    KopernicusPaletteType.Palette4 => new DecodeKopernicusPalette4bitJob
-                    {
-                        data = rawData.GetSubArray(0, 16 * 4 + width * height / 2),
-                        colors = colors,
-                    }.ScheduleBatch(width * height / 2, 4096),
-                    KopernicusPaletteType.Palette8 => new DecodeKopernicusPalette8bitJob
-                    {
-                        data = rawData.GetSubArray(0, 256 * 4 + width * height),
-                        colors = colors,
-                    }.ScheduleBatch(width * height, 4096),
-                    _ => throw new InvalidOperationException(
-                        $"Unknown palette type: {paletteType}"
-                    ),
-                };
-                JobHandle.ScheduleBatchedJobs();
-                return AsyncUtil.WaitFor(jobHandle);
-            });
+
+            await Decode();
+
             colorsGuard.array = default;
             return LargeNativeArray<byte>.FromNativeArray(
                 colors.Reinterpret<byte>(UnsafeUtility.SizeOf<Color32>())
             );
+
+            Task Decode() =>
+                paletteType switch
+                {
+                    KopernicusPaletteType.Palette4 => AsyncUtil.ScheduleAndWait(
+                        new DecodeKopernicusPalette4bitJob
+                        {
+                            data = rawData.GetSubArray(0, 16 * 4 + width * height / 2),
+                            colors = colors,
+                        },
+                        width * height / 2,
+                        4096
+                    ),
+                    KopernicusPaletteType.Palette8 => AsyncUtil.ScheduleAndWait(
+                        new DecodeKopernicusPalette8bitJob
+                        {
+                            data = rawData.GetSubArray(0, 256 * 4 + width * height),
+                            colors = colors,
+                        },
+                        width * height,
+                        4096
+                    ),
+                    _ => throw new InvalidOperationException(
+                        $"Unknown palette type: {paletteType}"
+                    ),
+                };
         });
     }
 

@@ -208,11 +208,7 @@ internal static class BlockDecompression
                 for (int i = 0; i < surfaceList.Count; ++i)
                     surfaces[i] = surfaceList[i];
 
-                await AsyncUtil.LaunchMainThreadTask(() =>
-                {
-                    var handle = Schedule(format, raw, output, surfaces, blockCount);
-                    return AsyncUtil.WaitFor(handle);
-                });
+                await Decompress(format, raw, output, surfaces, blockCount);
             }
             catch
             {
@@ -224,7 +220,7 @@ internal static class BlockDecompression
         });
     }
 
-    static unsafe JobHandle Schedule(
+    static unsafe Task Decompress(
         GraphicsFormat format,
         LargeNativeArray<byte> src,
         LargeNativeArray<byte> dst,
@@ -251,61 +247,73 @@ internal static class BlockDecompression
         {
             case GraphicsFormat.RGBA_DXT1_UNorm:
             case GraphicsFormat.RGBA_DXT1_SRGB:
-                return new DecompressDXT1Job { inner = Inner<DXT1Decoder>() }.ScheduleBatch(
+                return AsyncUtil.ScheduleAndWait(
+                    new DecompressDXT1Job { inner = Inner<DXT1Decoder>() },
                     blockCount,
                     BlockBatchSize
                 );
 
             case GraphicsFormat.RGBA_DXT3_UNorm:
             case GraphicsFormat.RGBA_DXT3_SRGB:
-                return new DecompressDXT3Job { inner = Inner<DXT3Decoder>() }.ScheduleBatch(
+                return AsyncUtil.ScheduleAndWait(
+                    new DecompressDXT3Job { inner = Inner<DXT3Decoder>() },
                     blockCount,
                     BlockBatchSize
                 );
 
             case GraphicsFormat.RGBA_DXT5_UNorm:
             case GraphicsFormat.RGBA_DXT5_SRGB:
-                return new DecompressDXT5Job { inner = Inner<DXT5Decoder>() }.ScheduleBatch(
+                return AsyncUtil.ScheduleAndWait(
+                    new DecompressDXT5Job { inner = Inner<DXT5Decoder>() },
                     blockCount,
                     BlockBatchSize
                 );
 
             case GraphicsFormat.R_BC4_UNorm:
-                return new DecompressBC4UNormJob { inner = Inner<BC4UNormDecoder>() }.ScheduleBatch(
+                return AsyncUtil.ScheduleAndWait(
+                    new DecompressBC4UNormJob { inner = Inner<BC4UNormDecoder>() },
                     blockCount,
                     BlockBatchSize
                 );
 
             case GraphicsFormat.R_BC4_SNorm:
-                return new DecompressBC4SNormJob { inner = Inner<BC4SNormDecoder>() }.ScheduleBatch(
+                return AsyncUtil.ScheduleAndWait(
+                    new DecompressBC4SNormJob { inner = Inner<BC4SNormDecoder>() },
                     blockCount,
                     BlockBatchSize
                 );
 
             case GraphicsFormat.RG_BC5_UNorm:
-                return new DecompressBC5UNormJob { inner = Inner<BC5UNormDecoder>() }.ScheduleBatch(
+                return AsyncUtil.ScheduleAndWait(
+                    new DecompressBC5UNormJob { inner = Inner<BC5UNormDecoder>() },
                     blockCount,
                     BlockBatchSize
                 );
 
             case GraphicsFormat.RG_BC5_SNorm:
-                return new DecompressBC5SNormJob { inner = Inner<BC5SNormDecoder>() }.ScheduleBatch(
+                return AsyncUtil.ScheduleAndWait(
+                    new DecompressBC5SNormJob { inner = Inner<BC5SNormDecoder>() },
                     blockCount,
                     BlockBatchSize
                 );
 
             case GraphicsFormat.RGB_BC6H_UFloat:
             case GraphicsFormat.RGB_BC6H_SFloat:
-                return new DecompressBC6HJob
-                {
-                    inner = Inner<BC6HDecoder>(
-                        new() { signed = format == GraphicsFormat.RGB_BC6H_SFloat }
-                    ),
-                }.ScheduleBatch(blockCount, BlockBatchSize);
+                return AsyncUtil.ScheduleAndWait(
+                    new DecompressBC6HJob
+                    {
+                        inner = Inner<BC6HDecoder>(
+                            new() { signed = format == GraphicsFormat.RGB_BC6H_SFloat }
+                        ),
+                    },
+                    blockCount,
+                    BlockBatchSize
+                );
 
             case GraphicsFormat.RGBA_BC7_UNorm:
             case GraphicsFormat.RGBA_BC7_SRGB:
-                return new DecompressBC7Job { inner = Inner<BC7Decoder>() }.ScheduleBatch(
+                return AsyncUtil.ScheduleAndWait(
+                    new DecompressBC7Job { inner = Inner<BC7Decoder>() },
                     blockCount,
                     BlockBatchSize
                 );

@@ -1,12 +1,17 @@
 using System;
+using System.Collections;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using KSPTextureLoader.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using UnityEngine;
 using UnityEngine.Rendering;
+#if UNITY_6_7
+using IJobParallelForBatch = KSPTextureLoader.Burst.IJobParallelForBatch;
+#endif
 
 namespace KSPTextureLoader.Utils;
 
@@ -167,6 +172,34 @@ internal static class AsyncUtil
     #endregion
 
     #region WaitForJob
+    public static Task ScheduleAndWait<T>(T job, int arrayLength, int minIndicesPerJob)
+        where T : struct, IJobParallelForBatch
+    {
+        if (!BurstUtil.JobsAllowed)
+            return Task.Run(() => job.ExecuteManaged(arrayLength, minIndicesPerJob));
+
+        return LaunchMainThreadTask(() =>
+        {
+            var handle = job.ScheduleBatch(arrayLength, minIndicesPerJob);
+            JobHandle.ScheduleBatchedJobs();
+            return WaitFor(handle);
+        });
+    }
+
+    public static Task ScheduleAndWait<T>(T job)
+        where T : struct, IJob
+    {
+        if (!BurstUtil.JobsAllowed)
+            return Task.Run(() => job.Execute());
+
+        return LaunchMainThreadTask(() =>
+        {
+            var handle = job.Schedule();
+            JobHandle.ScheduleBatchedJobs();
+            return WaitFor(handle);
+        });
+    }
+
     struct NotifyJob(TaskCompletionSource<Empty> tcs) : IJob
     {
         ObjectHandle<TaskCompletionSource<Empty>> tcs = new(tcs);
@@ -178,13 +211,74 @@ internal static class AsyncUtil
         }
     }
 
+    /// <summary>
+    /// Waits on a job handle by polling it once per frame from a coroutine on
+    /// <see cref="TextureLoader"/>. Used before PSystemSpawn, when scheduling a
+    /// <see cref="NotifyJob"/> is not allowed (see <see cref="BurstUtil.JobsAllowed"/>).
+    /// </summary>
+    sealed class PolledJobCompletionSource
+        : TaskCompletionSource<Empty>,
+            ICompleteHandler
+    {
+        readonly JobHandle handle;
+        readonly ICompletionContext context;
+
+        public bool IsComplete => Task.IsCompleted;
+
+        PolledJobCompletionSource(JobHandle handle, ICompletionContext context)
+            : base(TaskCreationOptions.RunContinuationsAsynchronously)
+        {
+            this.handle = handle;
+            this.context = context;
+        }
+
+        public static Task Start(JobHandle handle)
+        {
+            var context = CompletionContext.Current;
+            var tcs = new PolledJobCompletionSource(handle, context);
+            context?.MarkBlockedOn(tcs);
+            TextureLoader.Instance.StartCoroutine(tcs.Poll());
+            return tcs.Task;
+        }
+
+        public void WaitUntilComplete()
+        {
+            if (IsComplete)
+                return;
+
+            handle.Complete();
+            Finish();
+        }
+
+        IEnumerator Poll()
+        {
+            while (!IsComplete && !handle.IsCompleted)
+                yield return null;
+
+            handle.Complete();
+            Finish();
+        }
+
+        void Finish()
+        {
+            if (TrySetResult(default))
+                context?.MarkCompleted(this);
+        }
+    }
+
     public static Task WaitFor(JobHandle handle)
     {
+        if (!BurstUtil.JobsAllowed && !IsMainThread)
+            return LaunchMainThreadTask(() => WaitFor(handle));
+
         TaskCompletionSource<Empty> tcs;
         if (IsMainThread)
         {
             if (handle.IsCompleted)
                 return Task.CompletedTask;
+
+            if (!BurstUtil.JobsAllowed)
+                return PolledJobCompletionSource.Start(handle);
 
             tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
             var job = new NotifyJob(tcs);

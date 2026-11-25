@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using KSPTextureLoader.Utils;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
@@ -26,13 +27,22 @@ internal static class IJobParallelForBatchExtensions
             int jobIndex
         );
 
-        internal static readonly IntPtr jobReflectionData = JobsUtility.CreateJobReflectionData(
-            typeof(T),
+        internal static readonly IntPtr jobReflectionData;
+
+        // An explicit static constructor removes beforefieldinit, so the runtime
+        // must not create the reflection data until jobReflectionData is first
+        // read. Creating it before PSystemSpawn would trip KSPBurst (see
+        // BurstUtil.JobsAllowed).
+        static JobStruct()
+        {
+            jobReflectionData = JobsUtility.CreateJobReflectionData(
+                typeof(T),
 #if !UNITY_6_7
-            JobType.ParallelFor,
+                JobType.ParallelFor,
 #endif
-            new ExecuteJobFunction(Execute)
-        );
+                new ExecuteJobFunction(Execute)
+            );
+        }
 
         public static void Execute(
             ref T jobData,
@@ -59,6 +69,16 @@ internal static class IJobParallelForBatchExtensions
     )
         where T : struct, IJobParallelForBatch
     {
+        // Touching JobStruct<T> creates job reflection data, which KSPBurst
+        // blocks on (or breaks on) until its compile is done. Like scheduling,
+        // this path must be called on the main thread.
+        if (!BurstUtil.JobsAllowed)
+        {
+            dependsOn.Complete();
+            job.ExecuteManaged(arrayLength, minIndicesPerJob);
+            return default;
+        }
+
         var parameters = new JobsUtility.JobScheduleParameters(
             UnsafeUtility.AddressOf(ref job),
             JobStruct<T>.jobReflectionData,
@@ -90,4 +110,12 @@ internal static class IJobParallelForBatchExtensions
 
         return JobsUtility.ScheduleParallelFor(ref parameters, arrayLength, minIndicesPerJob);
     }
+
+    internal static void ExecuteManaged<T>(this T job, int arrayLength, int minIndicesPerJob)
+        where T : struct, IJobParallelForBatch =>
+        BurstUtil.RunParallelBatches(
+            arrayLength,
+            minIndicesPerJob,
+            (start, count) => job.Execute(start, count)
+        );
 }
