@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.0.45
+### Added
+* Added a warning popup when the 1.12.5 version of KSPTL is loaded in a
+  retooled install.
+
+### Fixes
+* KSPTL will no longer run any jobs until after PSystemSpawn in order to
+  avoid causing KSPBurst to force-finish burst compilation.
+* Fixed a bunch of memory leaks.
+
 ## v1.0.44
 ### Changed
 * All texture types can now be loaded through the fake asset bundle path.
