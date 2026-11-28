@@ -5,6 +5,7 @@ using KSPTextureLoader.Utils;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Jobs;
 using UnityEngine;
 
 namespace KSPTextureLoader;
@@ -12,7 +13,7 @@ namespace KSPTextureLoader;
 partial class CPUTexture2D
 {
     [BurstCompile(FloatMode = FloatMode.Fast)]
-    public readonly struct RGBAFloat : ICPUTexture2D, IGetPixels
+    public readonly struct RGBAFloat : ICPUTexture2D, IGetPixels, IGetPixelsV2
     {
         public int Width { get; }
         public int Height { get; }
@@ -78,6 +79,36 @@ partial class CPUTexture2D
                 in this,
                 mipLevel,
                 allocator,
+                (data, pixels) => new GetPixels32Job { data = data, pixels = pixels }
+            );
+        }
+
+        public JobHandle GetPixels(
+            NativeArray<Color> pixels,
+            int mipLevel = 0,
+            JobHandle dependsOn = default
+        )
+        {
+            return GetPixels<RGBAFloat, Color, GetPixelsJob>(
+                in this,
+                pixels,
+                mipLevel,
+                dependsOn,
+                (data, pixels) => new GetPixelsJob { data = data, pixels = pixels }
+            );
+        }
+
+        public JobHandle GetPixels32(
+            NativeArray<Color32> pixels,
+            int mipLevel = 0,
+            JobHandle dependsOn = default
+        )
+        {
+            return GetPixels32<RGBAFloat, Color, GetPixels32Job>(
+                in this,
+                pixels,
+                mipLevel,
+                dependsOn,
                 (data, pixels) => new GetPixels32Job { data = data, pixels = pixels }
             );
         }

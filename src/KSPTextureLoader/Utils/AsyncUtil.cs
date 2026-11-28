@@ -9,9 +9,6 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using UnityEngine;
 using UnityEngine.Rendering;
-#if UNITY_6_7
-using IJobParallelForBatch = KSPTextureLoader.Burst.IJobParallelForBatch;
-#endif
 
 namespace KSPTextureLoader.Utils;
 

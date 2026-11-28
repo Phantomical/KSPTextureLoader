@@ -15,7 +15,7 @@ partial class CPUTexture2D
     /// Kopernicus custom 4-bit palette format: 16-entry RGBA32 palette (64 bytes)
     /// followed by 4bpp color indices (two pixels per byte).
     /// </summary>
-    public readonly struct KopernicusPalette4 : ICPUTexture2D, ICompileToTexture, IGetPixels
+    public readonly struct KopernicusPalette4 : ICPUTexture2D, ICompileToTexture, IGetPixels, IGetPixelsV2
     {
         const int PaletteEntries = 16;
         const int PaletteBytes = PaletteEntries * 4;
@@ -87,23 +87,23 @@ partial class CPUTexture2D
 
         public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp)
         {
-            using var pixels32 = GetPixels32(mipLevel, Allocator.Temp);
-            var result = new NativeArray<Color>(
-                pixels32.Length,
+            var pixels = new NativeArray<Color>(
+                Width * Height,
                 allocator,
                 NativeArrayOptions.UninitializedMemory
             );
-            for (int i = 0; i < pixels32.Length; i++)
+
+            try
             {
-                var c = pixels32[i];
-                result[i] = new Color(
-                    c.r * Byte2Float,
-                    c.g * Byte2Float,
-                    c.b * Byte2Float,
-                    c.a * Byte2Float
-                );
+                GetPixels(pixels, mipLevel).Complete();
             }
-            return result;
+            catch
+            {
+                pixels.Dispose();
+                throw;
+            }
+
+            return pixels;
         }
 
         public NativeArray<Color32> GetPixels32(
@@ -111,16 +111,55 @@ partial class CPUTexture2D
             Allocator allocator = Allocator.Temp
         )
         {
-            int pixelCount = Width * Height;
-            var result = new NativeArray<Color32>(
-                pixelCount,
+            var pixels = new NativeArray<Color32>(
+                Width * Height,
                 allocator,
                 NativeArrayOptions.UninitializedMemory
             );
-            new DecodeKopernicusPalette4bitJob { data = this.data, colors = result }
-                .ScheduleBatch(pixelCount / 2, 4096)
-                .Complete();
-            return result;
+
+            try
+            {
+                GetPixels32(pixels, mipLevel).Complete();
+            }
+            catch
+            {
+                pixels.Dispose();
+                throw;
+            }
+
+            return pixels;
+        }
+
+        public JobHandle GetPixels(
+            NativeArray<Color> pixels,
+            int mipLevel = 0,
+            JobHandle dependsOn = default
+        )
+        {
+            ValidatePixels(pixels.Length, mipLevel);
+
+            return new DecodeKopernicusPalette4bitColorJob { data = data, colors = pixels }
+                .ScheduleBatch(pixels.Length / 2, 4096, dependsOn);
+        }
+
+        public JobHandle GetPixels32(
+            NativeArray<Color32> pixels,
+            int mipLevel = 0,
+            JobHandle dependsOn = default
+        )
+        {
+            ValidatePixels(pixels.Length, mipLevel);
+
+            return new DecodeKopernicusPalette4bitJob { data = data, colors = pixels }
+                .ScheduleBatch(pixels.Length / 2, 4096, dependsOn);
+        }
+
+        void ValidatePixels(int length, int mipLevel)
+        {
+            if (mipLevel != 0)
+                throw new ArgumentOutOfRangeException(nameof(mipLevel));
+            if (length != Width * Height)
+                throw new InvalidOperationException("pixel length did not match mipmap size");
         }
 
         public Texture2D CompileToTexture(bool readable)

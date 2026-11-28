@@ -178,7 +178,8 @@ internal static class IGetPixelsBlockJobExtensions
         int blocksPerRow,
         int width,
         int height,
-        NativeArray<Color> pixels
+        NativeArray<Color> pixels,
+        JobHandle dependsOn = default
     )
         where T : struct, IGetPixelsBlockJob
     {
@@ -193,7 +194,7 @@ internal static class IGetPixelsBlockJobExtensions
         var parameters = new JobsUtility.JobScheduleParameters(
             UnsafeUtility.AddressOf(ref wrap),
             JobStruct<T>.JobReflectionData,
-            default,
+            dependsOn,
 #if UNITY_6_7
             ScheduleMode.Parallel
 #else
@@ -210,7 +211,8 @@ internal static class IGetPixelsBlockJobExtensions
         int blocksPerRow,
         int width,
         int height,
-        NativeArray<Color32> pixels
+        NativeArray<Color32> pixels,
+        JobHandle dependsOn = default
     )
         where T : struct, IGetPixelsBlockJob
     {
@@ -225,7 +227,7 @@ internal static class IGetPixelsBlockJobExtensions
         var parameters = new JobsUtility.JobScheduleParameters(
             UnsafeUtility.AddressOf(ref wrap),
             JobStruct32<T>.JobReflectionData,
-            default,
+            dependsOn,
 #if UNITY_6_7
             ScheduleMode.Parallel
 #else

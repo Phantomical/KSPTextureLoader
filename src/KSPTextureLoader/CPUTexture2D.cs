@@ -8,6 +8,7 @@ using KSPTextureLoader.Utils;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Jobs;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
@@ -45,13 +46,37 @@ public interface ICompileToTexture
 }
 
 /// <summary>
-/// Interface for texture that have custom implementations of <see cref="GetPixels"/>
+/// Interface for textures that have custom implementations of <see cref="GetPixels"/>
 /// and <see cref="GetPixels32"/>.
 /// </summary>
+/// 
+/// <remarks>
+/// You should implement <see cref="IGetPixelsV2" /> instead, this interface is
+/// kept for backwards compatibility.
+/// </remarks>
 public interface IGetPixels
 {
     public NativeArray<Color> GetPixels(int mipLevel = 0, Allocator allocator = Allocator.Temp);
     public NativeArray<Color32> GetPixels32(int mipLevel = 0, Allocator allocator = Allocator.Temp);
+}
+
+/// <summary>
+/// Interface for textures that have custom implementations of <see cref="GetPixels"/>
+/// and <see cref="GetPixels32"/>.
+/// </summary>
+public interface IGetPixelsV2
+{
+    public JobHandle GetPixels(
+        NativeArray<Color> pixels,
+        int mipLevel = 0,
+        JobHandle dependsOn = default
+    );
+
+    public JobHandle GetPixels32(
+        NativeArray<Color32> pixels,
+        int mipLevel = 0,
+        JobHandle dependsOn = default
+    );
 }
 
 /// <summary>
@@ -119,22 +144,18 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             allocator,
             NativeArrayOptions.UninitializedMemory
         );
+
         try
         {
-            int i = 0;
-            for (int y = 0; y < p.height; ++y)
-            {
-                for (int x = 0; x < p.width; ++x)
-                    pixels[i++] = GetPixel(x, y, mipLevel);
-            }
-
-            return pixels;
+            GetPixels(pixels, mipLevel).Complete();
         }
         catch
         {
             pixels.Dispose();
             throw;
         }
+
+        return pixels;
     }
 
     public virtual NativeArray<Color32> GetPixels32(
@@ -150,22 +171,70 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             allocator,
             NativeArrayOptions.UninitializedMemory
         );
+
         try
         {
-            int i = 0;
-            for (int y = 0; y < p.height; ++y)
-            {
-                for (int x = 0; x < p.width; ++x)
-                    pixels[i++] = GetPixel32(x, y, mipLevel);
-            }
-
-            return pixels;
+            GetPixels32(pixels, mipLevel).Complete();
         }
         catch
         {
             pixels.Dispose();
             throw;
         }
+
+        return pixels;
+    }
+
+    public virtual JobHandle GetPixels(
+        NativeArray<Color> pixels,
+        int mipLevel = 0,
+        JobHandle dependsOn = default
+    )
+    {
+        dependsOn.Complete();
+
+        var tex = this;
+        var p = GetMipProperties(in tex, mipLevel);
+
+        if (pixels.Length != p.width * p.height)
+            throw new InvalidOperationException(
+                "pixel array was not the right size for this texture"
+            );
+
+        int i = 0;
+        for (int y = 0; y < p.height; ++y)
+        {
+            for (int x = 0; x < p.width; ++x)
+                pixels[i++] = GetPixel(x, y, mipLevel);
+        }
+
+        return default;
+    }
+
+    public virtual JobHandle GetPixels32(
+        NativeArray<Color32> pixels,
+        int mipLevel = 0,
+        JobHandle dependsOn = default
+    )
+    {
+        dependsOn.Complete();
+
+        var tex = this;
+        var p = GetMipProperties(in tex, mipLevel);
+
+        if (pixels.Length != p.width * p.height)
+            throw new InvalidOperationException(
+                "pixel array was not the right size for this texture"
+            );
+
+        int i = 0;
+        for (int y = 0; y < p.height; ++y)
+        {
+            for (int x = 0; x < p.width; ++x)
+                pixels[i++] = GetPixel32(x, y, mipLevel);
+        }
+
+        return default;
     }
 
     public NativeArray<T> GetRawTextureData<T>()
@@ -678,13 +747,8 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
 
         try
         {
-            var data = texture.GetRawTextureData<TData>().GetSubArray(info.offset, pixels.Length);
-            var job = jobFunc(data, pixels);
-
-            if (pixels.Length < 16384)
-                job.RunBatch(pixels.Length, 4096);
-            else
-                job.ScheduleBatch(pixels.Length, 4096).Complete();
+            GetPixels(in texture, pixels, mipLevel, default, jobFunc)
+                .Complete();
 
             return pixels;
         }
@@ -714,13 +778,8 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
 
         try
         {
-            var data = texture.GetRawTextureData<TData>().GetSubArray(info.offset, pixels.Length);
-            var job = jobFunc(data, pixels);
-
-            if (pixels.Length < 16384)
-                job.RunBatch(pixels.Length, 4096);
-            else
-                job.ScheduleBatch(pixels.Length, 4096).Complete();
+            GetPixels32(in texture, pixels, mipLevel, default, jobFunc)
+                .Complete();
 
             return pixels;
         }
@@ -814,6 +873,105 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             throw;
         }
     }
+
+    static JobHandle GetPixels<TTex, TData, TJob>(
+        in TTex texture,
+        NativeArray<Color> pixels,
+        int mipLevel,
+        JobHandle dependsOn,
+        Func<NativeArray<TData>, NativeArray<Color>, TJob> jobFunc
+    )
+        where TTex : ICPUTexture2D
+        where TJob : struct, IJobParallelForBatch
+        where TData : unmanaged
+    {
+        var info = GetMipProperties(in texture, mipLevel);
+        if (pixels.Length != info.width * info.height)
+            throw new InvalidOperationException("pixel length did not match mipmap size");
+
+        var data = texture.GetRawTextureData<TData>().GetSubArray(info.offset, pixels.Length);
+        return jobFunc(data, pixels).ScheduleBatch(pixels.Length, 4096, dependsOn);
+    }
+
+    static JobHandle GetPixels32<TTex, TData, TJob>(
+        in TTex texture,
+        NativeArray<Color32> pixels,
+        int mipLevel,
+        JobHandle dependsOn,
+        Func<NativeArray<TData>, NativeArray<Color32>, TJob> jobFunc
+    )
+        where TTex : ICPUTexture2D
+        where TJob : struct, IJobParallelForBatch
+        where TData : unmanaged
+    {
+        var info = GetMipProperties(in texture, mipLevel);
+        if (pixels.Length != info.width * info.height)
+            throw new InvalidOperationException("pixel length did not match mipmap size");
+
+        var data = texture.GetRawTextureData<TData>().GetSubArray(info.offset, pixels.Length);
+        return jobFunc(data, pixels).ScheduleBatch(pixels.Length, 4096, dependsOn);
+    }
+
+    static JobHandle GetBlockPixels<TTex, TBlock, TJob>(
+        in TTex texture,
+        NativeArray<Color> pixels,
+        int mipLevel,
+        JobHandle dependsOn,
+        Func<NativeArray<TBlock>, TJob> func
+    )
+        where TTex : ICPUTexture2D
+        where TBlock : unmanaged
+        where TJob : struct, IGetPixelsBlockJob
+    {
+        GetBlockMipProperties(
+            texture.Width,
+            texture.Height,
+            mipLevel,
+            out int mipWidth,
+            out int mipHeight,
+            out int blockOffset,
+            out int blocksPerRow,
+            out int blockCount
+        );
+        
+        if (pixels.Length != mipWidth * mipHeight)
+            throw new InvalidOperationException("pixel length did not match mipmap size");
+
+        var blocks = texture.GetRawTextureData<TBlock>().GetSubArray(blockOffset, blockCount);
+        var job = func(blocks);
+        return job.Schedule(blocksPerRow, mipWidth, mipHeight, pixels, dependsOn);
+    }
+
+    static JobHandle GetBlockPixels32<TTex, TBlock, TJob>(
+        in TTex texture,
+        NativeArray<Color32> pixels,
+        int mipLevel,
+        JobHandle dependsOn,
+        Func<NativeArray<TBlock>, TJob> func
+    )
+        where TTex : ICPUTexture2D
+        where TBlock : unmanaged
+        where TJob : struct, IGetPixelsBlockJob
+    {
+        GetBlockMipProperties(
+            texture.Width,
+            texture.Height,
+            mipLevel,
+            out int mipWidth,
+            out int mipHeight,
+            out int blockOffset,
+            out int blocksPerRow,
+            out int blockCount
+        );
+        
+        if (pixels.Length != mipWidth * mipHeight)
+            throw new InvalidOperationException("pixel length did not match mipmap size");
+
+        var blocks = texture.GetRawTextureData<TBlock>().GetSubArray(blockOffset, blockCount);
+        var job = func(blocks);
+        return job.Schedule(blocksPerRow, mipWidth, mipHeight, pixels, dependsOn);
+    }
+
     #endregion
 }
 
@@ -863,26 +1021,28 @@ public class CPUTexture2D<TTexture>(TTexture texture) : CPUTexture2D
         return texture.GetRawTextureData<byte>();
     }
 
-    public sealed override NativeArray<Color> GetPixels(
+    public sealed override JobHandle GetPixels(
+        NativeArray<Color> pixels,
         int mipLevel = 0,
-        Allocator allocator = Allocator.Temp
+        JobHandle dependsOn = default
     )
     {
         Validate();
         if (GetPixelsFunc is not null)
-            return GetPixelsFunc(ref texture, mipLevel, allocator);
-        return base.GetPixels(mipLevel, allocator);
+            return GetPixelsFunc(ref texture, pixels, mipLevel, dependsOn);
+        return base.GetPixels(pixels, mipLevel, dependsOn);
     }
 
-    public sealed override NativeArray<Color32> GetPixels32(
+    public sealed override JobHandle GetPixels32(
+        NativeArray<Color32> pixels,
         int mipLevel = 0,
-        Allocator allocator = Allocator.Temp
+        JobHandle dependsOn = default
     )
     {
         Validate();
         if (GetPixels32Func is not null)
-            return GetPixels32Func(ref texture, mipLevel, allocator);
-        return base.GetPixels32(mipLevel, allocator);
+            return GetPixels32Func(ref texture, pixels, mipLevel, dependsOn);
+        return base.GetPixels32(pixels, mipLevel, dependsOn);
     }
 
     public override Texture2D CompileToTexture(bool readable = false)
@@ -936,15 +1096,17 @@ public class CPUTexture2D<TTexture>(TTexture texture) : CPUTexture2D
     #endregion
 
     #region GetPixels Helpers
-    delegate NativeArray<Color> GetPixelsDelegate(
+    delegate JobHandle GetPixelsDelegate(
         ref TTexture texture,
+        NativeArray<Color> pixels,
         int mipLevel,
-        Allocator allocator
+        JobHandle dependsOn
     );
-    delegate NativeArray<Color32> GetPixels32Delegate(
+    delegate JobHandle GetPixels32Delegate(
         ref TTexture texture,
+        NativeArray<Color32> pixels,
         int mipLevel,
-        Allocator allocator
+        JobHandle dependsOn
     );
 
     static readonly GetPixelsDelegate GetPixelsFunc = MakeGetPixelsDelegate();
@@ -952,7 +1114,7 @@ public class CPUTexture2D<TTexture>(TTexture texture) : CPUTexture2D
 
     static GetPixelsDelegate MakeGetPixelsDelegate()
     {
-        if (!typeof(IGetPixels).IsAssignableFrom(typeof(TTexture)))
+        if (!typeof(IGetPixelsV2).IsAssignableFrom(typeof(TTexture)))
             return null;
 
         var method = typeof(CPUTexture2D<TTexture>)
@@ -964,7 +1126,7 @@ public class CPUTexture2D<TTexture>(TTexture texture) : CPUTexture2D
 
     static GetPixels32Delegate MakeGetPixels32Delegate()
     {
-        if (!typeof(IGetPixels).IsAssignableFrom(typeof(TTexture)))
+        if (!typeof(IGetPixelsV2).IsAssignableFrom(typeof(TTexture)))
             return null;
 
         var method = typeof(CPUTexture2D<TTexture>)
@@ -974,16 +1136,26 @@ public class CPUTexture2D<TTexture>(TTexture texture) : CPUTexture2D
         return (GetPixels32Delegate)Delegate.CreateDelegate(typeof(GetPixels32Delegate), method);
     }
 
-    static NativeArray<Color> DoGetPixels<T>(ref T texture, int mipLevel, Allocator allocator)
-        where T : IGetPixels
+    static JobHandle DoGetPixels<T>(
+        ref T texture,
+        NativeArray<Color> pixels,
+        int mipLevel,
+        JobHandle dependsOn
+    )
+        where T : IGetPixelsV2
     {
-        return texture.GetPixels(mipLevel, allocator);
+        return texture.GetPixels(pixels, mipLevel, dependsOn);
     }
 
-    static NativeArray<Color32> DoGetPixels32<T>(ref T texture, int mipLevel, Allocator allocator)
-        where T : IGetPixels
+    static JobHandle DoGetPixels32<T>(
+        ref T texture,
+        NativeArray<Color32> pixels,
+        int mipLevel,
+        JobHandle dependsOn
+    )
+        where T : IGetPixelsV2
     {
-        return texture.GetPixels32(mipLevel, allocator);
+        return texture.GetPixels32(pixels, mipLevel, dependsOn);
     }
     #endregion
 

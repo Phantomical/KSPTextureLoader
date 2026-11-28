@@ -6,9 +6,6 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using UnityEngine;
-#if UNITY_6_7
-using IJobParallelForBatch = KSPTextureLoader.Burst.IJobParallelForBatch;
-#endif
 
 namespace KSPTextureLoader;
 
@@ -19,7 +16,7 @@ partial class CPUTexture2D
     /// a real unity texture format, but is used by some mods.
     /// </summary>
     [BurstCompile(FloatMode = FloatMode.Fast)]
-    public readonly struct RA16 : ICPUTexture2D, ICompileToTexture, IGetPixels
+    public readonly struct RA16 : ICPUTexture2D, ICompileToTexture, IGetPixels, IGetPixelsV2
     {
         const int bpp = 2;
 
@@ -88,6 +85,36 @@ partial class CPUTexture2D
                 in this,
                 mipLevel,
                 allocator,
+                (data, pixels) => new GetPixels32Job { data = data, pixels = pixels }
+            );
+        }
+
+        public JobHandle GetPixels(
+            NativeArray<Color> pixels,
+            int mipLevel = 0,
+            JobHandle dependsOn = default
+        )
+        {
+            return GetPixels<RA16, ushort, GetPixelsJob>(
+                in this,
+                pixels,
+                mipLevel,
+                dependsOn,
+                (data, pixels) => new GetPixelsJob { data = data, pixels = pixels }
+            );
+        }
+
+        public JobHandle GetPixels32(
+            NativeArray<Color32> pixels,
+            int mipLevel = 0,
+            JobHandle dependsOn = default
+        )
+        {
+            return GetPixels32<RA16, ushort, GetPixels32Job>(
+                in this,
+                pixels,
+                mipLevel,
+                dependsOn,
                 (data, pixels) => new GetPixels32Job { data = data, pixels = pixels }
             );
         }
