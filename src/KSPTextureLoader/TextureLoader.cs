@@ -44,6 +44,11 @@ public partial class TextureLoader : MonoBehaviour
         DX11.CacheCapabilities();
 
         GameEvents.onGameSceneLoadRequested.Add(OnGameSceneLoadRequested);
+
+#if !KSP_RETOOLED
+        if (Versioning.version_major == 1 && Versioning.version_minor >= 13)
+            UnsupportedVersionWarning.DisplayWarning();
+#endif
     }
 
     void OnApplicationQuit()
