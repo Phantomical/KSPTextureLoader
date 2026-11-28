@@ -6,6 +6,7 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 
 namespace KSPTextureLoader;
 
@@ -124,20 +125,33 @@ partial class CPUTexture2D
             var texture = TextureUtils.CreateUninitializedTexture2D(
                 Width,
                 Height,
-                TextureFormat.RGBA32
+                MipCount,
+                GraphicsFormatUtility.GetGraphicsFormat(TextureFormat.RGBA32, true)
             );
-            var pixels = new NativeArray<Color32>(
-                Width * Height,
-                Allocator.Temp,
+
+#if KSP_RETOOLED
+            var pixels = texture.GetRawTextureData<Color32>();
+#else
+            using var pixels = new NativeArray<Color32>(
+                GetTotalSize(in this),
+                Allocator.TempJob,
                 NativeArrayOptions.UninitializedMemory
             );
+#endif
+
             var job = new GetPixels32Job { data = GetRawTextureData<ushort>(), pixels = pixels };
             var handle = job.ScheduleBatch((int)(data.Length / 2), 4096);
+
+#if KSP_RETOOLED
+            handle.Complete();
+#else
+            // overlap the job with GetRawTextureData
             JobHandle.ScheduleBatchedJobs();
 
             var texdata = texture.GetRawTextureData<Color32>();
             handle.Complete();
             pixels.CopyTo(texdata);
+#endif
 
             texture.Apply(false, !readable);
             return texture;
