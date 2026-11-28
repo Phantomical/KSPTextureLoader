@@ -135,32 +135,30 @@ public partial class TextureLoader : MonoBehaviour
         return Instance.LoadTextureImpl<T>(path, options);
     }
 
-    /// <summary>
-    /// Load a texture from disk or from an asset bundle.
-    /// </summary>
-    /// <typeparam name="T">A specific texture type to load.</typeparam>
-    /// <param name="path">The path to load the texture from on disk or in asset bundles.</param>
-    ///
-    /// <remarks>
-    /// Depending on the type you pick for <typeparamref name="T"/> there are several
-    /// texture conversions that can happen:
-    ///
-    /// <list type="bullet">
-    ///   <item>
-    ///     <see cref="Cubemap"/>: can be converted from a <see cref="Texture2D"/> with the faces
-    ///     packed horizontally in a cross configuration.
-    ///   </item>
-    ///   <item>
-    ///     <see cref="Texture2DArray"/>: can be converted from a <see cref="Texture2D"/>. This
-    ///     will result in an array texture with depth 1.
-    ///   </item>
-    /// </list>
-    ///
-    /// If you are passing the texture directly into a shader property then usually you should be
-    /// able to get away with leaving <typeparamref name="T"/> as <see cref="Texture"/>.
-    /// </remarks>
+    /// <inheritdoc cref="LoadTexture{T}(string, TextureLoadOptions)" />
     public static TextureHandle<T> LoadTexture<T>(string path)
         where T : Texture => LoadTexture<T>(path, new());
+
+    /// <summary>
+    /// Load a cubemap from six separate face textures.
+    /// </summary>
+    /// <param name="faces">The paths of each face within GameData.</param>
+    /// <param name="options">Additional options configuring how the texture gets loaded.</param>
+    ///
+    /// <remarks>
+    /// <para>
+    /// All faces must be square and the same size. Faces with differing mip
+    /// counts are truncated to the smallest mip count.
+    /// </para>
+    /// </remarks>
+    public static TextureHandle<Cubemap> LoadDisjointCubemap(
+        CubemapFaces faces,
+        TextureLoadOptions options
+    ) => Instance.LoadDisjointCubemapImpl(faces, options);
+
+    /// <inheritdoc cref="LoadDisjointCubemap(CubemapFaces, TextureLoadOptions)"/>
+    public static TextureHandle<Cubemap> LoadDisjointCubemap(CubemapFaces faces) =>
+        LoadDisjointCubemap(faces, new());
 
     /// <summary>
     /// Check whether a texture exists.

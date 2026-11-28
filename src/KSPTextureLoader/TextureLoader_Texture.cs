@@ -34,36 +34,6 @@ public partial class TextureLoader
         if (path is null)
             throw new ArgumentNullException(nameof(path), "path argument was null");
 
-        static TextureHandleImpl GetApplicableExistingHandle(
-            string key,
-            string path,
-            TextureLoadOptions options
-        )
-        {
-            if (!textures.TryGetValue(key, out var weakHandle))
-                return null;
-            if (!weakHandle.TryGetTarget(out var handle))
-                return null;
-
-            // If the caller doesn't want a readable texture then they'll be
-            // happy regardless of whether the texture is readable or not.
-            if (options.Unreadable)
-                return handle;
-
-            // The handle is in an error state, the texture being readable or not
-            // won't make a difference here.
-            if (handle.IsError)
-                return handle;
-
-            // If the texture is readable and the caller wants a readable texture
-            // then everyone is happy.
-            if (handle.IsReadable)
-                return handle;
-
-            Debug.LogWarning($"[KSPTextureLoader] Reloading {path} to get readable texture");
-            return null;
-        }
-
         var key = CanonicalizeResourcePath(path);
         var handle = GetApplicableExistingHandle(key, path, options);
         if (handle is not null)
@@ -78,6 +48,36 @@ public partial class TextureLoader
         StartCoroutine(coroutine);
 
         return new(handle);
+    }
+
+    private static TextureHandleImpl GetApplicableExistingHandle(
+        string key,
+        string path,
+        TextureLoadOptions options
+    )
+    {
+        if (!textures.TryGetValue(key, out var weakHandle))
+            return null;
+        if (!weakHandle.TryGetTarget(out var handle))
+            return null;
+
+        // If the caller doesn't want a readable texture then they'll be
+        // happy regardless of whether the texture is readable or not.
+        if (options.Unreadable)
+            return handle;
+
+        // The handle is in an error state, the texture being readable or not
+        // won't make a difference here.
+        if (handle.IsError)
+            return handle;
+
+        // If the texture is readable and the caller wants a readable texture
+        // then everyone is happy.
+        if (handle.IsReadable)
+            return handle;
+
+        Debug.LogWarning($"[KSPTextureLoader] Reloading {path} to get readable texture");
+        return null;
     }
 
     static readonly ProfilerMarker LoadTextureMarker = new("LoadTexture");
@@ -377,7 +377,12 @@ public partial class TextureLoader
         readable.name = tex2d.name;
 
         var prev = RenderTexture.active;
-        var rt = RenderTexture.GetTemporary(tex2d.width, tex2d.height, 0, RenderTextureFormat.ARGB32);
+        var rt = RenderTexture.GetTemporary(
+            tex2d.width,
+            tex2d.height,
+            0,
+            RenderTextureFormat.ARGB32
+        );
         try
         {
             Graphics.Blit(tex2d, rt);

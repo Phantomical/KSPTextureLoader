@@ -72,7 +72,7 @@ public class CubemapConversionTests : KSPTextureLoaderTestBase
     /// Reads a cubemap face back through the GPU, so this works for unreadable
     /// and compressed cubemaps.
     /// </summary>
-    static Color[] ReadBackFace(Cubemap cube, CubemapFace face, int mip)
+    internal static Color[] ReadBackFace(Cubemap cube, CubemapFace face, int mip)
     {
         int dim = Math.Max(cube.width >> mip, 1);
 

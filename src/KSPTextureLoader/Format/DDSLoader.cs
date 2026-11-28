@@ -987,6 +987,123 @@ internal static class DDSLoader
         });
     }
 
+    /// <summary>
+    /// Try to load a cubemap from six separate DDS face files through a single
+    /// streamed asset bundle whose payload spans the pixel data of all six
+    /// files.
+    /// </summary>
+    ///
+    /// <returns>
+    /// <c>false</c> if the faces are not eligible for the bundle path (the
+    /// caller should fall back to a slower path), <c>true</c> once the
+    /// cubemap has been set on <paramref name="handle"/>.
+    /// </returns>
+    ///
+    /// <remarks>
+    /// Unity stores cubemap pixel data face-major (every mip of +X, then every
+    /// mip of -X, ...), which is exactly what laying out the face files' mip
+    /// chains end to end gives us. The faces need to agree on size, format and
+    /// mip count; anything else goes through the slow path.
+    /// </remarks>
+    internal static async Task<bool> TryLoadDisjointCubemapViaBundle(
+        ITextureDestination handle,
+        string[] diskPaths,
+        TextureLoadOptions options
+    )
+    {
+        var infoTasks = new Task<FileInfo>[diskPaths.Length];
+        var metadataTasks = new Task<TextureMetadata>[diskPaths.Length];
+        for (int i = 0; i < diskPaths.Length; ++i)
+        {
+            infoTasks[i] = ReadFileHeaderAsync(diskPaths[i]);
+            metadataTasks[i] = GetTextureMetadata<Texture2D>(infoTasks[i], dataTask: null, options);
+        }
+
+        FileInfo[] infos;
+        TextureMetadata[] metadatas;
+        try
+        {
+            infos = await Task.WhenAll(infoTasks);
+            metadatas = await Task.WhenAll(metadataTasks);
+        }
+        catch
+        {
+            // Let the slow path report errors for broken files, since it will
+            // give an error that points at the specific face.
+            return false;
+        }
+
+        var first = metadatas[0];
+        var format = first.format;
+        var size = first.width;
+        var mipCount = first.mipCount;
+
+        foreach (var metadata in metadatas)
+        {
+            if (metadata.type != DDSTextureType.Texture2D || metadata.arraySize != 1)
+                return false;
+            if (metadata.paletteType != KopernicusPaletteType.None)
+                return false;
+            if (metadata.width != size || metadata.height != size)
+                return false;
+            if (metadata.format != format || metadata.mipCount != mipCount)
+                return false;
+        }
+
+#if UNITY_6_7
+        if (BlockDecompression.NeedsDecompression(format, size, size))
+            return false;
+#endif
+
+        long faceChainSize = GetFaceMipChainSize(size, size, mipCount, format);
+        long pixelDataSize = 6L * faceChainSize;
+        if (!ShouldLoadViaBundle(options, pixelDataSize, format, size, size))
+            return false;
+        if (!TryGetClassicFormat(format, out int textureFormat, out int colorSpace))
+            return false;
+
+        var regions = new MultiFileRegionStream.Region[diskPaths.Length];
+        for (int i = 0; i < diskPaths.Length; ++i)
+        {
+            if (infos[i].fileLength < faceChainSize)
+                return false;
+
+            regions[i] = new(diskPaths[i], infos[i].dataOffset, faceChainSize);
+        }
+
+        var request = new TextureBundleBuilder.TextureRequest
+        {
+            ClassId = SerializedTypeTrees.CubemapClassId,
+            Name = handle.Path,
+            Width = size,
+            Height = size,
+            MipCount = mipCount,
+            Format = textureFormat,
+            ColorSpace = colorSpace,
+            Readable = false,
+            // Unity cannot go back to a stream payload to reload mips.
+            IgnoreMipmapLimit = true,
+        };
+
+        var built = TextureBundleBuilder.Build(request, pixelDataSize);
+        var stream = new BundleStream(
+            built.Prefix,
+            new MultiFileRegionStream(regions),
+            0,
+            pixelDataSize
+        );
+
+        LogBundleBuilt(request, pixelDataSize, built);
+
+        await AsyncUtil.LaunchMainThreadTask(async () =>
+        {
+            var texture = await TextureBundleLoader.LoadOnMainThread(built, stream);
+            handle.SetTexture<Cubemap>(texture, options);
+        });
+
+        return true;
+    }
+
     static async Task LoadTextureCubemapArray<T>(
         ITextureDestination handle,
         TextureLoadOptions options,
