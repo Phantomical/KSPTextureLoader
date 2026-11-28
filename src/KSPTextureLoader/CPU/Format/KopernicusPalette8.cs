@@ -166,22 +166,34 @@ partial class CPUTexture2D
                 Height,
                 TextureFormat.RGBA32
             );
-            var data = new NativeArray<Color32>(
+
+#if KSP_RETOOLED
+            var data = texture.GetRawTextureData<Color32>();
+#else
+            using var data = new NativeArray<Color32>(
                 Width * Height,
-                Allocator.Temp,
+                Allocator.TempJob,
                 NativeArrayOptions.UninitializedMemory
             );
+#endif
+
             var job = new DecodeKopernicusPalette8bitJob
             {
                 data = this.data.GetSubArray(0, PaletteBytes + Width * Height),
                 colors = data,
             };
             var handle = job.ScheduleBatch(Width * Height, 4096);
+
+#if KSP_RETOOLED
+            handle.Complete();
+#else
+            // overlap the job with GetRawTextureData
             JobHandle.ScheduleBatchedJobs();
 
             var texdata = texture.GetRawTextureData<Color32>();
             handle.Complete();
             data.CopyTo(texdata);
+#endif
 
             texture.Apply(true, !readable);
             return texture;
