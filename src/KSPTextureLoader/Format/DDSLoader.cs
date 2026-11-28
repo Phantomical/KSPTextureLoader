@@ -726,9 +726,11 @@ internal static class DDSLoader
             }
             else
             {
+#if !KSP_RETOOLED
                 // This will wait until the texture has been uploaded by the graphics
                 // and so it won't make a copy if we call GetRawTextureData.
                 await AsyncUtil.RunOnGraphicsThread(static () => { });
+#endif
 
                 var texdata = texture.GetRawTextureData<byte>();
                 await Task.Run(async () =>
@@ -806,12 +808,14 @@ internal static class DDSLoader
             );
             using var texGuard = new TextureCleanupGuard(tex2dArray);
 
+#if !KSP_RETOOLED
             if (options.Hint != TextureLoadHint.Synchronous)
             {
                 // This will wait until the texture has been uploaded by the graphics
                 // and so it won't make a copy if we call SetPixelData.
                 await AsyncUtil.RunOnGraphicsThread(() => { });
             }
+#endif
 
             var buffer = await dataTask;
 
@@ -898,12 +902,14 @@ internal static class DDSLoader
             var cubemap = TextureUtils.CreateUninitializedCubemap(width, mipCount, format);
             using var texGuard = new TextureCleanupGuard(cubemap);
 
+#if !KSP_RETOOLED
             if (options.Hint != TextureLoadHint.Synchronous)
             {
                 // This will wait until the texture has been uploaded by the graphics
                 // and so it won't make a copy if we call SetPixelData.
                 await AsyncUtil.RunOnGraphicsThread(() => { });
             }
+#endif
 
             var buffer = await dataTask;
 
@@ -948,12 +954,14 @@ internal static class DDSLoader
                 );
                 using var guard = new TextureDisposeGuard(staging);
 
+#if !KSP_RETOOLED
                 if (options.Hint != TextureLoadHint.Synchronous)
                 {
                     // This will wait until the texture has been uploaded by the graphics
                     // and so it won't make a copy if we call SetPixelData.
                     await AsyncUtil.RunOnGraphicsThread(() => { });
                 }
+#endif
 
                 var sdata = staging.GetRawTextureData<byte>();
                 int mipChainSize = GetFaceMipChainSize(width, height, mipCount, format);
@@ -1032,12 +1040,14 @@ internal static class DDSLoader
             using var _guard = texGuard;
             texGuard.Update(cubeArray);
 
+#if !KSP_RETOOLED
             if (options.Hint != TextureLoadHint.Synchronous)
             {
                 // This will wait until the texture has been uploaded by the graphics
                 // and so it won't make a copy if we call SetPixelData.
                 await AsyncUtil.RunOnGraphicsThread(() => { });
             }
+#endif
 
             var buffer = await dataTask;
 
@@ -1128,12 +1138,14 @@ internal static class DDSLoader
             );
             texGuard.Update(tex3d);
 
+#if !KSP_RETOOLED
             if (options.Hint != TextureLoadHint.Synchronous)
             {
                 // This will wait until the texture has been uploaded by the graphics
                 // and so it won't make a copy if we call SetPixelData.
                 await AsyncUtil.RunOnGraphicsThread(() => { });
             }
+#endif
 
             var buffer = await dataTask;
 
